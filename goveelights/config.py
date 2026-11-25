@@ -15,6 +15,10 @@ DEFAULTS = {
     "engine": {"fps": 20, "gamma": 1.0, "refresh_s": 1.0, "brightness": 1.0},
     "master": {"speed": 1.0, "hue": 0.0, "palette": "", "bpm": 120},
     "palettes": {},
+    "events": None,                                  # None -> built-in New Year / Christmas
+    "game": {"enabled": False, "teams": [{"league": "nfl", "team": "DEN"}], "delay": 30,
+             "when_lights_off": False},
+    "weather": {"enabled": False, "snow": True, "rain": False, "storm": True, "wind": True},
     "zones": [],
     "playlists": {
         "Christmas": {"items": [{"preset": "candy-cane", "minutes": 5},

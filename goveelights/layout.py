@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 
 class Pixel:
     __slots__ = ("i", "n", "u", "run", "mac", "local", "ri", "rn", "ru",
-                 "x", "y", "sx", "sy", "spanx", "spany", "nx", "ny", "rny")
+                 "x", "y", "sx", "sy", "spanx", "spany", "nx", "ny", "rny", "rnx")
 
     def __repr__(self):
         return f"Pixel(i={self.i}, run={self.run!r}, local={self.local}, x={self.x:.1f}, y={self.y:.1f})"
@@ -89,9 +89,12 @@ class Layout:
             p.nx, p.ny = p.sx / spanx, p.sy / spany
         for r in runs:
             ys = [p.y for p in r.pixels] or [0.0]
+            xs = [p.x for p in r.pixels] or [0.0]
             lo, hi = min(ys), max(ys)
+            xlo, xhi = min(xs), max(xs)
             for p in r.pixels:
                 p.rny = (p.y - lo) / (hi - lo) if hi > lo else 0.0
+                p.rnx = (p.x - xlo) / (xhi - xlo) if xhi > xlo else 0.5
 
         # zones: named groups of bulbs, e.g. {"name": "North wall",
         #   "parts": [{"run": "Eaves", "from": 0, "to": 30}]}   (physical indexes, inclusive)

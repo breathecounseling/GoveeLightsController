@@ -12,6 +12,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from . import live, shows
 from . import schedule as sched
 from .config import Config
 from .diag_server import App as DiagApp
@@ -85,12 +86,21 @@ class Controller:
         self.playlist: dict | None = None          # {"name", "order", "idx", "next_at", "fade"}
         self.override_until: datetime | None = None
         self.diag_active = False
+        self.interrupt: dict | None = None          # celebration/countdown in progress
+        self.map_state: dict | None = None
+        self.weather: dict = {}
+        self.games: dict = {}                       # "league:team" -> latest game info
+        self._pending: list = []                    # delayed celebrations [(at, kind, colors)]
+        self._events_done: set = set()
+        self._last_reminder = 0.0
+        self._forced_weather: dict = {}             # test overlays {kind: until}
         self._sched_key = "unset"
         self.sched_status: dict = {}
         self._stop = threading.Event()
         self.build_engine()
         self.diag.scan()
         threading.Thread(target=self._tick_loop, name="controller", daemon=True).start()
+        threading.Thread(target=self._live_loop, name="live-data", daemon=True).start()
 
     # --------------------------------------------------------- engine
     @property
@@ -197,6 +207,7 @@ class Controller:
         with self.lock:
             if manual:
                 self._manual()
+                self.interrupt = None
             if not keep_playlist:
                 self.playlist = None
             self.scene_dict = scene.to_dict()
@@ -256,6 +267,227 @@ class Controller:
             self.engine.set_scene(None)
             self.engine.set_live(False, release=release)
 
+    # ---------------------------------------------------- interruptions
+    def start_interrupt(self, d: dict, seconds: float, label: str, force_live: bool = False) -> bool:
+        """Play a scene for a while (celebration, countdown), then put back what was playing."""
+        with self.lock:
+            if self.diag_active or self.map_state:
+                return False
+            if not self.engine.live and not force_live:
+                return False
+            if self.interrupt is None:
+                self.interrupt = {"scene": self.scene_dict, "playing": self.playing, "live": self.engine.live}
+            self.interrupt["until"] = time.time() + seconds
+            self.interrupt["label"] = label
+            self.engine.set_scene(Scene.from_dict(d, self.user_palettes), 0.3)
+            self.playing = {"kind": "event", "name": label}
+            if force_live:
+                self.set_live(True, manual=False)
+            log.info("interrupt: %s for %.0f s", label, seconds)
+            return True
+
+    def end_interrupt(self):
+        with self.lock:
+            st, self.interrupt = self.interrupt, None
+            if not st:
+                return
+            self.engine.set_scene(Scene.from_dict(st["scene"], self.user_palettes) if st["scene"] else None, 1.5)
+            self.playing = st["playing"]
+            if not st["live"]:
+                self.engine.set_live(False, release=True)
+
+    # ---------------------------------------------------------- events
+    @property
+    def events(self) -> list:
+        ev = self.cfg.data.get("events")
+        return shows.DEFAULT_EVENTS if ev is None else ev
+
+    def _events_tick(self):
+        now = datetime.now().astimezone()
+        for ev in self.events:
+            if not ev.get("enabled", True):
+                continue
+            try:
+                at = shows.next_occurrence(ev, now)
+            except (KeyError, ValueError):
+                continue
+            key = (ev.get("name"), at.isoformat())
+            secs = (at - now).total_seconds()
+            cd = float(ev.get("countdown", 0))
+            if cd > 0 and 0 < secs <= cd and ("cd",) + key not in self._events_done:
+                self._events_done.add(("cd",) + key)
+                self.start_interrupt(shows.countdown_scene(at.timestamp(), int(cd), int(ev.get("digits", 10))),
+                                     secs + 0.5, f"{ev.get('name')} countdown", force_live=ev.get("lights_on", True))
+            elif -2 < secs <= 0.5 and ("party",) + key not in self._events_done and float(ev.get("minutes", 0)) > 0:
+                self._events_done.add(("party",) + key)
+                try:
+                    d = self.presets.get(ev.get("celebrate", "fireworks"))
+                except (OSError, ValueError):
+                    d = shows.celebration("win", ["#ffd700", "#ffffff"])[0]
+                self.start_interrupt(d, float(ev["minutes"]) * 60, ev.get("name", "Celebration"),
+                                     force_live=ev.get("lights_on", True))
+            # "days to go" reminders while the lights are on
+            days = (at.date() - now.date()).days
+            if (ev.get("reminders") and self.engine.live and not self.interrupt
+                    and 0 < days <= int(ev.get("remind_from_days", 30))
+                    and time.time() - self._last_reminder > float(ev.get("remind_every_min", 15)) * 60):
+                self._last_reminder = time.time()
+                self.start_interrupt(shows.days_scene(days), 8, f"{days} days to {ev.get('name')}")
+
+    # ------------------------------------------------------- live data
+    def _live_loop(self):
+        last_weather = 0.0
+        next_game = {}
+        while not self._stop.wait(2.0):
+            try:
+                now = time.time()
+                w = self.cfg.data.get("weather", {})
+                if w.get("enabled") and now - last_weather > 600:
+                    last_weather = now
+                    sch = self.cfg.data.get("schedule", {})
+                    try:
+                        self.weather = {**live.parse_weather(live.fetch_json(
+                            live.weather_url(float(sch.get("lat", 40.3764)), float(sch.get("lon", -104.6922))))),
+                            "at": now}
+                    except Exception as e:  # noqa: BLE001
+                        self.weather = {**self.weather, "error": str(e)}
+                self._apply_weather()
+                g = self.cfg.data.get("game", {})
+                if g.get("enabled"):
+                    for t in g.get("teams", []):
+                        key = f"{t.get('league')}:{t.get('team')}"
+                        if now >= next_game.get(key, 0):
+                            next_game[key] = now + self._poll_game(t, key)
+                for item in list(self._pending):
+                    if now >= item[0]:
+                        self._pending.remove(item)
+                        _, kind, colors = item
+                        d, secs = shows.celebration(kind, colors)
+                        self.start_interrupt(d, secs, d["name"], force_live=bool(g.get("when_lights_off")))
+            except Exception:  # noqa: BLE001
+                log.exception("live data loop failed")
+
+    def _poll_game(self, t: dict, key: str) -> float:
+        """Check one team; returns seconds until the next check."""
+        league, team = t.get("league", "nfl"), t.get("team", "")
+        try:
+            game = live.find_game(live.fetch_json(live.scoreboard_url(league)), team)
+        except Exception as e:  # noqa: BLE001
+            self.games[key] = {**self.games.get(key, {}), "error": str(e)}
+            return 300
+        prev = self.games.get(key)
+        self.games[key] = game or {"state": "none", "team": team}
+        if not game:
+            return 1800
+        delay = float(self.cfg.data.get("game", {}).get("delay", 30))
+        if prev and prev.get("id") == game["id"] and prev.get("state") in ("in", "post"):
+            delta = game["score"] - prev.get("score", 0)
+            if delta > 0 and game["state"] == "in":
+                self._pending.append((time.time() + delay, live.classify(league, delta), game["colors"]))
+            if prev.get("state") == "in" and game["state"] == "post" and game["score"] > game["opp_score"]:
+                self._pending.append((time.time() + delay, "win", game["colors"]))
+        return 15 if game["state"] == "in" else 300
+
+    def _apply_weather(self):
+        w = self.cfg.data.get("weather", {})
+        now = time.time()
+        forced = {k for k, until in self._forced_weather.items() if until > now}
+        cond = self.weather if w.get("enabled") else {}
+        want = {}
+        if (w.get("snow", True) and cond.get("snow")) or "snow" in forced:
+            want["snow"] = ({"layers": [{"effect": "snowfall", "params": {"density": 0.8}}]}, "lighten", 1.0)
+        if (w.get("rain") and cond.get("rain")) or "rain" in forced:
+            want["rain"] = ({"layers": [{"effect": "rain"}]}, "lighten", 0.8)
+        if (w.get("storm", True) and cond.get("storm")) or "storm" in forced:
+            want["storm"] = ({"layers": [{"effect": "lightning", "params": {"interval": 7}}]}, "add", 1.0)
+        wind = max(float(cond.get("wind_mph") or 0), float(cond.get("gust_mph") or 0) * 0.7)
+        if "wind" in forced:
+            wind = 35
+        if w.get("wind", True) and wind >= 12 or "wind" in forced:
+            depth = min(0.6, (wind - 8) / 40)
+            want["wind"] = ({"layers": [{"effect": "solid", "params": {"color": "#ffffff"},
+                                         "fx": [{"type": "shimmer", "params": {"depth": depth, "rate": 1 + wind / 8}}]}]},
+                            "multiply", 1.0)
+        ov = self.engine.overlays
+        for k in list(ov):
+            if k not in want:
+                ov.pop(k, None)
+        for k, (d, mode, op) in want.items():
+            if k not in ov or getattr(ov[k][0], "_spec", None) != d:
+                sc = Scene.from_dict(d)
+                sc._spec = d
+                ov[k] = (sc, mode, op)
+
+    def test_live(self, kind: str):
+        if kind in ("snow", "rain", "storm", "wind"):
+            self._forced_weather[kind] = time.time() + 60
+            self._apply_weather()
+            return f"{kind} overlay for 60 s"
+        if kind in ("touchdown", "field goal", "score", "win"):
+            g = next(iter(self.games.values()), {}) or {}
+            d, secs = shows.celebration(kind, g.get("colors") or ["#fc4c02", "#0a2343"])
+            self.start_interrupt(d, min(secs, 20), d["name"], force_live=True)
+            return d["name"]
+        if kind == "countdown":
+            self.start_interrupt(shows.countdown_scene(time.time() + 12, 12, 10), 15, "Countdown test", force_live=True)
+            return "countdown"
+        if kind == "days":
+            self.start_interrupt(shows.days_scene(24), 8, "Days to go test", force_live=True)
+            return "days to go"
+        raise ValueError(f"unknown test {kind}")
+
+    # --------------------------------------------------------- mapping
+    def map_start(self) -> dict:
+        from .effects import MAP_BITS, MAP_OFF, MAP_ON, MAP_SLOT, map_cycle
+        with self.lock:
+            if self.map_state is None:
+                self.interrupt = None
+                self.map_state = {"scene": self.scene_dict, "playing": self.playing, "live": self.engine.live,
+                                  "speed": self.engine.master.get("speed", 1.0), "blackout": self.engine.blackout}
+            self.engine.master["speed"] = 1.0
+            self.engine.blackout = False
+            self.engine.set_scene(Scene.from_dict({"layers": [{"effect": "mapcode"}]}))
+            self.playing = {"kind": "event", "name": "Camera mapping pattern"}
+        self.set_live(True, manual=False)
+        return {"on": MAP_ON, "off": MAP_OFF, "slot": MAP_SLOT, "bits": MAP_BITS, "cycle": map_cycle(),
+                "n": self.engine.layout.n}
+
+    def map_stop(self):
+        with self.lock:
+            st, self.map_state = self.map_state, None
+            if not st:
+                return
+            self.engine.master["speed"] = st["speed"]
+            self.engine.blackout = st["blackout"]
+            self.engine.set_scene(Scene.from_dict(st["scene"], self.user_palettes) if st["scene"] else None)
+            self.playing = st["playing"]
+            if not st["live"]:
+                self.engine.set_live(False, release=True)
+
+    def map_apply(self, points: list, target: str = "all") -> dict:
+        L = self.engine.layout
+        only = None if target in ("all", "", None) else L.indices(target)
+        measured = shows.fit_mapping(L, points, only)
+        geo = shows.merged_geometry(L, measured)
+        with self.cfg.lock:
+            for mac, knots in geo.items():
+                d = self.cfg.devices[mac]
+                d["geometry_prev"] = d.get("geometry", [])
+                d["geometry"] = knots
+            self.cfg.save()
+        self.build_engine()
+        return {"mapped": len(measured), "runs": [self.cfg.devices[m].get("name") for m in geo]}
+
+    def map_undo(self) -> int:
+        n = 0
+        with self.cfg.lock:
+            for d in self.cfg.devices.values():
+                if "geometry_prev" in d:
+                    d["geometry"], n = d.pop("geometry_prev"), n + 1
+            self.cfg.save()
+        self.build_engine()
+        return n
+
     # ------------------------------------------------------ diagnostics
     def enter_diag(self):
         if not self.diag_active:
@@ -280,8 +512,13 @@ class Controller:
             try:
                 now = time.time()
                 with self.lock:
-                    if self.playlist and now >= self.playlist["next_at"]:
+                    if self.interrupt and now >= self.interrupt["until"]:
+                        self.end_interrupt()
+                    if self.playlist and (self.interrupt or self.map_state):
+                        self.playlist["next_at"] += 1.0          # hold the playlist while interrupted
+                    elif self.playlist and now >= self.playlist["next_at"]:
                         self._advance()
+                self._events_tick()
                 if now - last_sched >= 10:
                     last_sched = now
                     self._schedule_tick()
@@ -296,7 +533,7 @@ class Controller:
         now = datetime.now().astimezone()
         ev = sched.evaluate(now, sch)
         self.sched_status = ev
-        if not sch.get("enabled") or self.diag_active:
+        if not sch.get("enabled") or self.diag_active or self.map_state or self.interrupt:
             return
         if self.override_until:
             if now < self.override_until:
@@ -324,6 +561,10 @@ class Controller:
             "live": e.live, "playing": self.playing, "playlist": pl, "diag_active": self.diag_active,
             "fps": e.fps, "gamma": e.gamma, "brightness": e.brightness, "stats": e.stats,
             "master": e.master, "blackout": e.blackout,
+            "interrupt": ({"label": self.interrupt.get("label"), "left": max(0, round(self.interrupt["until"] - time.time()))}
+                          if self.interrupt else None),
+            "mapping": bool(self.map_state), "weather": self.weather, "overlays": list(e.overlays),
+            "games": self.games,
             "schedule": {"enabled": bool(sch.get("enabled")), **self.sched_status,
                          "override_until": self.override_until.isoformat(timespec="minutes") if self.override_until else None},
             "runs": [{"name": r.name, "mac": r.mac, "count": r.count, "visible": len(r.pixels),

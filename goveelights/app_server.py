@@ -33,7 +33,7 @@ class Server(ThreadingHTTPServer):
 
 
 CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
-       "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+       "img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 PUBLIC = {"/login", "/api/login", "/api/auth"}
 
 
@@ -135,6 +135,12 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                     return self._json(ctl.cfg.data.get("playlists", {}))
                 if path == "/api/schedule":
                     return self._json(ctl.cfg.data.get("schedule", {}))
+                if path == "/api/extras":
+                    from .live import LEAGUES
+                    from .pictures import PICTURES
+                    return self._json({"events": ctl.events, "game": ctl.cfg.data.get("game", {}),
+                                       "weather": ctl.cfg.data.get("weather", {}),
+                                       "leagues": {k: v[2] for k, v in LEAGUES.items()}, "pictures": list(PICTURES)})
                 if path == "/api/diag/state":
                     return self._json(ctl.diag.state())
                 if path == "/api/diag/report":
@@ -294,6 +300,33 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
             if a == "schedule/resume":
                 ctl.resume_schedule()
                 return {"ok": True}
+            if a in ("events", "game", "weather"):
+                val = b["value"]
+                if a == "events":
+                    if not isinstance(val, list):
+                        raise ValueError("events must be a list")
+                    for ev in val:
+                        int(ev["month"]), int(ev["day"]), str(ev.get("time", "00:00")).split(":")
+                elif not isinstance(val, dict):
+                    raise ValueError(f"{a} must be an object")
+                with cfg.lock:
+                    cfg.data[a] = val
+                    cfg.save()
+                return {"ok": True}
+            if a == "live/test":
+                return {"ok": True, "message": ctl.test_live(str(b.get("kind")))}
+            if a == "interrupt/end":
+                ctl.end_interrupt()
+                return {"ok": True}
+            if a == "map/start":
+                return {"ok": True, **ctl.map_start()}
+            if a == "map/stop":
+                ctl.map_stop()
+                return {"ok": True}
+            if a == "map/apply":
+                return {"ok": True, **ctl.map_apply(b["points"], b.get("target", "all"))}
+            if a == "map/undo":
+                return {"ok": True, "restored": ctl.map_undo()}
             if a == "diag/exit":
                 ctl.exit_diag()
                 return {"ok": True}

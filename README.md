@@ -35,6 +35,28 @@ and exponential decay, run white-hot and cool into the bulb's own colour, and bl
 neighbouring bulbs; the base shimmers underneath. **62 palettes** in categories (Classic,
 Warm, Cool, Nature, Neon, Elegant, Soft, Holidays), tuned for LEDs.
 
+**Camera mapping** (More → Map the bulbs with your camera): the lights blink a binary ID
+code (8 bits + parity, each bit shown with its inverse, so ambient light and auto-exposure
+don't matter). You record ~25 s with the phone's normal camera, and the page decodes the
+video on the phone. Nothing is uploaded. Measured positions are fitted into the layout
+(scale from the real bulb spacing, rotation and offset fitted), short gaps are
+interpolated, and only the area you pick is updated. Undo restores the previous shape.
+
+**Paint mode** (🖌 in Create): paint bulbs by dragging on the live preview, plus pictures
+on the zigzag (tree, star, snowflake, heart, pumpkin, present, smile).
+
+**Live** (Shows → Live):
+* **Countdowns/events:** big digits on the zigzag with the eaves filling up, then a
+  celebration preset, plus optional "days to go" reminders. New Year and Christmas are
+  built in; add birthdays etc.
+* **Game day:** ESPN's public scoreboard (NFL, college, NBA, NHL, MLB, MLS; any team).
+  Touchdown, field goal/score and win celebrations in the team's own colours (brightened
+  for LEDs), with a delay setting to match the TV.
+* **Weather:** Open-Meteo for your location. Snowfall, rain, lightning and wind-shimmer
+  overlays layered on whatever is playing.
+
+Every feature has test buttons so you don't have to wait for snow or a touchdown.
+
 **Remote access and login:** see [REMOTE.md](REMOTE.md) (Cloudflare Tunnel + Access on
 your own subdomain; the app adds its own password, lockout and CSRF protection). Set the
 password under More → Security, or with `python -m goveelights set-password`.

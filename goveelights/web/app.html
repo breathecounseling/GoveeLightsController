@@ -130,6 +130,15 @@ h2 .sp{flex:1}
 .starter{display:flex;align-items:center;gap:10px;width:100%;margin-bottom:6px;text-align:left}
 .starter i{flex:1;height:22px;border-radius:7px;display:block}
 .starter b{width:118px;font-size:13px}
+#pv.painting{touch-action:none;outline:2px solid var(--mod);outline-offset:-2px;cursor:crosshair}
+.tools{display:flex;gap:6px;flex-wrap:wrap}
+.tools button.on{border-color:var(--mod);background:#2e1065}
+.brush{width:36px;height:36px;border-radius:50%;border:2px solid var(--line);padding:0}
+.brush.on{border-color:#fff;box-shadow:0 0 0 2px var(--mod)}
+.prog{height:8px;border-radius:99px;background:var(--p2);overflow:hidden;margin:8px 0}.prog i{display:block;height:100%;background:var(--blue);width:0}
+.evt{background:var(--p2);border:1px solid var(--line);border-radius:12px;padding:8px;margin-bottom:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.evt .full{grid-column:1/-1}
+.evt label{font-size:12px;color:var(--dim)}
 .grp{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin:12px 0 6px}
 #toast{position:fixed;left:50%;bottom:calc(76px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#2c3542;padding:8px 14px;border-radius:10px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;z-index:60;font-size:14px}
 #toast.show{opacity:1}
@@ -181,22 +190,42 @@ h2 .sp{flex:1}
   <div class="tb">
     <button onclick="undo()" id="undoB" aria-label="Undo">↶</button><button onclick="redo()" id="redoB" aria-label="Redo">↷</button>
     <button class="grow" id="nameBtn" onclick="saveSheet()"></button>
-    <button onclick="randomize()" title="Randomize">🎲</button><button onclick="mutate()" title="Mutate">✨</button>
+    <button onclick="togglePaint()" title="Paint" id="paintB">🖌</button><button onclick="randomize()" title="Randomize">🎲</button><button onclick="mutate()" title="Mutate">✨</button>
     <button class="pri" onclick="saveSheet()">Save</button>
   </div>
   <div id="layerList"></div>
   <div class="row" style="margin:2px 0 6px"><button class="grow" onclick="addLayer()">+ Layer</button><button onclick="openSheet('Open a preset', loadPicker())">Open…</button><button onclick="newScene()">New</button></div>
   <div id="layerPanel"></div>
+  <div id="paintPanel" style="display:none"></div>
 </section>
 
 <!-- SHOWS -->
 <section id="s-shows">
-  <div class="seg" id="showSeg"><button data-v="lists" class="on">Playlists</button><button data-v="sched">Schedule</button></div>
+  <div class="seg" id="showSeg"><button data-v="lists" class="on">Playlists</button><button data-v="sched">Schedule</button><button data-v="live">Live</button></div>
   <div id="v-lists">
     <div class="card">
       <div class="row"><select id="plSel" class="grow" onchange="plPick(this.value)"></select><button onclick="plNew()">New</button></div>
       <div id="plEd" style="margin-top:10px"></div>
     </div>
+  </div>
+  <div id="v-live" style="display:none">
+    <div class="card"><h2>Countdowns &amp; events</h2><p class="help">At the moment itself the house counts down (digits on the zigzag, eaves filling up), then plays a celebration. "Days to go" shows the number on the zigzag for a few seconds every 15 minutes while the lights are on.</p>
+      <div id="evList"></div><div class="row"><button onclick="addEvent()">+ Event</button><button onclick="post('live/test',{kind:'countdown'})">Test countdown</button><button onclick="post('live/test',{kind:'days'})">Test days</button></div>
+      <button class="pri" style="width:100%;margin-top:8px" onclick="saveExtras('events')">Save events</button></div>
+    <div class="card"><h2><span class="sp">Game day</span><input type="checkbox" id="gEn"></h2>
+      <p class="help">Celebrates when your team scores (touchdowns, field goals, goals, runs) and wins, in the team's colours. Scores come from ESPN's public scoreboard. TV is usually 20–60 s behind, so add a delay to avoid spoilers.</p>
+      <div id="gTeams"></div><button class="sm" onclick="addTeam()">+ Team</button>
+      <div class="prm"><div class="top"><span class="lbl">Delay to match TV</span><output id="gDelayV"></output></div><input type="range" id="gDelay" min="0" max="120" step="5"></div>
+      <label class="row" style="margin:6px 0"><input type="checkbox" id="gOff"> <span>Celebrate even when the lights are off</span></label>
+      <div id="gStatus" class="help"></div>
+      <div class="row wrap"><button class="sm" onclick="post('live/test',{kind:'touchdown'})">Test touchdown</button><button class="sm" onclick="post('live/test',{kind:'field goal'})">Test field goal</button><button class="sm" onclick="post('live/test',{kind:'win'})">Test win</button></div>
+      <button class="pri" style="width:100%;margin-top:8px" onclick="saveExtras('game')">Save game day</button></div>
+    <div class="card"><h2><span class="sp">Weather</span><input type="checkbox" id="wEn"></h2>
+      <p class="help">Adds weather on top of whatever is playing, using the forecast for your location (Open-Meteo, checked every 10 minutes).</p>
+      <div class="tgt" id="wKinds"></div>
+      <div id="wStatus" class="help" style="margin-top:8px"></div>
+      <div class="row wrap"><button class="sm" onclick="post('live/test',{kind:'snow'})">Test snow</button><button class="sm" onclick="post('live/test',{kind:'rain'})">Test rain</button><button class="sm" onclick="post('live/test',{kind:'storm'})">Test lightning</button><button class="sm" onclick="post('live/test',{kind:'wind'})">Test wind</button></div>
+      <button class="pri" style="width:100%;margin-top:8px" onclick="saveExtras('weather')">Save weather</button></div>
   </div>
   <div id="v-sched" style="display:none">
     <div class="card" id="schedStatus"></div>
@@ -227,6 +256,11 @@ h2 .sp{flex:1}
     <div class="knob"><label>Frame rate</label><select id="fps" onchange="post('settings',{fps:+this.value})"><option>10</option><option>15</option><option>20</option><option>25</option><option>30</option></select><span></span></div>
     <div class="knob"><label>Gamma</label><input id="gamma" type="range" min="1" max="2.8" step="0.1"><output id="oGamma"></output></div>
     <p class="help">Gamma 1.0 = off; ~2.2 if mid colours look washed out on the bulbs.</p>
+  </div>
+  <div class="card">
+    <h2>Map the bulbs with your camera</h2>
+    <p class="help">Makes 2D effects (ripples, sweeps, pictures, fire rising) line up with the real roofline. The lights blink a code, you film them for ~25 seconds, and your phone works out where every bulb is. Nothing is uploaded.</p>
+    <div class="row"><button class="pri grow" onclick="mapWizard()">Start mapping</button><button onclick="post('map/undo').then(r=>r&&(toast(r.restored?'Previous layout restored':'Nothing to undo'), reloadLayout()))">Undo last</button></div>
   </div>
   <div class="card">
     <h2>Devices</h2><div id="devInfo" class="kv"></div>
@@ -263,7 +297,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const h = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild };
 let BLEND_INFO = {};
 let ST = {}, EFX = {}, FXD = {}, BLENDS = [], SHAPES = [], PRESETS = [], LAYOUT = null, PL = {}, SCH = {}, PALS = {}, PAL_BUILTIN = [], PAL_CATS = {};
-let draft = null, draftId = null, sel = 0, panel = 'source', filter = 'all';
+let draft = null, draftId = null, sel = 0, panel = 'source', filter = 'all', draftLoading = null;
 const hist = {u: [], r: [], last: null};
 
 function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2000) }
@@ -281,14 +315,14 @@ function tabTo(t){
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
   document.querySelectorAll('main section').forEach(s => s.classList.toggle('on', s.id === 's-'+t));
   store.set('tab', t); window.scrollTo(0,0);
-  if (t === 'create' && !draft) editCurrent(true);
+  if (t === 'create' && !draft) draftLoading = editCurrent(true);
 }
 document.querySelectorAll('#nav button').forEach(b => b.onclick = () => tabTo(b.dataset.t));
 function openSheet(title, body){ $('sheetTitle').textContent = title; const sb=$('sheetBody'); sb.innerHTML=''; if (typeof body === 'string') sb.innerHTML = body; else sb.appendChild(body); $('sheet').scrollTop=0; $('sheet').classList.add('on'); $('scrim').classList.add('on') }
 function closeSheet(){ $('sheet').classList.remove('on'); $('scrim').classList.remove('on') }
 document.querySelectorAll('#showSeg button').forEach(b => b.onclick = () => {
   document.querySelectorAll('#showSeg button').forEach(x => x.classList.toggle('on', x===b));
-  $('v-lists').style.display = b.dataset.v==='lists' ? '' : 'none'; $('v-sched').style.display = b.dataset.v==='sched' ? '' : 'none';
+  ['lists','sched','live'].forEach(v => $('v-'+v).style.display = b.dataset.v===v ? '' : 'none');
 });
 
 // ------------------------------------------------------------- preview
@@ -381,6 +415,8 @@ async function refresh(){
   if (document.activeElement !== $('fps')) setSel($('fps'), String(Math.round(s.fps)));
   setKnob('gamma','oGamma', s.gamma, v => (+v).toFixed(1));
   const b = [];
+  if (s.interrupt) b.push(`<div class="banner">Playing <b>${esc(s.interrupt.label)}</b> (${s.interrupt.left}s left), then back to what was on. <button class="sm" onclick="post('interrupt/end').then(refresh)">End now</button></div>`);
+  if (s.mapping) b.push(`<div class="banner">The camera-mapping pattern is running. <button class="sm" onclick="post('map/stop').then(refresh)">Stop it</button></div>`);
   if (s.diag_active) b.push(`<div class="banner">Diagnostics paused the effects. <button class="sm" onclick="post('diag/exit').then(refresh)">Resume effects</button></div>`);
   if (!s.runs.length) b.push(`<div class="banner">No runs have a confirmed bulb count. Open <a href="/diag">diagnostics</a>.</div>`);
   else if (s.devices_without_count.length) b.push(`<div class="banner">Not in the effects yet (no bulb count): ${esc(s.devices_without_count.join(', '))}</div>`);
@@ -388,7 +424,7 @@ async function refresh(){
   document.querySelectorAll('.pc').forEach(el => el.classList.toggle('on', !!p && p.kind==='preset' && el.dataset.id===p.id));
   document.querySelectorAll('#palChips .pals .pal').forEach(el => el.classList.toggle('on', el.dataset.p === (s.master.palette||'')));
   $('devInfo').innerHTML = s.runs.map(r => `<b>${esc(r.name)}</b><span>${r.visible}/${r.count} bulbs · ${esc(r.ip||'no IP')}</span>`).join('');
-  schedStatus();
+  schedStatus(); liveStatus();
 }
 function setKnob(id, out, v, fmt){ const el=$(id); if (document.activeElement !== el && !el._drag){ el.value = v; $(out).textContent = fmt(v) } }
 function fmtS(n){ if(n==null) return ''; const m=Math.floor(n/60), s=n%60; return m?`${m}m ${s}s`:`${s}s` }
@@ -628,6 +664,8 @@ function effectPicker(L){
   const groups = {'Sparkle & glitter': ['glitter','shimmer','sequins','fizz','fireflies','twinkle','sparkle'],
                   'Along the lights': ['solid','chase','comet','scanner','wipe','wave','candy_cane','alternate','gradient','rainbow'],
                   'Across the house (2D)': ['ripple','sweep','plasma','aurora','bursts'],
+                  'Pictures & numbers': ['picture','digits','countdown','paint'],
+                  'Weather': ['snowfall','rain','lightning'],
                   'Texture & time': ['fire','breathe','off']};
   const el = h('<div></div>');
   Object.entries(groups).forEach(([gname, names]) => {
@@ -717,7 +755,7 @@ function paramRow(obj, p, owner){
         w.querySelector('input').oninput = e => { const a=[...val(obj,p)]; a[k]=e.target.value; set(a) };
         const x = w.querySelector('.x'); if (x) x.onclick = () => { const a=[...val(obj,p)]; a.splice(k,1); set(a); drawC() };
         box.appendChild(w) });
-      const add = h('<button class="sm">+</button>'); add.onclick = () => { set([...val(obj,p), cs[cs.length-1]]); drawC() }; box.appendChild(add) };
+      const add = h('<button class="sm">+</button>'); add.onclick = () => { set([...val(obj,p), cs[cs.length-1] || '#ffffff']); drawC() }; box.appendChild(add) };
     drawC();
   } else if (p.kind === 'choice'){
     const tg = h('<div class="tgt" style="margin-top:4px"></div>');
@@ -871,6 +909,213 @@ function schedStatus(){ const s = ST.schedule || {}; let x;
   if (s.enabled && s.override_until) x += `<div style="color:var(--warn);margin-top:6px">Paused by a manual change until ${tfmt(s.override_until)}. <button class="sm" onclick="post('schedule/resume').then(()=>setTimeout(refresh,300))">Resume</button></div>`;
   $('schedStatus').innerHTML = x }
 
+// ------------------------------------------------------------- paint mode
+let painting = false, brush = '#ff2020', brushSize = 1, tool = 'brush';
+function paintLayer(){
+  let i = draft.layers.findIndex(L => L.effect === 'paint');
+  if (i < 0){ draft.layers.push(blankLayer('paint', {blend:'lighten', params:{pixels:{}}})); i = draft.layers.length-1 }
+  sel = i; draft.layers[i].params.pixels ||= {}; return draft.layers[i];
+}
+async function togglePaint(){
+  if (!draft) await (draftLoading || editCurrent(true));
+  painting = !painting; $('paintB').classList.toggle('on', painting); $('pv').classList.toggle('painting', painting);
+  $('layerPanel').style.display = painting ? 'none' : ''; $('paintPanel').style.display = painting ? '' : 'none';
+  if (painting){ paintLayer(); changed(); renderPaint(); toast('Paint on the house preview at the top') } else renderEditor();
+}
+function renderPaint(){
+  const L = paintLayer(), pal = (L.palette && PALS[L.palette]) || PALS[draft.layers[0]?.palette] || ['#ff2020','#00c040','#ffd000','#ffffff','#2060ff','#ff00c0'];
+  const swatches = [...new Set([...pal, '#ffffff', '#ff2020', '#00c040', '#2060ff', '#ffd000', '#ff00c0'])].slice(0, 10);
+  const el = h(`<div class="card">
+    <div class="grp" style="margin-top:0">Colour</div><div class="tools" id="brushes"></div>
+    <div class="grp">Tool</div><div class="tools" id="tools"></div>
+    <div class="grp">Brush size</div><div class="tools" id="sizes"></div>
+    <div class="grp">Pictures on the zigzag</div><div class="tools" id="pics"></div>
+    <p class="help">Painting goes to a "Paint" layer blended on top, so the layers below still show where you haven't painted. Add Glitter FX to it for sparkling pictures.</p>
+    <button style="width:100%" onclick="togglePaint()">Done painting</button></div>`);
+  const bb = el.querySelector('#brushes');
+  swatches.forEach(c => { const b = h(`<button class="brush ${c===brush?'on':''}" style="background:${c}"></button>`); b.onclick = () => { brush = c; tool = 'brush'; renderPaint() }; bb.appendChild(b) });
+  const ci = h(`<input type="color" value="${brush}">`); ci.oninput = e => { brush = e.target.value; tool = 'brush' }; bb.appendChild(ci);
+  const tb = el.querySelector('#tools');
+  [['brush','🖌 Brush'],['erase','⌫ Erase'],['fill','▦ Fill all'],['clear','✕ Clear']].forEach(([k,l]) => { const b = h(`<button class="sm ${tool===k?'on':''}">${l}</button>`);
+    b.onclick = () => { if (k==='fill'){ const px = paintLayer().params.pixels; LAYOUT.pixels.forEach((_,i) => px[i] = brush); changed() }
+      else if (k==='clear'){ paintLayer().params.pixels = {}; changed() } else tool = k; renderPaint() }; tb.appendChild(b) });
+  const sb = el.querySelector('#sizes');
+  [[1,'1 bulb'],[3,'Small'],[6,'Big']].forEach(([n,l]) => { const b = h(`<button class="sm ${brushSize===n?'on':''}">${l}</button>`); b.onclick = () => { brushSize = n; renderPaint() }; sb.appendChild(b) });
+  const pb = el.querySelector('#pics');
+  (EXTRAS.pictures || []).forEach(name => { const b = h(`<button class="sm">${esc(name)}</button>`);
+    b.onclick = () => { const i = draft.layers.findIndex(L => L.effect === 'picture');
+      const L = i >= 0 ? draft.layers[i] : (draft.layers.push(blankLayer('picture', {target: LAYOUT.runs.find(r => /peak/i.test(r)) || 'all', blend:'lighten'})), draft.layers[draft.layers.length-1]);
+      L.params.image = name; changed(); toast('Picture: ' + name) }; pb.appendChild(b) });
+  $('paintPanel').innerHTML = ''; $('paintPanel').appendChild(el);
+}
+function paintAt(ev){
+  if (!painting || !geo) return;
+  const r = cv.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top;
+  const px = paintLayer().params.pixels, rad = Math.max(geo.r * 2.5, brushSize * geo.r * 2.4);
+  let hit = false;
+  geo.pts.forEach(([qx, qy], i) => { if ((qx-x)**2 + (qy-y)**2 <= rad*rad){ if (tool === 'erase') delete px[i]; else px[i] = brush; hit = true } });
+  if (hit) changed();
+}
+cv.addEventListener('pointerdown', e => { if (!painting) return; cv.setPointerCapture(e.pointerId); paintAt(e) });
+cv.addEventListener('pointermove', e => { if (painting && e.buttons) paintAt(e) });
+
+// ------------------------------------------------------------- camera mapping
+const once = (el, ev) => new Promise(res => el.addEventListener(ev, res, {once:true}));
+/* Decode a video of the mapping pattern. Returns {points:[[id,x,y,conf]], blobs, w, h, on}. Runs entirely in the browser. */
+async function decodeMapVideo(blob, T, progress = () => {}){
+  const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = URL.createObjectURL(blob);
+  await new Promise((res, rej) => { v.onloadedmetadata = res; v.onerror = () => rej(new Error("Couldn't read that video on this phone. Try recording it again in landscape.")) });
+  if (!isFinite(v.duration)){ v.currentTime = 1e9; await once(v, 'seeked') }
+  const dur = v.duration;
+  const seek = t => new Promise(res => { const done = () => { v.removeEventListener('seeked', done); res() }; v.addEventListener('seeked', done); v.currentTime = Math.max(0, Math.min(t, dur - 0.02)) });
+  // pass 1: overall brightness over time, to find the all-on → all-off moment
+  const lc = document.createElement('canvas'); lc.width = 64; lc.height = 36; const lx = lc.getContext('2d', {willReadFrequently: true});
+  const step = 0.1, means = [];
+  for (let t = 0; t < dur; t += step){ await seek(t); lx.drawImage(v, 0, 0, 64, 36); const d = lx.getImageData(0, 0, 64, 36).data;
+    let s2 = 0; for (let i = 0; i < d.length; i += 4) s2 += d[i] + d[i+1] + d[i+2]; means.push(s2); progress(0.45 * t / dur) }
+  const sorted = [...means].sort((a,b) => a-b), lo = sorted[Math.floor(sorted.length*.05)], hi = sorted[Math.floor(sorted.length*.95)];
+  const hiT = lo + 0.75*(hi-lo), loT = lo + 0.3*(hi-lo), need = Math.round(0.75/step);
+  const need2 = Math.round(0.75/step), cycleLen = T.on + T.off + T.bits*2*T.slot;
+  let edge = -1;
+  for (let i = need; i < means.length - need2; i++){
+    let ok = true; for (let k = 1; k <= need; k++) if (means[i-k] < hiT) { ok = false; break }
+    if (ok) for (let k = 0; k < need2; k++) if (means[i+k] > loT) { ok = false; break }
+    if (ok && i*step - step/2 + T.off + T.bits*2*T.slot <= dur){ edge = i*step - step/2; break }
+  }
+  if (edge < 0) throw new Error("Couldn't find the blink pattern in this video. Record at least 25 seconds while the pattern runs, holding still.");
+  // refine the all-on → all-off moment to about one video frame
+  const mid = (hiT + loT) / 2, sc = (64*36*3) ? 1 : 1;
+  for (let t = edge - 0.15; t <= edge + 0.15; t += 0.02){ await seek(t); lx.drawImage(v, 0, 0, 64, 36); const d = lx.getImageData(0, 0, 64, 36).data;
+    let s2 = 0; for (let i = 0; i < d.length; i += 4) s2 += d[i] + d[i+1] + d[i+2]; if (s2 < mid * sc){ edge = t - 0.01; break } }
+  // pass 2: full-detail frames at the middle of each phase
+  const W = Math.min(800, v.videoWidth), H = Math.round(W * v.videoHeight / v.videoWidth);
+  const hc = document.createElement('canvas'); hc.width = W; hc.height = H; const hx = hc.getContext('2d', {willReadFrequently: true});
+  let onImg = null;
+  const grab = async (center, keep) => { const acc = new Float32Array(W*H);
+    for (const o of [-0.08, 0, 0.08]){ await seek(center + o); hx.drawImage(v, 0, 0, W, H); const d = hx.getImageData(0, 0, W, H);
+      if (keep && o === 0) onImg = d;
+      for (let i = 0, j = 0; i < acc.length; i++, j += 4) acc[i] += (d.data[j]*0.3 + d.data[j+1]*0.59 + d.data[j+2]*0.11) / 3 }
+    return acc };
+  const ON = await grab(edge - T.on/2, true), OFF = await grab(edge + T.off/2);
+  const slots = [];
+  for (let k = 0; k < T.bits*2; k++){ slots.push(await grab(edge + T.off + k*T.slot + T.slot/2)); progress(0.45 + 0.45*(k+1)/(T.bits*2)) }
+  // find bulbs: bright in ON, dark in OFF
+  const D = new Float32Array(W*H); let mx = 0;
+  for (let i = 0; i < D.length; i++){ D[i] = Math.max(0, ON[i] - OFF[i]); if (D[i] > mx) mx = D[i] }
+  const vals = Array.from(D.filter((_, i) => i % 7 === 0)).sort((a,b) => a-b), p999 = vals[Math.floor(vals.length*.999)] || mx;
+  const thr = Math.max(12, 0.3 * p999), seen = new Uint8Array(W*H), blobs = [];
+  for (let i = 0; i < D.length; i++){
+    if (D[i] < thr || seen[i]) continue;
+    const st = [i]; seen[i] = 1; let sw = 0, sx = 0, sy = 0, n = 0;
+    while (st.length){ const q = st.pop(), x = q % W, y = (q / W) | 0, w = D[q]; sw += w; sx += x*w; sy += y*w; n++;
+      for (const nb of [q-1, q+1, q-W, q+W]) if (nb >= 0 && nb < D.length && !seen[nb] && D[nb] >= thr && Math.abs((nb % W) - x) <= 1){ seen[nb] = 1; st.push(nb) } }
+    if (n >= 2 && n < W*H/200) blobs.push({x: sx/sw, y: sy/sw, n});
+  }
+  const at = (img, b) => { let s3 = 0, c = 0; const cx = Math.round(b.x), cy = Math.round(b.y);
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++){ const x = cx+dx, y = cy+dy; if (x >= 0 && y >= 0 && x < W && y < H){ s3 += img[y*W+x]; c++ } } return s3/c };
+  const best = {};
+  for (const b of blobs){
+    const amp = at(ON, b) - at(OFF, b); if (amp <= 0) { b.ok = false; continue }
+    let code = 0, conf = 1;
+    for (let bit = 0; bit < T.bits; bit++){ const a = at(slots[bit*2], b), inv = at(slots[bit*2+1], b); if (a > inv) code |= 1 << bit; conf = Math.min(conf, Math.abs(a - inv) / amp) }
+    const id = code & 255, parity = (code >> 8) & 1, popc = id.toString(2).split('1').length - 1;
+    b.ok = parity === (popc & 1) && conf >= 0.2 && id < T.n; b.id = id; b.conf = conf;
+    if (b.ok && (!best[id] || best[id].conf < conf)) best[id] = b;
+  }
+  progress(1);
+  return {points: Object.values(best).map(b => [b.id, +b.x.toFixed(1), +b.y.toFixed(1), +b.conf.toFixed(2)]), blobs, w: W, h: H, on: onImg};
+}
+async function reloadLayout(){ LAYOUT = await get('layout'); layoutPreview(); thumbs.data = {}; mini.data = {}; document.querySelectorAll('canvas').forEach(c => c._g = null); loadPresets() }
+async function mapWizard(){
+  const el = h(`<div>
+    <p class="help" style="margin-top:0"><b>1.</b> Stand where you can see the part of the house you want to map, e.g. across the street facing the front gable. Landscape, no zoom, at night. Lean the phone on something so it stays still.</p>
+    <p class="help"><b>2.</b> Start the pattern. The lights blink a code that repeats every 11½ seconds.</p>
+    <button class="pri" style="width:100%" id="mStart">Start the blink pattern</button>
+    <p class="help"><b>3.</b> Record a video of about 25 seconds (two full cycles), then come back here.</p>
+    <label class="row" style="gap:8px"><span class="grow"><button style="width:100%;pointer-events:none">🎥 Record video</button></span><input type="file" accept="video/*" capture="environment" id="mRec" style="position:absolute;opacity:0;width:1px"></label>
+    <label class="row" style="margin-top:6px"><span class="grow"><button class="sm" style="width:100%;pointer-events:none">Choose an existing video</button></span><input type="file" accept="video/*" id="mPick" style="position:absolute;opacity:0;width:1px"></label>
+    <div id="mOut"></div>
+    <button class="sm" style="width:100%;margin-top:10px" id="mStop">Stop the pattern</button></div>`);
+  let T = null;
+  el.querySelector('#mStart').onclick = async () => { const r = await post('map/start'); if (r){ T = r; toast('Pattern running: start recording') } };
+  el.querySelector('#mStop').onclick = () => post('map/stop').then(refresh);
+  ['#mRec','#mPick'].forEach(id => { const inp = el.querySelector(id); inp.closest('label').onclick = () => inp.click(); inp.onchange = () => inp.files[0] && runDecode(inp.files[0]) });
+  async function runDecode(file){
+    if (!T) T = await post('map/start');
+    const out = el.querySelector('#mOut');
+    out.innerHTML = '<p class="help">Reading the video on this phone…</p><div class="prog"><i></i></div>';
+    try {
+      const res = await decodeMapVideo(file, T, f => out.querySelector('.prog i').style.width = Math.round(f*100) + '%');
+      const decoded = res.points.length;
+      out.innerHTML = `<p><b>Found ${decoded} of ${T.n} bulbs</b> <span class="dim">(${res.blobs.length} lights seen)</span></p><canvas id="mImg" style="width:100%;border-radius:10px"></canvas>
+        <p class="help">Green = identified, red = seen but unreadable. Only the area you choose below is updated; the rest keeps its current shape.</p>
+        <div class="grp">Apply to</div><div class="tgt" id="mTgt"></div>
+        <button class="pri" style="width:100%;margin-top:8px" id="mApply">Use these positions</button>`;
+      const c = out.querySelector('#mImg'); c.width = res.w; c.height = res.h; const x = c.getContext('2d');
+      if (res.on) x.putImageData(res.on, 0, 0);
+      res.blobs.forEach(b => { x.strokeStyle = b.ok ? '#4ade80' : '#f87171'; x.lineWidth = 2; x.beginPath(); x.arc(b.x, b.y, 5, 0, 7); x.stroke() });
+      let target = LAYOUT.zones['Whole front gable'] ? 'Whole front gable' : 'all';
+      const tg = out.querySelector('#mTgt');
+      const drawT = () => { tg.innerHTML = ''; ['all', ...LAYOUT.targets].forEach(n => { const b = h(`<button class="chip ${n===target?'on':''}">${n==='all'?'Everything decoded':esc(n)}</button>`); b.onclick = () => { target = n; highlight(n); drawT() }; tg.appendChild(b) }) };
+      drawT();
+      out.querySelector('#mApply').onclick = async () => { const r = await post('map/apply', {points: res.points, target});
+        if (r){ toast(`Updated ${r.mapped} bulbs (${r.runs.join(', ')})`); await post('map/stop'); closeSheet(); reloadLayout() } };
+    } catch (e) { out.innerHTML = `<p class="help" style="color:var(--bad)">${esc(e.message)}</p>` }
+  }
+  openSheet('Map with your camera', el);
+}
+
+// ------------------------------------------------------------- live: events, game day, weather
+let EXTRAS = {};
+async function loadExtras(){ EXTRAS = await get('extras'); drawEvents(); drawGame(); drawWeather() }
+function drawEvents(){
+  const box = $('evList'); box.innerHTML = '';
+  EXTRAS.events.forEach((ev, k) => {
+    const el = h(`<div class="evt">
+      <input type="text" class="full" value="${esc(ev.name)}" data-f="name" placeholder="Name">
+      <div><label>Date (MM-DD)</label><input type="text" value="${String(ev.month).padStart(2,'0')}-${String(ev.day).padStart(2,'0')}" data-f="date"></div>
+      <div><label>Time</label><input type="time" value="${esc(ev.time||'00:00')}" data-f="time"></div>
+      <div><label>Countdown (s, 0 = none)</label><input type="number" min="0" max="600" value="${ev.countdown||0}" data-f="countdown"></div>
+      <div><label>Celebration (min)</label><input type="number" min="0" max="120" value="${ev.minutes||0}" data-f="minutes"></div>
+      <div class="full"><label>Celebrate with</label><select data-f="celebrate">${PRESETS.map(p => opt(p.id, p.name, p.id===ev.celebrate)).join('')}</select></div>
+      <label class="row"><input type="checkbox" data-f="reminders" ${ev.reminders?'checked':''}> Days-to-go reminders</label>
+      <label class="row"><input type="checkbox" data-f="lights_on" ${ev.lights_on?'checked':''}> Turn lights on for it</label>
+      <label class="row"><input type="checkbox" data-f="enabled" ${ev.enabled!==false?'checked':''}> On</label>
+      <button class="sm bad" data-del>Remove</button></div>`);
+    el.querySelectorAll('[data-f]').forEach(i => i.onchange = () => { const f = i.dataset.f;
+      if (f === 'date'){ const m = i.value.match(/^(\d{1,2})-(\d{1,2})$/); if (m){ ev.month = +m[1]; ev.day = +m[2] } else toast('Use MM-DD') }
+      else if (i.type === 'checkbox') ev[f] = i.checked; else if (i.type === 'number') ev[f] = +i.value; else ev[f] = i.value });
+    el.querySelector('[data-del]').onclick = () => { EXTRAS.events.splice(k, 1); drawEvents() };
+    box.appendChild(el) });
+}
+function addEvent(){ EXTRAS.events.push({name:'Birthday', month:1, day:1, time:'19:00', countdown:10, digits:10, celebrate:'fireworks', minutes:5, reminders:false, lights_on:true, enabled:true}); drawEvents() }
+function drawGame(){
+  const g = EXTRAS.game; $('gEn').checked = !!g.enabled; $('gDelay').value = g.delay ?? 30; $('gDelayV').textContent = (g.delay ?? 30) + ' s'; $('gOff').checked = !!g.when_lights_off;
+  $('gDelay').oninput = e => { g.delay = +e.target.value; $('gDelayV').textContent = g.delay + ' s' };
+  $('gEn').onchange = e => g.enabled = e.target.checked; $('gOff').onchange = e => g.when_lights_off = e.target.checked;
+  const box = $('gTeams'); box.innerHTML = '';
+  (g.teams ||= []).forEach((t, k) => { const el = h(`<div class="row" style="margin-bottom:6px"><select class="grow">${Object.entries(EXTRAS.leagues).map(([v,l]) => opt(v, l, v===t.league)).join('')}</select>
+      <input type="text" value="${esc(t.team)}" style="width:90px" placeholder="DEN" maxlength="6"><button class="sm bad">✕</button></div>`);
+    el.querySelector('select').onchange = e => t.league = e.target.value; el.querySelector('input').onchange = e => t.team = e.target.value.trim().toUpperCase();
+    el.querySelector('button').onclick = () => { g.teams.splice(k, 1); drawGame() }; box.appendChild(el) });
+}
+function addTeam(){ EXTRAS.game.teams.push({league:'nba', team:'DEN'}); drawGame() }
+function drawWeather(){
+  const w = EXTRAS.weather; $('wEn').checked = !!w.enabled; $('wEn').onchange = e => w.enabled = e.target.checked;
+  const box = $('wKinds'); box.innerHTML = '';
+  [['snow','❄ Snow'],['rain','☂ Rain'],['storm','⚡ Lightning'],['wind','🌬 Wind shimmer']].forEach(([k,l]) => { const b = h(`<button class="chip ${w[k]?'on':''}">${l}</button>`);
+    b.onclick = () => { w[k] = !w[k]; drawWeather() }; box.appendChild(b) });
+}
+async function saveExtras(which){ if (await post(which, {value: EXTRAS[which]})) toast('Saved') }
+function liveStatus(){
+  const g = Object.entries(ST.games || {}).map(([k, v]) => v.error ? `${esc(k)}: couldn't reach scores (${esc(v.error)})` :
+    v.state === 'none' || !v.id ? `${esc(v.team||k)}: no game on the current scoreboard` :
+    `<b>${esc(v.team)} ${v.score} – ${esc(v.opponent)} ${v.opp_score}</b> · ${esc(v.detail)}`).join('<br>');
+  if ($('gStatus')) $('gStatus').innerHTML = g || (EXTRAS.game?.enabled ? 'Checking…' : '');
+  const w = ST.weather || {};
+  if ($('wStatus')) $('wStatus').innerHTML = w.error ? `Couldn't reach the forecast: ${esc(w.error)}` : w.text ? `Now: <b>${esc(w.text)}</b>, ${Math.round(w.temp_f)}°F, wind ${Math.round(w.wind_mph)} mph` + (ST.overlays?.length ? ` · showing: ${ST.overlays.join(', ')}` : '') : (ST.overlays?.length ? 'Showing: ' + ST.overlays.join(', ') : '');
+}
+
 // ------------------------------------------------------------- security
 async function security(){
   const a = await get('auth').catch(()=>null); if (!a) return;
@@ -897,7 +1142,7 @@ async function security(){
   const e = await get('effects'); e.effects.forEach(x => EFX[x.name] = x); e.fx.forEach(x => FXD[x.name] = x); BLENDS = e.blends; SHAPES = e.shapes; BLEND_INFO = e.blend_info || {};
   LAYOUT = await get('layout'); layoutPreview(); openStream();
   await loadPalettes(); PL = await get('playlists'); SCH = await get('schedule');
-  await loadPresets(); plSelect(); schedForm(); await refresh(); setInterval(refresh, 2000); security();
+  await loadPresets(); plSelect(); schedForm(); await loadExtras(); await refresh(); setInterval(refresh, 2000); security();
   const t = store.get('tab', 'play'); if (t !== 'play') tabTo(t);
 })();
 </script>

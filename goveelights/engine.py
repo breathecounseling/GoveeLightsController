@@ -9,7 +9,7 @@ import time
 from .color import Color
 from .layout import Layout
 from .output import Output
-from .scene import Scene
+from .scene import Scene, blend
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +34,7 @@ class Engine:
         self.live = False          # False: render for preview only, lights untouched
         self.master = {"speed": 1.0, "hue": 0.0, "palette": "", "bpm": 120.0}
         self.blackout = False
+        self.overlays: dict[str, tuple[Scene, str, float]] = {}   # name -> (scene, blend, opacity), e.g. weather
         self.scene: Scene | None = None
         self._prev: Scene | None = None
         self._fade_start, self._fade_s = 0.0, 0.0
@@ -75,6 +76,9 @@ class Engine:
                 old = prev.render(t, self.layout, self.master)
                 cols = [(a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f)
                         for a, b in zip(old, cols)]
+        for sc, mode, op in list(self.overlays.values()):
+            oc = sc.render(t, self.layout)
+            cols = [blend(mode, a, b, op) for a, b in zip(cols, oc)]
         return cols
 
     def tick(self):

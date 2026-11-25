@@ -59,6 +59,8 @@ class Effect:
             try:
                 if prm.kind == "color":
                     v = hex_to_rgb(v)
+                elif prm.kind == "pixels":
+                    v = {int(k): hex_to_rgb(c) for k, c in (v or {}).items()}
                 elif prm.kind == "colors":
                     v = [hex_to_rgb(c) for c in (v or prm.default)] or [hex_to_rgb(c) for c in prm.default]
                 elif prm.kind == "int":
@@ -592,6 +594,154 @@ def off(t, p, P):
     return BLACK
 
 
+# ------------------------------------------------------------ paint, pictures, countdown
+import time as _time  # noqa: E402
+
+from .pictures import PICTURE_COLORS, PICTURES, sample as pic_sample, text_bitmap  # noqa: E402
+
+
+@effect("paint", "Paint", [
+    Param("pixels", "pixels", {}, help="painted bulbs: {virtual index: colour}"),
+    Param("background", "color", "#000000"),
+], "Your own finger painting.")
+def paint(t, p, P):
+    c = P["pixels"].get(p.i)
+    return c if c is not None else P["background"]
+
+
+@effect("picture", "Picture", [
+    Param("image", "choice", "tree", options=list(PICTURES)),
+    Param("colors", "colors", [], help="leave empty for the picture's own colours"),
+    Param("background", "color", "#000000"),
+    Param("width", "number", 1.0, "Width", 0.4, 1.5, 0.05),
+    Param("pulse", "number", 0.0, "Pulse", 0, 1, 0.05),
+    Param("period", "number", 2.0, "Pulse speed (s)", 0.3, 10, 0.1),
+], "A small picture (tree, star, heart, pumpkin…) drawn on the zigzag. Target the Peak.")
+def picture(t, p, P):
+    ch = pic_sample(PICTURES[P["image"]], p.rnx, p.rny, P["width"])
+    if ch == ".":
+        return P["background"]
+    cols = P["colors"] or [hex_to_rgb(h) for h in PICTURE_COLORS.get(P["image"], ["#ffffff"])]
+    c = cols[(int(ch) - 1) % len(cols)]
+    if P["pulse"] > 0:
+        c = scale(c, 1 - P["pulse"] * (0.5 - 0.5 * math.cos(2 * math.pi * t / P["period"])))
+    return c
+
+
+@effect("countdown", "Countdown", [
+    Param("target", "number", 0, "Target time (unix seconds; 0 = demo loop)"),
+    Param("colors", "colors", ["#ffffff", "#ffd000", "#ff2050"], help="digits, eaves fill, final flash"),
+    Param("seconds", "int", 10, "Count the last (s)", 3, 99, 1),
+    Param("part", "choice", "digits", options=["digits", "fill"],
+          help="digits: big numbers (target the Peak); fill: a bar that fills up (target the eaves)"),
+], "Counts down to a moment: big digits on the zigzag while the eaves fill up, then a flash at zero.")
+def countdown(t, p, P):
+    tgt = P["target"]
+    remaining = (tgt - _time.time()) if tgt else (P["seconds"] - (t % (P["seconds"] + 2)))
+    cols = P["colors"]
+    if remaining <= 0:                              # the moment: white flash fading over 2 s
+        return scale(cols[-1], max(0.0, 1 + remaining / 2.0))
+    if P["part"] == "digits":
+        n = int(math.ceil(remaining))
+        if n > P["seconds"]:
+            return scale(cols[0], 0.08)
+        bmp = text_bitmap(str(n))
+        ch = pic_sample(bmp, p.rnx, p.rny, min(1.0, len(bmp[0]) / 9))
+        frac = remaining - math.floor(remaining)    # each digit fades as its second passes
+        return scale(cols[0], 0.6 + 0.4 * frac) if ch != "." else BLACK
+    fill = 1 - min(1.0, remaining / max(1, P["seconds"]))
+    return cols[1 % len(cols)] if p.ru <= fill else scale(cols[1 % len(cols)], 0.05)
+
+
+@effect("digits", "Number", [
+    Param("value", "int", 24, "Number", 0, 99, 1),
+    Param("colors", "colors", ["#ffffff"]),
+    Param("pulse", "number", 0.3, "Pulse", 0, 1, 0.05),
+], "A number on the zigzag (e.g. days to go). Target the Peak.")
+def digits(t, p, P):
+    bmp = text_bitmap(str(P["value"]))
+    ch = pic_sample(bmp, p.rnx, p.rny, min(1.0, len(bmp[0]) / 9))
+    if ch == ".":
+        return BLACK
+    return scale(P["colors"][0], 1 - P["pulse"] * (0.5 - 0.5 * math.cos(2 * math.pi * t / 1.5)))
+
+
+# ------------------------------------------------------------ weather overlays
+@effect("snowfall", "Snowfall", [
+    Param("color", "color", "#ffffff"),
+    Param("density", "number", 0.6, "Flakes", 0.05, 3, 0.05),
+    Param("fall", "number", 1.2, "Fall speed", 0.2, 6, 0.1),
+    Param("seed", "int", 14, "Seed", 0, 9999, 1),
+], "Snowflakes drifting down the zigzag and settling as twinkles along the eaves.")
+def snowfall(t, p, P):
+    col = int(p.sx / 1.3)
+    tt = t + p.sy / P["fall"]                    # higher bulbs see the flake first
+    g, _ = glint(col * 977 + 13, tt, P["density"] * 0.4, 0.15, 0.25, P["seed"], 1)
+    return scale(P["color"], g)
+
+
+@effect("rain", "Rain", [
+    Param("color", "color", "#4080ff"),
+    Param("density", "number", 1.5, "Drops", 0.1, 6, 0.1),
+    Param("seed", "int", 15, "Seed", 0, 9999, 1),
+], "Quick blue drops streaking down and spattering.")
+def rain(t, p, P):
+    col = int(p.sx / 1.0)
+    tt = t + p.sy / 8.0
+    g, _ = glint(col * 641 + 7, tt, P["density"] * 0.5, 0.01, 0.08, P["seed"], 1)
+    return scale(P["color"], g)
+
+
+@effect("lightning", "Lightning", [
+    Param("color", "color", "#e0e8ff"),
+    Param("interval", "number", 8, "Average gap (s)", 1, 60, 0.5),
+    Param("seed", "int", 16, "Seed", 0, 9999, 1),
+], "Rare, sudden multi-flicker flashes across part of the house, like a storm.")
+def lightning(t, p, P):
+    iv = P["interval"]
+    k = math.floor(t / iv)
+    start = k * iv + hash01(k, P["seed"]) * iv * 0.6
+    age = t - start
+    if age < 0 or age > 0.9:
+        return BLACK
+    centre, width = hash01(k, P["seed"], 1), 0.25 + 0.5 * hash01(k, P["seed"], 2)
+    if abs(p.u - centre) > width:
+        return BLACK
+    v = 0.0
+    for j, (at, amp) in enumerate(((0.0, 1.0), (0.12, 0.6), (0.3, 0.9))):   # strobe-like double/triple strike
+        v = max(v, amp * math.exp(-max(0.0, age - at) / 0.05) if age >= at else 0.0)
+    return scale(P["color"], v)
+
+
+# ------------------------------------------------------------ camera mapping code
+MAP_ON, MAP_OFF, MAP_SLOT, MAP_BITS = 1.0, 1.0, 0.5, 9
+
+
+def map_cycle() -> float:
+    return MAP_ON + MAP_OFF + MAP_BITS * 2 * MAP_SLOT + 0.5
+
+
+@effect("mapcode", "Mapping code", [Param("level", "number", 0.7, "Brightness", 0.1, 1, 0.05)],
+        "Each bulb blinks its own binary ID for camera mapping.")
+def mapcode(t, p, P):
+    """Cycle: all on, all off, then for each bit b: bulbs with bit b set, then the inverse."""
+    on = (P["level"],) * 3
+    x = t % map_cycle()
+    if x < MAP_ON:
+        return on
+    x -= MAP_ON
+    if x < MAP_OFF:
+        return BLACK
+    x -= MAP_OFF
+    slot = int(x // MAP_SLOT)
+    if slot >= MAP_BITS * 2:
+        return BLACK
+    b, inverse = divmod(slot, 2)
+    code = p.i | ((bin(p.i).count("1") & 1) << 8)       # 8-bit id + parity bit
+    bit = (code >> b) & 1
+    return on if bit ^ inverse else BLACK
+
+
 # ------------------------------------------------------------ what you'll see
 # Plain-language descriptions shown in the app's pickers (they override the short
 # ones above). Written as "what it looks like on the house".
@@ -621,6 +771,14 @@ LOOKS = {
     "fizz": "Tiny bright bubbles rising up the zigzag like champagne, twinkling along the flat eaves.",
     "fireflies": "Soft warm points that glow up, drift a bulb or two, and fade away.",
     "off": "Nothing: a dark layer. Useful as a mask or to blank part of the house.",
+    "paint": "Exactly what you painted with your finger in paint mode.",
+    "picture": "A little picture (tree, star, snowflake, heart, pumpkin, present, smile) drawn on the zigzag. Set 'Where' to the Peak.",
+    "countdown": "Big digits counting down on the zigzag while the eaves fill up, then a bright flash at zero.",
+    "digits": "A number shown on the zigzag, gently pulsing (used for 'days to go').",
+    "snowfall": "Snowflakes drifting down the zigzag and twinkling along the eaves.",
+    "rain": "Fast blue raindrops streaking down.",
+    "lightning": "Every few seconds, a sudden flickering flash across part of the house.",
+    "mapcode": "Each bulb blinks its own ID code (used by camera mapping).",
 }
 for _n, _d in LOOKS.items():
     if _n in EFFECTS:
