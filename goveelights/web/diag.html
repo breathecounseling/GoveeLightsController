@@ -102,10 +102,10 @@ label.inl{display:flex;gap:8px;align-items:center;color:var(--dim);font-size:14p
   </div>
   <div class="card">
     <h2>Gradient flag check</h2>
-    <p class="help">Sends red → blue with gradient = 01. You should see a smooth blend, not two hard halves.</p>
+    <p class="help">Both send red, blue. With flag 01 you should see a blend. With flag 00 you should see half red, half blue with a hard edge.</p>
     <div class="grid2"><button onclick="act('gradient_test',{colors:['#ff0000','#0000ff']})">Red→Blue (gradient)</button>
-      <button onclick="act('solid',{color:'#ff0000',n:2}).then(()=>0)">Hard halves (n=2, flag 00)</button></div>
-    <div class="grid2" style="margin-top:8px"><button onclick="note('gradient_flag','blends')">Blends</button><button onclick="note('gradient_flag','no difference')">No difference</button></div>
+      <button onclick="act('gradient_test',{colors:['#ff0000','#0000ff'],gradient:false})">Hard halves (n=2, flag 00)</button></div>
+    <div class="grid2" style="margin-top:8px"><button onclick="note('gradient_flag','01 blends, 00 hard halves')">Blend + hard halves</button><button onclick="note('gradient_flag','no difference')">No difference</button></div>
   </div>
   <div class="card">
     <h2>Status while in realtime</h2>
@@ -283,7 +283,7 @@ function render(){
   const dl = S.devices.map(x=>`<div class="card"><div class="row" style="justify-content:space-between">
      <input value="${esc(x.name)}" onchange="act('device',{mac:'${x.mac}',name:this.value})" style="flex:1;font-weight:700">
      <button onclick="act('identify',{mac:'${x.mac}'})">Identify</button></div>
-     <div class="kv" style="margin-top:8px"><b>IP</b><span>${esc(x.ip)}</span><b>MAC</b><span class="mono">${esc(x.mac)}</span><b>SKU</b><span>${esc(x.sku)}</span>
+     <div class="kv" style="margin-top:8px"><b>IP</b><span>${esc(x.ip)}${x.reported_ip?` <span class=warn>(device reports ${esc(x.reported_ip)})</span>`:''}</span><b>MAC</b><span class="mono">${esc(x.mac)}</span><b>SKU</b><span>${esc(x.sku)}</span>
      <b>Firmware</b><span class="mono">${esc(Object.entries(x.firmware||{}).map(([k,v])=>k.replace('Version','')+' '+v).join(', '))}</span>
      <b>Seen</b><span>${x.seen_ago==null?'<span class=warn>not this session</span>':x.seen_ago+' s ago'}</span>
      <b>Bulbs</b><span>${x.pixel_count?'<span class=ok>'+x.pixel_count+' confirmed</span>':'~'+x.estimated_count+' estimated'}</span>

@@ -20,6 +20,7 @@ DEVICE_DEFAULTS = {
     "ip": "",
     "sku": "",
     "firmware": {},
+    "reported_ip": None,       # set if the scan reply's "ip" differs from its source
     "estimated_count": 72,     # 30 m / 0.417 m spacing
     "pixel_count": None,       # confirmed in Phase 1
     "reversed": False,
@@ -71,7 +72,11 @@ class Config:
             if new:
                 d["name"] = f"{info.get('sku', 'Govee')} {mac.replace(':', '')[-4:]}"
                 d["order"] = len(self.devices) - 1
-            d["ip"] = info.get("ip", d["ip"])
+            # Send to the address the reply actually came from. The "ip" field the
+            # device reports can be stale; keep it for diagnosis when it differs.
+            src, reported = info.get("source_ip"), info.get("ip")
+            d["ip"] = src or reported or d["ip"]
+            d["reported_ip"] = reported if reported and reported != d["ip"] else None
             d["sku"] = info.get("sku", d["sku"])
             d["firmware"] = {k: info[k] for k in
                              ("bleVersionHard", "bleVersionSoft", "wifiVersionHard", "wifiVersionSoft")

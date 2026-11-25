@@ -63,7 +63,7 @@ class GoveeLan:
                 continue
             cmd, d = msg.get("cmd"), msg.get("data") or {}
             if cmd == "scan" and "device" in d:
-                d.setdefault("ip", ip)
+                d["source_ip"] = ip
                 if self.on_device:
                     try:
                         self.on_device(d)

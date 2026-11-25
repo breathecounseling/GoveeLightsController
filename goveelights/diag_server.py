@@ -107,7 +107,7 @@ class App:
         for mac, d in sorted(self.cfg.devices.items(), key=lambda kv: kv[1].get("order", 0)):
             s = self.streamers.get(mac)
             devs.append({
-                "mac": mac, **{k: d.get(k) for k in ("name", "ip", "sku", "firmware", "estimated_count",
+                "mac": mac, **{k: d.get(k) for k in ("name", "ip", "reported_ip", "sku", "firmware", "estimated_count",
                                                       "pixel_count", "reversed", "order", "landmarks", "diag")},
                 "n": self.n_for(mac),
                 "seen_ago": round(now - self.seen[mac], 1) if mac in self.seen else None,
@@ -179,7 +179,7 @@ class App:
         if path == "gradient_test":
             s = self.streamer(mac)
             cols = [p.hex_rgb(c) for c in b.get("colors", ["#ff0000", "#0000ff"])]
-            s.show(cols, gradient=True)
+            s.show(cols, gradient=bool(b.get("gradient", True)))
             return {"ok": True}
         if path == "landmark":
             with self.cfg.lock:
@@ -290,7 +290,7 @@ def make_handler(app: App):
 def build_report(app: App) -> dict:
     out = []
     for d in app.state()["devices"]:
-        out.append({k: d[k] for k in ("name", "mac", "ip", "sku", "firmware", "pixel_count",
+        out.append({k: d[k] for k in ("name", "mac", "ip", "reported_ip", "sku", "firmware", "pixel_count",
                                       "estimated_count", "landmarks", "diag")})
     return {"generated": time.strftime("%Y-%m-%d %H:%M:%S"), "devices": out}
 
