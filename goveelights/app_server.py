@@ -109,7 +109,7 @@ def make_handler(ctl: Controller, on_quit):
                 b = json.loads(self.rfile.read(ln) or b"{}")
                 if path.startswith("/api/diag/") and path != "/api/diag/exit":
                     action = path[len("/api/diag/"):]
-                    if action not in ("scan", "add_ip", "device", "note", "landmark", "status"):
+                    if action not in ("scan", "add_ip", "device", "note", "landmark", "status", "check"):
                         ctl.enter_diag()       # anything that drives the lights pauses effects
                     res = ctl.diag.handle(action, b)
                     if action == "device" and not ctl.diag_active:

@@ -210,8 +210,8 @@ label.inl{display:flex;gap:8px;align-items:center;color:var(--dim);font-size:14p
     <h2>Is the white diode reachable in realtime?</h2>
     <p class="help">Compare these by eye at one bulb. A: realtime RGB full white (likely RGB diodes only, slightly blue or pink). B: realtime warm mix. C: the official colorwc at 2700 K, which probably uses the W diode and may exit realtime. D: speculative RGBW (4-byte) frame. Rejected or garbled means unsupported.</p>
     <div class="grid2">
-      <button onclick="act('solid',{color:'#ffffff',enable_first:true})">A: RGB 255,255,255</button>
-      <button onclick="act('solid',{color:'#ffb46b',enable_first:true})">B: RGB warm mix</button>
+      <button onclick="act('solid',{color:'#ffffff'})">A: RGB 255,255,255</button>
+      <button onclick="act('solid',{color:'#ffb46b'})">B: RGB warm mix</button>
       <button onclick="act('colorwc',{kelvin:2700})">C: colorwc 2700 K</button>
       <button onclick="act('rgbw_probe',{rgbw:[0,0,0,255]})">D: RGBW probe (W only)</button>
     </div>
@@ -229,7 +229,7 @@ label.inl{display:flex;gap:8px;align-items:center;color:var(--dim);font-size:14p
       <button onclick="note('rgbw_w_diode','D looks like real W diode white')">D = W diode</button>
       <button onclick="note('rgbw_w_diode','D looks like RGB mix / unclear')">D unclear</button>
     </div>
-    <p class="help">After C, did realtime stay active? Tap a colour in the Razer tab to see. Record what you saw:</p>
+    <p class="help">C takes the box out of realtime mode. The next A, B, D or E button turns realtime back on by itself (expect a blink).</p>
     <div class="grid2">
       <button onclick="note('white','RGB only (A differs from C)')">RGB only</button>
       <button onclick="note('white','RGBW probe lit white')">D gave real white</button>
@@ -299,12 +299,13 @@ function render(){
   // device list
   const dl = S.devices.map(x=>`<div class="card"><div class="row" style="justify-content:space-between">
      <input value="${esc(x.name)}" onchange="act('device',{mac:'${x.mac}',name:this.value})" style="flex:1;font-weight:700">
-     <button onclick="act('identify',{mac:'${x.mac}'})">Identify</button></div>
+     <button onclick="act('identify',{mac:'${x.mac}'})">Identify</button><button onclick="check('${x.mac}',this)">Check</button></div>
      <div class="kv" style="margin-top:8px"><b>IP</b><span>${esc(x.ip)}${x.reported_ip?` <span class=warn>(device reports ${esc(x.reported_ip)})</span>`:''}</span><b>MAC</b><span class="mono">${esc(x.mac)}</span><b>SKU</b><span>${esc(x.sku)}</span>
      <b>Firmware</b><span class="mono">${esc(Object.entries(x.firmware||{}).map(([k,v])=>k.replace('Version','')+' '+v).join(', '))}</span>
      <b>Seen</b><span>${x.seen_ago==null?'<span class=warn>not this session</span>':x.seen_ago+' s ago'}</span>
      <b>Bulbs</b><span>${x.pixel_count?'<span class=ok>'+x.pixel_count+' confirmed</span>':'~'+x.estimated_count+' estimated'}</span>
-     <b>Landmarks</b><span>${x.landmarks.length}</span></div></div>`).join('');
+     <b>Landmarks</b><span>${x.landmarks.length}</span>
+     ${x.diag.lan_check?`<b>Check</b><span class="${x.diag.lan_check.value.status_replies.startsWith('0')?'err':'ok'}">${esc(x.diag.lan_check.value.verdict)} (${esc(x.diag.lan_check.value.status_replies)})</span>`:''}</div></div>`).join('');
   if ($('devlist')._h !== dl && !$('devlist').contains(document.activeElement)) { $('devlist').innerHTML = dl; $('devlist')._h = dl }
   if(!d) return;
   // walker
@@ -380,6 +381,9 @@ function ka(s){ act('keepalive',{seconds:s}) }
 async function loadReport(){ const r=await fetch(API+'report').then(r=>r.text()); $('report').textContent=r }
 function copyReport(){ const t=$('report').textContent; (navigator.clipboard?.writeText(t)||Promise.reject()).then(()=>toast('Copied'),()=>{const r=document.createRange();r.selectNode($('report'));getSelection().removeAllRanges();getSelection().addRange(r);toast('Selected; copy it manually')}) }
 
+async function check(mac, btn){ btn.disabled=true; btn.textContent='Checking…';
+  const r = await act('check',{mac}); btn.disabled=false; btn.textContent='Check';
+  if (r) toast(r.verdict + ' (' + r.replies + '/3 replies)'); $('devlist')._h=null; refresh() }
 function addIp(){ const ip=$('addip').value.trim(); if(ip) act('add_ip',{ip}).then(()=>$('addip').value='') }
 </script>
 </body>

@@ -58,6 +58,14 @@ class App:
                 s = self.streamers[mac] = Streamer(self.lan, dev["ip"])
             return s
 
+    def rt(self, mac: str) -> Streamer:
+        """Streamer with realtime on. The official colour/temperature command
+        drops the box out of realtime, so test buttons re-enable as needed."""
+        s = self.streamer(mac)
+        if not s.realtime:
+            s.enable()
+        return s
+
     def n_for(self, mac: str, n=None) -> int:
         if n:
             return max(1, min(p.MAX_RAZER_COLORS, int(n)))
@@ -150,6 +158,19 @@ class App:
         if path == "status":
             st = self.lan.status(self.cfg.device(mac)["ip"])
             return {"ok": st is not None, "status": st}
+        if path == "check":                       # is the box listening on the control port?
+            ip = self.cfg.device(mac)["ip"]
+            replies, last = 0, None
+            for _ in range(3):
+                st = self.lan.status(ip, timeout=1.2)
+                if st:
+                    replies, last = replies + 1, st
+            seen = self.seen.get(mac)
+            verdict = ("answering commands" if replies else
+                       "answers the scan but ignores commands" if seen else "not answering at all")
+            self.note(mac, "lan_check", {"status_replies": f"{replies}/3", "ip": ip, "verdict": verdict,
+                                         "wifi_fw": self.cfg.device(mac).get("firmware", {}).get("wifiVersionSoft")})
+            return {"ok": True, "replies": replies, "verdict": verdict, "status": last}
         if path == "realtime":
             s = self.streamer(mac)
             if b.get("on"):
@@ -158,15 +179,13 @@ class App:
                 s.disable()
             return {"ok": True}
         if path == "solid":                       # n copies of one colour
-            s = self.streamer(mac)
+            s = self.rt(mac)
             rgb = p.hex_rgb(b.get("color", "#00ff00"))
             n = self.n_for(mac, b.get("n")) if b.get("n") else 1
-            if b.get("enable_first") and not s.realtime:
-                s.enable()
             s.show([rgb] * n, gradient=False)
             return {"ok": True, "n": n}
         if path == "pixel":                       # walker: one lit bulb
-            s = self.streamer(mac)
+            s = self.rt(mac)
             n = self.n_for(mac, b.get("n"))
             idx = int(b.get("index", 0))
             frame = [BLACK] * n
@@ -177,7 +196,7 @@ class App:
             s.show(frame)
             return {"ok": True, "n": n, "index": idx, "in_range": 0 <= idx < n}
         if path == "gradient_test":
-            s = self.streamer(mac)
+            s = self.rt(mac)
             cols = [p.hex_rgb(c) for c in b.get("colors", ["#ff0000", "#0000ff"])]
             s.show(cols, gradient=bool(b.get("gradient", True)))
             return {"ok": True}
@@ -193,7 +212,7 @@ class App:
                 self.cfg.save()
             return {"ok": True}
         if path == "chase":
-            s = self.streamer(mac)
+            s = self.rt(mac)
             n = self.n_for(mac, b.get("n"))
             col = p.hex_rgb(b.get("color", "#ffffff"))
 
@@ -220,6 +239,10 @@ class App:
         if path == "colorwc":
             ip = self.cfg.device(mac)["ip"]
             self.lan.send(ip, p.colorwc_msg(p.hex_rgb(b.get("color", "#000000")), int(b.get("kelvin", 0))))
+            s = self.streamers.get(mac)
+            if s:                                  # observed on H805A: this exits realtime
+                s.stop_anim()
+                s.realtime = False
             return {"ok": True}
         if path == "brightness":
             self.lan.send(self.cfg.device(mac)["ip"], p.brightness_msg(int(b["value"])))
@@ -228,7 +251,7 @@ class App:
             self.lan.send(self.cfg.device(mac)["ip"], p.turn_msg(bool(b.get("on"))))
             return {"ok": True}
         if path == "rgbw_probe":
-            s = self.streamer(mac)
+            s = self.rt(mac)
             n = self.n_for(mac)
             s.send_raw(p.razer_rgbw_probe_packet([tuple(b.get("rgbw", [0, 0, 0, 255]))] * n))
             return {"ok": True}
