@@ -12,7 +12,21 @@ DEFAULT_PATH = Path(os.environ.get("GOVEE_CONFIG", Path(__file__).resolve().pare
 DEFAULTS = {
     "server": {"host": "0.0.0.0", "port": 8080, "bind_ip": ""},
     "manual_ips": [],
-    "engine": {"fps": 20, "gamma": 1.0, "refresh_s": 1.0},
+    "engine": {"fps": 20, "gamma": 1.0, "refresh_s": 1.0, "brightness": 1.0},
+    "playlists": {
+        "Christmas": {"items": [{"preset": "candy-cane", "minutes": 5},
+                                {"preset": "christmas-twinkle", "minutes": 10},
+                                {"preset": "comets", "minutes": 3}], "fade": 3, "shuffle": False},
+    },
+    "schedule": {
+        "enabled": False, "lat": 40.3764, "lon": -104.6922,
+        "on": "sunset", "on_offset_min": 0, "on_time": "17:00", "off_time": "23:00",
+        "default": {"preset": "warm-white"},
+        "rules": [
+            {"name": "Christmas", "from": "11-25", "to": "01-06", "program": {"playlist": "Christmas"}},
+            {"name": "Halloween", "from": "10-01", "to": "10-31", "program": {"preset": "halloween"}},
+        ],
+    },
     "devices": {},
 }
 

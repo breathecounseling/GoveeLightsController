@@ -88,6 +88,9 @@ class EngineTests(unittest.TestCase):
         e = Engine(L, out)
         e.set_scene(Scene.single("solid", {"color": "#00ff00"}))
         e.tick()
+        self.assertEqual(out.frames, {})                 # preview only until live
+        e.set_live(True)
+        e.tick()
         self.assertEqual(len(out.frames[L.runs[0].mac]), 96)
         self.assertEqual(out.frames[L.runs[0].mac][95], (0, 0, 0))     # hidden
         self.assertEqual(out.frames[L.runs[1].mac][0], (0, 255, 0))

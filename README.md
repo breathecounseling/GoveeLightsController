@@ -3,14 +3,39 @@
 Local-only controller for Govee permanent outdoor lights (H705E / H805A), using the
 LAN API over UDP. No cloud, no API key, no dependencies beyond Python 3.10+.
 
-**Status:** Phase 1 (diagnostic + phone mapping tool) done. Phase 2 (effects engine,
-command line) done. Phase 3 (creator UI, preview, playlists, scheduler) is next.
+**Status:** Phase 1 (diagnostics), Phase 2 (effects engine) and Phase 3 (creator app,
+playlists, scheduler) are done.
+
+## Creator app (Phase 3)
+
+`start.bat` (or `python -m goveelights`) starts the app. Open the printed address on your
+phone or the PC.
+
+* **Live preview** in the shape of the house, streamed from the real engine, so it shows
+  exactly what the lights are sent.
+* **Preview / Live** (top right): in Preview the lights are left alone. Live sends every
+  change to the lights instantly.
+* **Play:** tap a preset or playlist, and set the master brightness.
+* **Edit:** stack layers, pick effects, blend modes and which run each layer applies to,
+  then tune each control. Save as a preset (JSON in `presets/`).
+* **Playlists:** rotate presets on a timer, with crossfades and optional shuffle.
+* **Schedule:** on at sunset (with an offset) or a fixed time, off at a set time (it can
+  be after midnight), and a preset or playlist per date range (Christmas, Halloween…),
+  else a default. Playing something by hand pauses the schedule until its next on/off time.
+* **Settings:** fps (10-30), gamma, diagnostics (at `/diag`; opening it pauses the effects),
+  and Quit.
+* **Stop** blanks the lights and keeps control. **Release to Govee app** hands control back.
+
+**Run in the background on Windows:** `python -m goveelights install-startup` adds a hidden
+launcher to your Startup folder. The app then starts at login with no window and logs to
+`goveelights.log`. `python -m goveelights uninstall-startup` removes it.
 
 ## Run it (Windows)
 
 1. In the Govee app, turn on **LAN Control** for each of the 4 boxes.
 2. Install Python 3.10+ from python.org (tick "Add python to PATH").
-3. Double-click `start.bat`, or run `python -m goveelights` in this folder.
+3. Double-click `start.bat`, or run `python -m goveelights` in this folder. (The Phase 1
+   tool alone: `python -m goveelights diag`.)
 4. When Windows Firewall asks, allow Python on **Private networks**. Discovery replies
    arrive on UDP 4002, so blocking them means no devices show up.
 5. Open the URL it prints (e.g. `http://192.168.1.50:8080/`) on your phone, on the same network as the PC.
@@ -39,7 +64,7 @@ PC with several network adapters, e.g. VPN or Hyper-V), `--config path.json`, `-
 All settings, names, bulb counts, landmarks and test results live in one file:
 `govee_config.json` (created on first run, next to `start.bat`).
 
-## Phase 1 test checklist (on the phone page)
+## Phase 1 test checklist (Settings → Open diagnostics, or `python -m goveelights diag`)
 
 | Tab | What to do | What it tells us |
 |---|---|---|
@@ -138,6 +163,10 @@ goveelights/scene.py        layers, blend modes, presets
 goveelights/engine.py       render loop, crossfades
 goveelights/output.py       output interface + Govee razer output
 goveelights/cli.py          command line
+goveelights/controller.py   app state: presets, playlists, schedule, live/preview
+goveelights/schedule.py     sunset maths + schedule rules
+goveelights/app_server.py   creator app server (API, preview stream)
+goveelights/web/app.html    creator app page
 layouts/house.json          this house's geometry
 presets/                    example presets
 goveelights/web/diag.html   phone page

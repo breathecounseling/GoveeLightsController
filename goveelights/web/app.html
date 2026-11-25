@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
+<title>House Lights</title>
+<style>
+:root{--bg:#0d1117;--panel:#161b22;--panel2:#1c2129;--line:#30363d;--text:#e6edf3;--dim:#8b949e;--acc:#3fb950;--accbg:#238636;--warn:#d29922;--bad:#f85149;--blue:#58a6ff}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+.top{display:flex;align-items:center;gap:10px;padding:10px 12px 6px}
+.top h1{font-size:17px;margin:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top h1 small{color:var(--dim);font-weight:400}
+#preview{display:block;width:100%;background:#05070a}
+nav{display:flex;gap:2px;overflow-x:auto;padding:6px 8px 0;scrollbar-width:none}
+nav button{flex:1 0 auto;border:none;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--dim);padding:8px 10px}
+nav button.on{color:var(--text);border-bottom-color:var(--blue)}
+main{padding:12px 12px 100px;max-width:760px;margin:0 auto}
+section{display:none}section.on{display:block}
+select,input,button,textarea{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 11px;min-width:0}
+input[type=color]{padding:2px;width:44px;height:38px}
+input[type=range]{padding:0;border:none;background:transparent;accent-color:var(--blue)}
+input[type=checkbox]{width:22px;height:22px;accent-color:var(--blue)}
+button{cursor:pointer;touch-action:manipulation}
+button:active{filter:brightness(1.35)}
+button.pri{background:var(--accbg);border-color:#2ea043}
+button.bad{background:#3d1214;border-color:var(--bad)}
+button.sm{padding:5px 9px;font-size:14px}
+.pill{border-radius:99px;padding:7px 14px;font-weight:700;white-space:nowrap}
+.pill.live{background:var(--accbg);border-color:#2ea043}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:12px}
+h2{font-size:16px;margin:0 0 8px}
+.help{color:var(--dim);font-size:13px;margin:4px 0 8px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.grow{flex:1}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.preset{position:relative;text-align:left;padding:14px 46px 14px 12px;min-height:58px;font-weight:600}
+.preset.on{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset}
+.preset .ed{position:absolute;right:6px;top:6px;font-size:12px;padding:2px 7px;border-radius:8px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:14px}.kv b{color:var(--dim);font-weight:500}
+.layer{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px}
+.layer.off{opacity:.55}
+.lhead{display:flex;gap:6px;align-items:center;margin-bottom:8px}
+.lhead select{flex:1}
+.lmeta{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px}
+.lmeta label,.prm label{font-size:12px;color:var(--dim);display:block;margin-bottom:2px}
+.prm{display:grid;grid-template-columns:1fr;gap:8px}
+.prm>div{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:7px 9px}
+.rng{display:flex;gap:8px;align-items:center}.rng input{flex:1}.rng span{min-width:46px;text-align:right;font-variant-numeric:tabular-nums;font-size:14px}
+.cols{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.cols .c{position:relative}.cols .c button{position:absolute;right:-6px;top:-8px;padding:0 5px;font-size:11px;border-radius:99px;line-height:16px}
+.item{display:grid;grid-template-columns:1fr 84px auto;gap:6px;margin-bottom:6px;align-items:center}
+.rule{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px;margin-bottom:8px}
+.rule .full{grid-column:1/-1}
+.foot{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:10px 12px calc(10px + env(safe-area-inset-bottom));display:flex;gap:8px;z-index:6}
+.foot button{flex:1}
+#toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:#30363d;padding:8px 14px;border-radius:10px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;z-index:9}
+#toast.show{opacity:1}
+.banner{background:#3a2d0b;border:1px solid var(--warn);border-radius:12px;padding:10px;margin-bottom:12px;font-size:14px}
+.ok{color:var(--acc)}.warn{color:var(--warn)}.dim{color:var(--dim)}
+@media (min-width:700px){.prm{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <h1 id="title">House Lights <small id="sub"></small></h1>
+    <button id="liveBtn" class="pill" onclick="toggleLive()">Preview</button>
+  </div>
+  <canvas id="preview" height="90"></canvas>
+  <nav id="tabs">
+    <button data-t="play" class="on">Play</button>
+    <button data-t="edit">Edit</button>
+    <button data-t="lists">Playlists</button>
+    <button data-t="sched">Schedule</button>
+    <button data-t="set">Settings</button>
+  </nav>
+</header>
+
+<main>
+<div id="diagBanner" class="banner" style="display:none">Diagnostics paused the effects. <button class="sm" onclick="post('diag/exit').then(refresh)">Resume effects</button></div>
+<div id="noRuns" class="banner" style="display:none"></div>
+
+<!-- PLAY -->
+<section id="s-play" class="on">
+  <div class="card">
+    <div class="row"><div class="grow"><div class="dim" style="font-size:13px">Now playing</div><div id="nowName" style="font-size:20px;font-weight:700">Nothing</div><div id="nowSub" class="dim" style="font-size:13px"></div></div>
+      <button class="sm" onclick="editCurrent()">Edit</button></div>
+    <div class="row" style="margin-top:10px"><span class="dim" style="font-size:14px">Brightness</span>
+      <input id="bri" type="range" min="0" max="1" step="0.01" class="grow" oninput="briChanged(this.value)"><span id="briV" style="width:42px;text-align:right"></span></div>
+    <p id="previewHint" class="help">Preview only: the lights aren't touched. Tap <b>Preview</b> at the top to go <b>Live</b>.</p>
+  </div>
+  <h2>Presets</h2>
+  <div id="presetGrid" class="grid" style="margin-bottom:14px"></div>
+  <h2>Playlists</h2>
+  <div id="playlistGrid" class="grid"></div>
+</section>
+
+<!-- EDIT -->
+<section id="s-edit">
+  <div class="card">
+    <div class="row"><input id="sceneName" class="grow" placeholder="Scene name" oninput="draft.name=this.value;send()">
+      <select id="loadSel" onchange="loadPreset(this.value);this.value=''"><option value="">Load…</option></select></div>
+    <div class="row" style="margin-top:8px"><span class="dim" style="font-size:14px">Scene brightness</span>
+      <input id="sceneBri" type="range" min="0" max="1" step="0.01" class="grow" oninput="draft.brightness=+this.value;$('sceneBriV').textContent=Math.round(this.value*100)+'%';send()"><span id="sceneBriV" style="width:42px;text-align:right"></span></div>
+    <div class="row" style="margin-top:8px">
+      <button class="pri" onclick="savePreset(false)" id="saveBtn">Save</button>
+      <button onclick="savePreset(true)">Save as new</button>
+      <button onclick="newScene()">New</button>
+      <button class="bad sm" id="delBtn" onclick="deletePreset()" style="margin-left:auto">Delete preset</button>
+    </div>
+    <p class="help" id="editHint">Changes show at once in the preview, and on the lights when Live. The bottom layer is drawn first; layers above blend on top.</p>
+  </div>
+  <div id="layers"></div>
+  <button style="width:100%" onclick="addLayer()">+ Add layer</button>
+</section>
+
+<!-- PLAYLISTS -->
+<section id="s-lists">
+  <div class="card">
+    <div class="row"><select id="plSel" class="grow" onchange="plPick(this.value)"></select><button onclick="plNew()">New</button></div>
+    <div id="plEd" style="margin-top:10px"></div>
+  </div>
+</section>
+
+<!-- SCHEDULE -->
+<section id="s-sched">
+  <div class="card" id="schedStatus"></div>
+  <div class="card">
+    <label class="row"><input type="checkbox" id="scEn"> <b>Run on a schedule</b></label>
+    <p class="help">Turns the lights on in the evening and off at a set time. Playing something by hand pauses the schedule until its next on or off time.</p>
+    <div class="row"><span style="width:70px">On at</span>
+      <select id="scOn" onchange="scUI()"><option value="sunset">Sunset</option><option value="time">Fixed time</option></select>
+      <span id="scOffW"><input id="scOffset" type="number" step="5" style="width:80px"> min</span>
+      <input id="scOnTime" type="time"></div>
+    <div class="row" style="margin-top:8px"><span style="width:70px">Off at</span><input id="scOff" type="time"></div>
+    <div class="row" style="margin-top:8px"><span style="width:70px">Play</span><select id="scDefault" class="grow"></select></div>
+    <p class="help">…unless a date rule below matches. The first match wins; ranges can wrap the year (11-25 to 01-06).</p>
+    <div id="rules"></div>
+    <div class="row"><button onclick="addRule()">+ Date rule</button><button class="pri" style="margin-left:auto" onclick="saveSchedule()">Save schedule</button></div>
+    <details style="margin-top:10px"><summary class="dim">Location (for sunset)</summary>
+      <div class="row" style="margin-top:6px"><input id="scLat" type="number" step="0.0001" style="width:130px"><input id="scLon" type="number" step="0.0001" style="width:130px"></div>
+      <p class="help">Default is Evans, CO.</p></details>
+  </div>
+</section>
+
+<!-- SETTINGS -->
+<section id="s-set">
+  <div class="card">
+    <h2>Frame rate</h2>
+    <div class="row"><select id="fps" onchange="post('settings',{fps:+this.value})">
+      <option>10</option><option>15</option><option>20</option><option>25</option><option>30</option></select>
+      <span class="help">10-25 looked smooth in testing; 30 stuttered.</span></div>
+  </div>
+  <div class="card">
+    <h2>Colour curve (gamma)</h2>
+    <div class="rng"><input id="gamma" type="range" min="1" max="2.8" step="0.1" oninput="$('gammaV').textContent=this.value" onchange="post('settings',{gamma:+this.value})"><span id="gammaV"></span></div>
+    <p class="help">1.0 = off. Raise it (around 2.2) if mid colours look washed out or orange looks yellow on the bulbs.</p>
+  </div>
+  <div class="card">
+    <h2>Devices</h2>
+    <div id="devInfo" class="kv"></div>
+    <p class="help">Bulb counts, landmarks and identify are in the diagnostics. Opening it pauses the effects.</p>
+    <a href="/diag"><button>Open diagnostics</button></a>
+  </div>
+  <div class="card">
+    <h2>Run in the background</h2>
+    <p class="help">On the PC, run <code>python -m goveelights install-startup</code> once. The app then starts silently at login, and you open this page from your phone as usual. <code>uninstall-startup</code> undoes it.</p>
+    <button class="bad" onclick="if(confirm('Stop the app? The lights go back to the Govee app.'))post('quit').then(()=>toast('Stopped'))">Quit app</button>
+  </div>
+</section>
+</main>
+
+<div class="foot">
+  <button onclick="post('stop').then(refresh)">Stop</button>
+  <button class="bad" onclick="post('release').then(()=>{toast('Released to the Govee app');refresh()})">Release to Govee app</button>
+</div>
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let ST = {}, EFX = {}, BLENDS = [], PRESETS = [], LAYOUT = null, PL = {}, SCH = {};
+let draft = null, draftId = null, plCur = null;
+
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),2000)}
+async function get(p){ const r = await fetch('/api/'+p); return r.json() }
+async function post(p, body={}){
+  const r = await fetch('/api/'+p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const j = await r.json().catch(()=>({})); if(!r.ok||j.ok===false){ toast('Error: '+(j.error||r.status)); return null } return j;
+}
+
+// ------------------------------------------------------------ tabs
+document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('main section').forEach(s => s.classList.toggle('on', s.id === 's-' + b.dataset.t));
+  try { localStorage.setItem('tab', b.dataset.t) } catch(e) {}
+  if (b.dataset.t === 'edit' && !draft) editCurrent(true);
+});
+
+// ------------------------------------------------------------ preview
+const cv = $('preview'), cx = cv.getContext('2d');
+let geo = null, lastHex = '';
+function layoutPreview(){
+  if (!LAYOUT || !LAYOUT.pixels.length) return;
+  const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, pad = 10, YEX = 2.2;
+  const [x0,y0,x1,y1] = LAYOUT.bounds, s = (W - 2*pad) / Math.max(1, x1 - x0);
+  const H = Math.max(56, Math.min(170, (y1 - y0) * s * YEX + 2*pad));
+  cv.width = W * dpr; cv.height = H * dpr; cv.style.height = H + 'px';
+  const r = Math.max(1.6, Math.min(4.5, s * 0.36));
+  geo = {dpr, r, pts: LAYOUT.pixels.map(([x,y]) => [pad + (x - x0) * s, H - pad - (y - y0) * s * YEX])};
+  draw(lastHex);
+}
+function draw(hex){
+  lastHex = hex; if (!geo) return;
+  const {dpr, r, pts} = geo;
+  cx.setTransform(dpr,0,0,dpr,0,0); cx.clearRect(0,0,cv.width,cv.height);
+  for (let i = 0; i < pts.length; i++) {
+    const c = hex ? hex.substr(i*6, 6) : '000000';
+    const lit = c !== '000000' && c.length === 6;
+    cx.beginPath(); cx.arc(pts[i][0], pts[i][1], r, 0, 7);
+    cx.fillStyle = lit ? '#' + c : '#1b2027'; cx.fill();
+    if (lit) { cx.globalAlpha = .25; cx.beginPath(); cx.arc(pts[i][0], pts[i][1], r*2.2, 0, 7); cx.fill(); cx.globalAlpha = 1 }
+  }
+}
+window.addEventListener('resize', layoutPreview);
+function openStream(){
+  const es = new EventSource('/api/stream');
+  es.onmessage = e => draw(e.data);
+  es.onerror = () => { es.close(); setTimeout(openStream, 2000) };
+}
+
+// ------------------------------------------------------------ status
+async function refresh(){
+  const s = await get('status').catch(()=>null); if (!s) return; ST = s;
+  const live = s.live; $('liveBtn').textContent = live ? '● Live' : 'Preview'; $('liveBtn').classList.toggle('live', live);
+  $('previewHint').style.display = live ? 'none' : '';
+  const p = s.playing;
+  $('nowName').textContent = p ? (p.kind === 'playlist' ? p.name : p.name) : 'Nothing';
+  $('nowSub').textContent = p ? (p.kind === 'playlist' ? `playlist · now: ${p.item_name||p.item} · next in ${fmtS(s.playlist?.next_in)}` : p.kind) : (live ? 'lights are under control but dark' : '');
+  $('sub').textContent = live ? '' : '· preview';
+  if (document.activeElement !== $('bri')) { $('bri').value = s.brightness; $('briV').textContent = Math.round(s.brightness*100)+'%' }
+  if (document.activeElement !== $('fps')) setSel($('fps'), String(Math.round(s.fps)));
+  if (document.activeElement !== $('gamma')) { $('gamma').value = s.gamma; $('gammaV').textContent = s.gamma }
+  $('diagBanner').style.display = s.diag_active ? '' : 'none';
+  const nr = $('noRuns');
+  if (!s.runs.length) { nr.style.display=''; nr.innerHTML='No runs have a confirmed bulb count yet. Open <a href="/diag">diagnostics</a> first.' }
+  else if (s.devices_without_count.length) { nr.style.display=''; nr.textContent='Not in the effects yet (no bulb count): ' + s.devices_without_count.join(', ') }
+  else nr.style.display='none';
+  document.querySelectorAll('.preset').forEach(b => b.classList.toggle('on', !!p && ((p.kind==='preset' && b.dataset.id===p.id) || (p.kind==='playlist' && b.dataset.pl===p.name))));
+  $('devInfo').innerHTML = s.runs.map(r => `<b>${esc(r.name)}</b><span>${r.visible}/${r.count} bulbs · ${esc(r.ip||'no IP')}</span>`).join('');
+  schedStatus();
+}
+function fmtS(n){ if(n==null) return ''; const m=Math.floor(n/60), s=n%60; return m ? `${m}m ${s}s` : `${s}s` }
+function setSel(sel, v){ if (![...sel.options].some(o=>o.value===v)) sel.add(new Option(v+' (custom)', v)); sel.value = v }
+async function toggleLive(){ await post('live',{on:!ST.live}); refresh() }
+let briT; function briChanged(v){ $('briV').textContent=Math.round(v*100)+'%'; clearTimeout(briT); briT=setTimeout(()=>post('settings',{brightness:+v}),80) }
+
+// ------------------------------------------------------------ presets
+async function loadPresets(){
+  PRESETS = await get('presets');
+  $('presetGrid').innerHTML = PRESETS.map(p => `<button class="preset" data-id="${esc(p.id)}" onclick="playPreset('${esc(p.id)}')">${esc(p.name)}<span class="ed" onclick="event.stopPropagation();editPreset('${esc(p.id)}')">edit</span></button>`).join('');
+  $('loadSel').innerHTML = '<option value="">Load…</option>' + PRESETS.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+}
+async function playPreset(id){ await post('play',{preset:id}); draft=null; refresh() }
+function playlistGrid(){
+  $('playlistGrid').innerHTML = Object.keys(PL).map(n => `<button class="preset" data-pl="${esc(n)}" onclick="playPlaylist(this.dataset.pl)">▶ ${esc(n)}</button>`).join('') || '<p class="help">None yet.</p>';
+}
+async function playPlaylist(n){ await post('play',{playlist:n}); refresh() }
+
+// ------------------------------------------------------------ editor
+function tabTo(t){ document.querySelector(`#tabs button[data-t="${t}"]`).click() }
+async function editCurrent(quiet){
+  const r = await get('scene');
+  if (r.scene) { draft = r.scene; draftId = r.playing && r.playing.kind === 'preset' ? r.playing.id : (r.playing && r.playing.id) || null }
+  else { draft = {name:'New scene', brightness:1, layers:[{effect:'solid', params:{}, blend:'normal', opacity:1, target:'all', enabled:true}]}; draftId = null; if(!quiet) send() }
+  renderEditor(); if (!quiet) tabTo('edit');
+}
+async function editPreset(id){ await loadPreset(id); tabTo('edit') }
+async function loadPreset(id){ if(!id) return; draft = await get('preset?id='+encodeURIComponent(id)); draftId = id; renderEditor(); send() }
+function newScene(){ draft = {name:'New scene', brightness:1, layers:[{effect:'gradient', params:{}, blend:'normal', opacity:1, target:'all', enabled:true}]}; draftId=null; renderEditor(); send() }
+let sendT; function send(){ clearTimeout(sendT); sendT = setTimeout(() => post('scene',{scene:draft, id:draftId}), 90) }
+async function savePreset(asNew){
+  let id = asNew ? null : draftId;
+  if (asNew) { const n = prompt('Name for the new preset', draft.name === 'New scene' ? '' : draft.name + ' copy'); if (!n) return; draft.name = n; $('sceneName').value = n }
+  const r = await post('preset/save', {scene:draft, id}); if (r) { draftId = r.id; toast('Saved "'+draft.name+'"'); loadPresets(); renderEditor(); send() }
+}
+async function deletePreset(){ if (!draftId || !confirm('Delete preset "'+draft.name+'"?')) return; await post('preset/delete',{id:draftId}); draftId=null; toast('Deleted'); loadPresets(); renderEditor() }
+function addLayer(){ draft.layers.push({effect:'twinkle', params:{}, blend:'lighten', opacity:1, target:'all', enabled:true}); renderEditor(); send() }
+
+function renderEditor(){
+  if (!draft) return;
+  $('sceneName').value = draft.name || ''; $('sceneBri').value = draft.brightness ?? 1; $('sceneBriV').textContent = Math.round((draft.brightness??1)*100)+'%';
+  $('saveBtn').textContent = draftId ? 'Save' : 'Save as preset'; $('delBtn').style.display = draftId ? '' : 'none';
+  const box = $('layers'); box.innerHTML = '';
+  draft.layers.forEach((L, i) => box.appendChild(layerCard(L, i)));
+}
+const runNames = () => (LAYOUT ? LAYOUT.runs : []);
+function opt(v, label, sel){ return `<option value="${esc(v)}" ${sel?'selected':''}>${esc(label)}</option>` }
+function layerCard(L, i){
+  const fx = EFX[L.effect] || EFX.solid, n = draft.layers.length;
+  const d = document.createElement('div'); d.className = 'layer' + (L.enabled === false ? ' off' : '');
+  const tg = Array.isArray(L.target) ? L.target[0] : (L.target || 'all');
+  d.innerHTML = `<div class="lhead"><b class="dim" style="font-size:13px">${i+1}</b>
+      <select data-k="effect">${Object.values(EFX).map(e => opt(e.name, e.label, e.name===L.effect)).join('')}</select>
+      <input type="checkbox" data-k="enabled" title="on/off" ${L.enabled!==false?'checked':''}>
+      <button class="sm" data-a="up" ${i===n-1?'disabled':''} title="move up">↑</button><button class="sm" data-a="down" ${i===0?'disabled':''} title="move down">↓</button>
+      <button class="sm bad" data-a="del" ${n===1?'disabled':''}>✕</button></div>
+    ${fx.description ? `<p class="help" style="margin-top:-4px">${esc(fx.description)}</p>` : ''}
+    <div class="lmeta">
+      <div><label>Blend</label><select data-k="blend" ${i===0?'disabled title="bottom layer"':''}>${BLENDS.map(b => opt(b, b, b===(L.blend||'normal'))).join('')}</select></div>
+      <div><label>Apply to</label><select data-k="target">${opt('all','All runs',tg==='all')}${runNames().map(r => opt(r, r, r===tg)).join('')}</select></div>
+      <div style="grid-column:1/-1"><label>Opacity</label><div class="rng"><input type="range" min="0" max="1" step="0.01" data-k="opacity" value="${L.opacity??1}"><span>${Math.round((L.opacity??1)*100)}%</span></div></div>
+    </div><div class="prm"></div>`;
+  const prm = d.querySelector('.prm');
+  fx.params.forEach(p => prm.appendChild(paramControl(L, p)));
+  d.querySelectorAll('[data-k]').forEach(el => el.addEventListener(el.type==='range'?'input':'change', () => {
+    const k = el.dataset.k;
+    if (k === 'effect') { L.effect = el.value; L.params = {}; renderEditor() }
+    else if (k === 'enabled') { L.enabled = el.checked; d.classList.toggle('off', !el.checked) }
+    else if (k === 'opacity') { L.opacity = +el.value; el.nextElementSibling.textContent = Math.round(el.value*100)+'%' }
+    else L[k] = el.value;
+    send();
+  }));
+  d.querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
+    const a = b.dataset.a, ls = draft.layers;
+    if (a === 'del') ls.splice(i, 1);
+    if (a === 'up' && i < ls.length-1) [ls[i], ls[i+1]] = [ls[i+1], ls[i]];
+    if (a === 'down' && i > 0) [ls[i], ls[i-1]] = [ls[i-1], ls[i]];
+    renderEditor(); send();
+  });
+  return d;
+}
+function paramControl(L, p){
+  L.params = L.params || {};
+  const val = () => L.params[p.name] ?? p.default;
+  const set = v => { L.params[p.name] = v; send() };
+  const d = document.createElement('div');
+  d.innerHTML = `<label title="${esc(p.help||'')}">${esc(p.label)}${p.help?' <span class="dim">ⓘ</span>':''}</label>`;
+  if (p.kind === 'color') {
+    const i = document.createElement('input'); i.type = 'color'; i.value = val(); i.oninput = () => set(i.value); d.appendChild(i);
+  } else if (p.kind === 'colors') {
+    const box = document.createElement('div'); box.className = 'cols'; d.appendChild(box);
+    const draw = () => {
+      const cs = [...val()]; box.innerHTML = '';
+      cs.forEach((c, k) => { const w = document.createElement('span'); w.className = 'c';
+        const i = document.createElement('input'); i.type='color'; i.value=c; i.oninput=()=>{ const a=[...val()]; a[k]=i.value; set(a) };
+        w.appendChild(i);
+        if (cs.length > 1) { const x = document.createElement('button'); x.textContent='×'; x.onclick=()=>{ const a=[...val()]; a.splice(k,1); set(a); draw() }; w.appendChild(x) }
+        box.appendChild(w) });
+      const add = document.createElement('button'); add.className='sm'; add.textContent='+'; add.onclick=()=>{ set([...val(), cs[cs.length-1]]); draw() }; box.appendChild(add);
+    }; draw();
+  } else if (p.kind === 'number' || p.kind === 'int') {
+    if (p.min != null && p.max != null) {
+      const w = document.createElement('div'); w.className = 'rng';
+      w.innerHTML = `<input type="range" min="${p.min}" max="${p.max}" step="${p.step || (p.kind==='int'?1:0.01)}" value="${val()}"><span>${val()}</span>`;
+      const r = w.querySelector('input'), s = w.querySelector('span');
+      r.oninput = () => { const v = p.kind==='int' ? parseInt(r.value) : +r.value; s.textContent = v; set(v) };
+      d.appendChild(w);
+    } else { const i = document.createElement('input'); i.type='number'; i.value=val(); i.onchange=()=>set(+i.value); d.appendChild(i) }
+  } else if (p.kind === 'choice') {
+    const s = document.createElement('select'); s.innerHTML = p.options.map(o => opt(o, o, o===val())).join(''); s.onchange = () => set(s.value); d.appendChild(s);
+  } else if (p.kind === 'bool') {
+    const i = document.createElement('input'); i.type='checkbox'; i.checked=!!val(); i.onchange=()=>set(i.checked); d.appendChild(i);
+  }
+  return d;
+}
+
+// ------------------------------------------------------------ playlists
+function plSelect(){
+  const names = Object.keys(PL);
+  if (!plCur || !PL[plCur]) plCur = names[0] || null;
+  $('plSel').innerHTML = names.map(n => opt(n, n, n===plCur)).join('') || '<option value="">No playlists</option>';
+  plEditor(); playlistGrid();
+}
+function plPick(n){ plCur = n; plEditor() }
+function plNew(){ const n = prompt('Playlist name'); if (!n) return; if (PL[n]) return toast('That name exists'); PL[n] = {items:[], fade:2, shuffle:false}; plCur = n; plSelect() }
+function presetOpts(sel){ return PRESETS.map(p => opt(p.id, p.name, p.id===sel)).join('') }
+function plEditor(){
+  const box = $('plEd'); if (!plCur) { box.innerHTML = '<p class="help">Create a playlist to rotate presets on a timer.</p>'; return }
+  const pl = PL[plCur];
+  box.innerHTML = `<div id="plItems"></div>
+    <div class="row"><button class="sm" id="plAdd">+ Add preset</button></div>
+    <div class="row" style="margin-top:10px"><label class="row">Crossfade <input id="plFade" type="number" min="0" max="30" step="0.5" style="width:80px" value="${pl.fade??2}"> s</label>
+      <label class="row"><input type="checkbox" id="plShuf" ${pl.shuffle?'checked':''}> Shuffle</label></div>
+    <div class="row" style="margin-top:10px"><button class="pri" id="plSave">Save</button><button id="plPlay">▶ Play</button><button class="bad sm" id="plDel" style="margin-left:auto">Delete</button></div>`;
+  const items = $('plItems');
+  const drawItems = () => { items.innerHTML = pl.items.map((it, k) => `<div class="item"><select data-k="${k}">${presetOpts(it.preset)}</select>
+      <input type="number" min="0.1" step="0.5" value="${it.minutes}" data-m="${k}" title="minutes"><button class="sm bad" data-x="${k}">✕</button></div>`).join('') || '<p class="help">No presets yet.</p>';
+    items.querySelectorAll('[data-k]').forEach(s => s.onchange = () => pl.items[+s.dataset.k].preset = s.value);
+    items.querySelectorAll('[data-m]').forEach(s => s.onchange = () => pl.items[+s.dataset.m].minutes = +s.value);
+    items.querySelectorAll('[data-x]').forEach(b => b.onclick = () => { pl.items.splice(+b.dataset.x, 1); drawItems() }); };
+  drawItems();
+  $('plAdd').onclick = () => { pl.items.push({preset: PRESETS[0]?.id, minutes: 5}); drawItems() };
+  $('plFade').onchange = e => pl.fade = +e.target.value;
+  $('plShuf').onchange = e => pl.shuffle = e.target.checked;
+  $('plSave').onclick = async () => { if (await post('playlists',{playlists:PL})) { toast('Playlists saved'); plSelect(); schedForm() } };
+  $('plPlay').onclick = async () => { await post('playlists',{playlists:PL}); playPlaylist(plCur) };
+  $('plDel').onclick = async () => { if (!confirm('Delete playlist '+plCur+'?')) return; delete PL[plCur]; plCur=null; await post('playlists',{playlists:PL}); plSelect() };
+}
+
+// ------------------------------------------------------------ schedule
+function progOpts(sel){
+  const k = sel ? (sel.playlist ? 'playlist:'+sel.playlist : sel.preset ? 'preset:'+sel.preset : '') : '';
+  return opt('', '(lights off)', k==='') +
+    '<optgroup label="Playlists">' + Object.keys(PL).map(n => opt('playlist:'+n, n, k==='playlist:'+n)).join('') + '</optgroup>' +
+    '<optgroup label="Presets">' + PRESETS.map(p => opt('preset:'+p.id, p.name, k==='preset:'+p.id)).join('') + '</optgroup>';
+}
+const progVal = v => !v ? null : (v.startsWith('playlist:') ? {playlist: v.slice(9)} : {preset: v.slice(7)});
+function schedForm(){
+  const s = SCH;
+  $('scEn').checked = !!s.enabled; $('scOn').value = s.on || 'sunset'; $('scOffset').value = s.on_offset_min ?? 0;
+  $('scOnTime').value = s.on_time || '17:00'; $('scOff').value = s.off_time || '23:00';
+  $('scDefault').innerHTML = progOpts(s.default); $('scLat').value = s.lat ?? 40.3764; $('scLon').value = s.lon ?? -104.6922;
+  drawRules(); scUI();
+}
+function scUI(){ const sun = $('scOn').value === 'sunset'; $('scOffW').style.display = sun ? '' : 'none'; $('scOnTime').style.display = sun ? 'none' : '' }
+function drawRules(){
+  const rs = SCH.rules = SCH.rules || [];
+  $('rules').innerHTML = rs.map((r, k) => `<div class="rule"><input class="full" placeholder="Name" value="${esc(r.name)}" data-r="${k}" data-f="name">
+     <input placeholder="from MM-DD" value="${esc(r.from)}" data-r="${k}" data-f="from"><input placeholder="to MM-DD" value="${esc(r.to)}" data-r="${k}" data-f="to">
+     <select class="full" data-r="${k}" data-f="program">${progOpts(r.program)}</select>
+     <button class="sm bad" data-del="${k}">Remove</button></div>`).join('');
+  $('rules').querySelectorAll('[data-f]').forEach(el => el.onchange = () => { const r = rs[+el.dataset.r]; r[el.dataset.f] = el.dataset.f === 'program' ? progVal(el.value) : el.value.trim() });
+  $('rules').querySelectorAll('[data-del]').forEach(b => b.onclick = () => { rs.splice(+b.dataset.del, 1); drawRules() });
+}
+function addRule(){ SCH.rules.push({name:'', from:'12-01', to:'12-31', program:null}); drawRules() }
+async function saveSchedule(){
+  const md = /^\d{2}-\d{2}$/;
+  for (const r of SCH.rules) if (!md.test(r.from) || !md.test(r.to)) return toast('Dates must look like 12-01');
+  Object.assign(SCH, {enabled: $('scEn').checked, on: $('scOn').value, on_offset_min: +$('scOffset').value, on_time: $('scOnTime').value,
+    off_time: $('scOff').value, default: progVal($('scDefault').value), lat: +$('scLat').value, lon: +$('scLon').value});
+  if (await post('schedule',{schedule:SCH})) { toast('Schedule saved'); setTimeout(refresh, 300) }
+}
+const tfmt = iso => iso ? new Date(iso).toLocaleString([], {weekday:'short', hour:'numeric', minute:'2-digit'}) : '';
+function progName(p){ if(!p) return 'lights off'; if(p.playlist) return 'playlist '+p.playlist; const f = PRESETS.find(x=>x.id===p.preset); return f ? f.name : p.preset }
+function schedStatus(){
+  const s = ST.schedule || {}; let h;
+  if (!s.enabled) h = '<b>Schedule is off.</b> <span class="dim">Turn it on below.</span>';
+  else if (s.active) h = `<b class="ok">On now</b> · ${esc(progName(s.program))} <span class="dim">(${esc(s.rule)})</span><br><span class="dim">Turns off ${tfmt(s.off)}</span>`;
+  else h = `<b>Off now</b><br><span class="dim">Next on ${tfmt(s.on)} with ${esc(progName(s.next_program))} (${esc(s.rule)}), off ${tfmt(s.off)}</span>`;
+  if (s.enabled && s.override_until) h += `<div class="warn" style="margin-top:6px">Paused by a manual change until ${tfmt(s.override_until)}. <button class="sm" onclick="post('schedule/resume').then(()=>setTimeout(refresh,300))">Resume now</button></div>`;
+  $('schedStatus').innerHTML = h;
+}
+
+// ------------------------------------------------------------ boot
+(async function boot(){
+  const e = await get('effects'); EFFECTS_LIST = e.effects; e.effects.forEach(x => EFX[x.name] = x); BLENDS = e.blends;
+  LAYOUT = await get('layout'); layoutPreview(); openStream();
+  await loadPresets(); PL = await get('playlists'); SCH = await get('schedule');
+  plSelect(); schedForm(); await refresh(); setInterval(refresh, 2000);
+  try { const t = localStorage.getItem('tab'); if (t) tabTo(t) } catch(err) {}
+})();
+let EFFECTS_LIST;
+</script>
+</body>
+</html>

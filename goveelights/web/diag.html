@@ -256,6 +256,7 @@ label.inl{display:flex;gap:8px;align-items:center;color:var(--dim);font-size:14p
 </main>
 
 <div class="foot">
+  <button id="backBtn" style="display:none" onclick="fetch('/api/diag/exit',{method:'POST',body:'{}'}).then(()=>location.href='/')">← Back to effects</button>
   <button onclick="act('stop')">Stop anim</button>
   <button class="bad" onclick="act('release',{mac:null}).then(()=>toast('Released all to Govee app'))">Release to Govee app</button>
 </div>
@@ -263,11 +264,13 @@ label.inl{display:flex;gap:8px;align-items:center;color:var(--dim);font-size:14p
 
 <script>
 const $ = id => document.getElementById(id);
+// Served standalone (python -m goveelights diag) at "/", or inside the creator app at "/diag"
+const EMBED = location.pathname.startsWith('/diag'), API = EMBED ? '/api/diag/' : '/api/';
 let S = {devices:[]}, cur = localStorage.getItem('dev') || null, widx = 0, wcolor = '#00ff00', curFps = 0;
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),1800)}
 function dev(){return S.devices.find(d=>d.mac===cur)}
 async function api(path, body){
-  const r = await fetch('/api/'+path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
+  const r = await fetch(API+path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
   const j = await r.json(); if(!r.ok||j.ok===false){toast('Error: '+(j.error||r.status)); return null} return j;
 }
 async function act(a, extra={}){ if(!('mac' in extra)) extra.mac=cur; const r=await api(a, extra); refresh(); return r }
@@ -284,7 +287,7 @@ document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{
 {const t=localStorage.getItem('tab'); const b=t&&document.querySelector(`#tabs button[data-t="${t}"]`); if(b) b.click()}
 $('dev').onchange = e => { cur = e.target.value; localStorage.setItem('dev',cur); render() };
 
-async function refresh(){ const r = await fetch('/api/state').then(r=>r.json()).catch(()=>null); if(r){S=r; render()} }
+async function refresh(){ const r = await fetch(API+'state').then(r=>r.json()).catch(()=>null); if(r){S=r; render()} }
 function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function render(){
   if(!cur || !dev()) cur = S.devices[0]?.mac || null;
@@ -319,6 +322,7 @@ function render(){
   $('kaS').textContent = d.keepalive_s ? `Keepalive every ${d.keepalive_s} s` : 'Keepalive off';
 }
 setInterval(refresh, 1000); refresh();
+if (EMBED) $('backBtn').style.display = '';
 
 // walker
 function wn(){ const v=+$('wNin').value; return v>0? v : (dev()?.n||72) }
@@ -373,7 +377,7 @@ function reverted(){ note('realtime_timeout','reverted after ~'+lastSince()+' s 
 function ka(s){ act('keepalive',{seconds:s}) }
 
 // report
-async function loadReport(){ const r=await fetch('/api/report').then(r=>r.text()); $('report').textContent=r }
+async function loadReport(){ const r=await fetch(API+'report').then(r=>r.text()); $('report').textContent=r }
 function copyReport(){ const t=$('report').textContent; (navigator.clipboard?.writeText(t)||Promise.reject()).then(()=>toast('Copied'),()=>{const r=document.createRange();r.selectNode($('report'));getSelection().removeAllRanges();getSelection().addRange(r);toast('Selected; copy it manually')}) }
 
 function addIp(){ const ip=$('addip').value.trim(); if(ip) act('add_ip',{ip}).then(()=>$('addip').value='') }

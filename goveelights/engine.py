@@ -27,9 +27,11 @@ def to_device_frames(layout: Layout, colors: list[Color], gamma: float = 1.0) ->
 
 
 class Engine:
-    def __init__(self, layout: Layout, output: Output, fps: float = 20.0, gamma: float = 1.0):
+    def __init__(self, layout: Layout, output: Output, fps: float = 20.0, gamma: float = 1.0,
+                 brightness: float = 1.0):
         self.layout, self.output = layout, output
-        self.fps, self.gamma = fps, gamma
+        self.fps, self.gamma, self.brightness = fps, gamma, brightness
+        self.live = False          # False: render for preview only, lights untouched
         self.scene: Scene | None = None
         self._prev: Scene | None = None
         self._fade_start, self._fade_s = 0.0, 0.0
@@ -39,13 +41,14 @@ class Engine:
         self._run = False
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
+        self._live_lock = threading.Lock()
 
     def now(self) -> float:
         return time.monotonic() - self.t0
 
-    def set_scene(self, scene: Scene, fade_s: float = 0.0):
+    def set_scene(self, scene: Scene | None, fade_s: float = 0.0):
         with self._lock:
-            if self.scene is not None and fade_s > 0:
+            if self.scene is not None and scene is not None and fade_s > 0:
                 self._prev, self._fade_start, self._fade_s = self.scene, self.now(), fade_s
             else:
                 self._prev = None
@@ -72,17 +75,34 @@ class Engine:
     def tick(self):
         t0 = time.perf_counter()
         cols = self.render(self.now())
+        if self.brightness != 1.0:
+            b = self.brightness
+            cols = [(c[0] * b, c[1] * b, c[2] * b) for c in cols]
         self.last_colors = cols
-        for mac, frame in to_device_frames(self.layout, cols, self.gamma).items():
-            self.output.send_frame(mac, frame)
+        if self.live:
+            for mac, frame in to_device_frames(self.layout, cols, self.gamma).items():
+                self.output.send_frame(mac, frame)
         st = self.stats
         st["frames"] += 1
         st["render_ms"] = round((time.perf_counter() - t0) * 1000, 2)
 
-    def start(self):
+    def set_live(self, on: bool, release: bool = True):
+        """Start/stop sending to the lights. Rendering (preview) continues either way."""
+        with self._live_lock:          # schedule and UI can race here
+            if on and not self.live:
+                self.output.start()
+                self.live = True
+            elif not on and self.live:
+                self.live = False
+                if release:
+                    self.output.stop()
+
+    def start(self, live: bool = True):
+        """Start the render loop (and, if live, take control of the lights)."""
+        if live:
+            self.set_live(True)
         if self._run:
             return
-        self.output.start()
         self._run = True
         self._thread = threading.Thread(target=self._loop, name="engine", daemon=True)
         self._thread.start()
@@ -91,18 +111,16 @@ class Engine:
         self._run = False
         if self._thread:
             self._thread.join(timeout=2)
-        if release:
-            self.output.stop()
+        self.set_live(False, release=release)
 
     def _loop(self):
-        period = 1.0 / self.fps
         nxt = time.perf_counter()
         while self._run:
             try:
                 self.tick()
             except Exception:  # noqa: BLE001
                 log.exception("render failed")
-            nxt += period
+            nxt += 1.0 / max(1.0, self.fps)      # fps can change while running
             delay = nxt - time.perf_counter()
             if delay > 0:
                 time.sleep(delay)

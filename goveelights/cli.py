@@ -1,4 +1,10 @@
-"""Command line: python -m goveelights [diag|play|effects|layout] ..."""
+"""Command line.
+
+  python -m goveelights                 creator app (phone/PC web UI)  [same as 'serve']
+  python -m goveelights diag            Phase 1 diagnostic tool on its own
+  python -m goveelights play <preset>   play without the UI
+  python -m goveelights effects | layout | install-startup | uninstall-startup
+"""
 from __future__ import annotations
 
 import argparse
@@ -122,14 +128,51 @@ def cmd_layout(a):
     return 0
 
 
+STARTUP_NAME = "GoveeLights.vbs"
+
+
+def _startup_file():
+    appdata = os.environ.get("APPDATA")
+    if os.name != "nt" or not appdata:
+        raise SystemExit("install-startup is for Windows. Elsewhere, start 'python -m goveelights' from your login scripts.")
+    from pathlib import Path
+    return Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / STARTUP_NAME
+
+
+def cmd_install_startup(uninstall=False):
+    """Start the app silently (pythonw, no console) when this user logs in."""
+    from pathlib import Path
+    f = _startup_file()
+    if uninstall:
+        if f.exists():
+            f.unlink()
+            print(f"Removed {f}")
+        else:
+            print("Not installed.")
+        return 0
+    root = Path(__file__).resolve().parent.parent
+    exe = Path(sys.executable)
+    pyw = exe.with_name("pythonw.exe") if exe.with_name("pythonw.exe").exists() else exe
+    log = root / "goveelights.log"
+    f.write_text(
+        'Set sh = CreateObject("WScript.Shell")\r\n'
+        f'sh.CurrentDirectory = "{root}"\r\n'
+        f'sh.Run """{pyw}"" -m goveelights serve --log ""{log}""", 0, False\r\n', encoding="utf-8")
+    print(f"Installed: {f}\nThe app will start hidden at your next login (log: {log}).\n"
+          f"To start it now without a window, double-click that file.")
+    return 0
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
-    if not argv or argv[0] not in ("diag", "play", "effects", "layout"):
-        from .diag_server import main as diag_main
-        return diag_main(argv)
+    if not argv or argv[0].startswith("-") or argv[0] == "serve":
+        from .app_server import main as app_main
+        return app_main(argv[1:] if argv and argv[0] == "serve" else argv)
     if argv[0] == "diag":
         from .diag_server import main as diag_main
         return diag_main(argv[1:])
+    if argv[0] in ("install-startup", "uninstall-startup"):
+        return cmd_install_startup(uninstall=argv[0] == "uninstall-startup")
 
     ap = argparse.ArgumentParser(prog="python -m goveelights")
     ap.add_argument("--config")
