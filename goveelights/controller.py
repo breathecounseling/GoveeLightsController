@@ -163,17 +163,24 @@ class Controller:
 
     def thumbnail(self, scene_dict: dict, key=None, frames: int = 24, fps: float = 8.0) -> dict:
         """A short loop rendered by the real engine, for animated preset cards."""
-        if key is not None and key in self._thumbs:
-            return self._thumbs[key]
+        m = self.engine.master
+        look = {"palette": m.get("palette", ""), "hue": m.get("hue", 0.0)}     # previews match what plays
+        if key is not None:
+            key = (key, look["palette"], round(look["hue"], 3))
+            if key in self._thumbs:
+                return self._thumbs[key]
         sc = Scene.from_dict(scene_dict, self.user_palettes)
         L = self.engine.layout
         out = []
         for k in range(frames):
-            cols = sc.render(2.0 + k / fps, L)
+            cols = sc.render(2.0 + k / fps, L, look)
             out.append("".join(f"{int(c[0] * 255 + .5):02x}{int(c[1] * 255 + .5):02x}{int(c[2] * 255 + .5):02x}"
                                for c in cols))
         res = {"fps": fps, "frames": out}
         if key is not None:
+            if len(self._thumbs) > 300:          # simple bound: drop the oldest entries
+                for k in list(self._thumbs)[:100]:
+                    self._thumbs.pop(k, None)
             self._thumbs[key] = res
         return res
 

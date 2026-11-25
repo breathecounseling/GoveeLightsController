@@ -38,6 +38,14 @@ from .layout import Layout
 from .palettes import all_palettes
 
 BLENDS = ["normal", "add", "multiply", "screen", "lighten", "mask"]
+BLEND_INFO = {
+    "normal": "Covers the layers below. Lower the opacity to see through it.",
+    "add": "Adds its light to what's below: lit parts get brighter and colours mix (red + green = yellow). Best for sparkles and comets over a base.",
+    "lighten": "Each bulb shows whichever layer is brighter, so this layer's dark parts become see-through. Clean overlays without washing out.",
+    "screen": "Like add but gentler: brightens without blowing out to white.",
+    "multiply": "Darkens: the layer below only shows where this layer is bright, tinted by this layer's colour. Good for moving shadows.",
+    "mask": "This layer becomes a stencil: the layers below only show where it's lit. Its colour is ignored. Use a wave or chase to cut moving shapes out of a gradient.",
+}
 
 
 def blend(mode: str, b: Color, c: Color, o: float) -> Color:

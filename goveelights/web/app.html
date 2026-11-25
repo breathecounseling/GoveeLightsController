@@ -113,6 +113,23 @@ h2 .sp{flex:1}
 .pick button b{display:block;font-size:14px}
 .pick button span{display:block;font-size:11.5px;color:var(--dim);margin-top:2px}
 .pick button.on{border-color:var(--blue);background:#132033}
+.pick canvas,.blendc canvas{display:block;width:100%;height:42px;border-radius:8px;background:#040608;margin-bottom:6px}
+.blendc{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.blendc button{text-align:left;padding:8px}
+.blendc button b{display:block;font-size:13.5px}
+.blendc button span{display:block;font-size:11.5px;color:var(--dim);margin-top:2px}
+.blendc button.on{border-color:var(--blue);background:#132033}
+.info{background:none;border:none;padding:0 4px;color:var(--blue);font-size:14px}
+.phelp{font-size:12px;color:var(--dim);margin:2px 0 4px;display:none}
+.phelp.on{display:block}
+.stop{width:40px;height:40px;border-radius:10px;border:2px solid var(--line);padding:0;position:relative}
+.stop.sel{border-color:#fff;box-shadow:0 0 0 2px var(--blue)}
+.sugg{display:flex;gap:8px;flex-wrap:wrap}
+.sugg button{display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px;background:none;border:none;width:64px;font-size:10.5px;color:var(--dim);text-align:center;line-height:1.15}
+.sugg button i{width:38px;height:38px;border-radius:10px;border:1px solid var(--line);display:block}
+.starter{display:flex;align-items:center;gap:10px;width:100%;margin-bottom:6px;text-align:left}
+.starter i{flex:1;height:22px;border-radius:7px;display:block}
+.starter b{width:118px;font-size:13px}
 .grp{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin:12px 0 6px}
 #toast{position:fixed;left:50%;bottom:calc(76px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#2c3542;padding:8px 14px;border-radius:10px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;z-index:60;font-size:14px}
 #toast.show{opacity:1}
@@ -244,6 +261,7 @@ h2 .sp{flex:1}
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const h = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild };
+let BLEND_INFO = {};
 let ST = {}, EFX = {}, FXD = {}, BLENDS = [], SHAPES = [], PRESETS = [], LAYOUT = null, PL = {}, SCH = {}, PALS = {}, PAL_BUILTIN = [], PAL_CATS = {};
 let draft = null, draftId = null, sel = 0, panel = 'source', filter = 'all';
 const hist = {u: [], r: [], last: null};
@@ -309,6 +327,28 @@ addEventListener('resize', () => { layoutPreview(); thumbs.resize() });
 function openStream(){ const es = new EventSource('/api/stream'); es.onmessage = e => draw(e.data); es.onerror = () => { es.close(); setTimeout(openStream, 2000) } }
 
 // ------------------------------------------------------------- thumbnails
+/* Draw one frame of a mini house preview into a canvas. */
+function drawThumb(c, hex){
+  if (!c._g || c._g.w !== c.clientWidth){ const dpr=devicePixelRatio||1, W=c.clientWidth, H=c.clientHeight; if (!W) return; c.width=W*dpr; c.height=H*dpr;
+    const p = project(W, H, 4, 1.6); c._g = {w:W, H, dpr, pts:p.pts, r: Math.max(1, Math.min(2.6, p.s*.4))} }
+  const g = c._g, ctx = c.getContext('2d');
+  ctx.setTransform(g.dpr,0,0,g.dpr,0,0); ctx.clearRect(0,0,g.w,g.H);
+  for (let i=0;i<g.pts.length;i++){ const col = hex.substr(i*6,6); ctx.fillStyle = (!col || col==='000000') ? '#161b22' : '#'+col; ctx.fillRect(g.pts[i][0]-g.r, g.pts[i][1]-g.r, g.r*2, g.r*2) }
+}
+/* Animated previews of arbitrary scenes, rendered by the server's real engine (queued, cached). */
+const mini = {
+  els: new Map(), data: {}, queue: [], busy: 0, frame: 0,
+  add(canvas, scene){ const key = JSON.stringify(scene); this.els.set(canvas, key);
+    if (!this.data[key]){ this.data[key] = 'loading'; this.queue.push([key, scene]); this.pump() } },
+  pump(){ while (this.busy < 2 && this.queue.length){ const [key, scene] = this.queue.shift(); this.busy++;
+    post('thumb', {scene, frames: 12, fps: 6}).then(r => { if (r) this.data[key] = r; else delete this.data[key] }).finally(() => { this.busy--; this.pump() }) } },
+  tick(){ this.frame++;
+    for (const [c, key] of this.els){ if (!c.isConnected){ this.els.delete(c); continue }
+      const d = this.data[key]; const r = c.getBoundingClientRect(); if (r.bottom < 0 || r.top > innerHeight) continue;
+      if (!d || d === 'loading'){ if (!c._g) drawThumb(c, ''); continue }
+      drawThumb(c, d.frames[this.frame % d.frames.length]) } }
+};
+setInterval(() => { if (document.visibilityState === 'visible') mini.tick() }, 166);
 const thumbs = {
   data: {}, cards: new Map(), io: null, frame: 0,
   observe(el, id){ this.cards.set(el, id); if (!this.io) this.io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) this.load(e.target) }), {rootMargin:'200px'}); this.io.observe(el) },
@@ -320,11 +360,7 @@ const thumbs = {
     for (const [el, id] of this.cards){
       const d = this.data[id]; if (!d || d === 'loading' || !el.isConnected) continue;
       const c = el.querySelector('canvas'); if (!c) continue;
-      if (!c._g || c._g.w !== c.clientWidth){ const dpr=devicePixelRatio||1, W=c.clientWidth, H=c.clientHeight; c.width=W*dpr; c.height=H*dpr;
-        const p = project(W, H, 5, 1.6); c._g = {w:W, H, dpr, pts:p.pts, r: Math.max(1, Math.min(2.6, p.s*.4))} }
-      const g = c._g, ctx = c.getContext('2d'), hex = d.frames[this.frame % d.frames.length];
-      ctx.setTransform(g.dpr,0,0,g.dpr,0,0); ctx.clearRect(0,0,g.w,g.H);
-      for (let i=0;i<g.pts.length;i++){ const col = hex.substr(i*6,6); ctx.fillStyle = col==='000000' ? '#161b22' : '#'+col; ctx.fillRect(g.pts[i][0]-g.r, g.pts[i][1]-g.r, g.r*2, g.r*2) }
+      drawThumb(c, d.frames[this.frame % d.frames.length]);
     }
   }
 };
@@ -400,26 +436,79 @@ function palettePicker(current, onPick, first){
 }
 function drawPalChips(){
   const box = $('palChips'); box.className = ''; box.innerHTML = '';
-  box.appendChild(palettePicker(ST.master?.palette || '', p => post('master',{palette:p}).then(refresh),
+  box.appendChild(palettePicker(ST.master?.palette || '', p => post('master',{palette:p}).then(() => { thumbs.data = {}; loadPresets() }),
     {label:'Original', bg:'repeating-linear-gradient(45deg,#333 0 6px,#222 6px 12px)'}));
 }
 function drawPalList(){
   $('palList').innerHTML = Object.entries(PAL_CATS).map(([cat, names]) => `<div class="grp">${esc(cat)}</div>` + names.filter(n => PALS[n]).map(n => [n, PALS[n]]).map(([n,c]) => `<div class="row" style="margin-bottom:8px"><div class="grow"><div style="font-size:13px">${esc(n)}${PAL_BUILTIN.includes(n)?' <span class="dim">· built-in</span>':''}</div><div class="palbar" style="background:${palCss(c)}"></div></div><button class="sm" data-e="${esc(n)}">Edit</button></div>`).join('')).join('');
   $('palList').querySelectorAll('[data-e]').forEach(b => b.onclick = () => editPalette(b.dataset.e));
 }
+/* ---- colour harmony (LED-tuned: keep colours vivid and bright, keep whites white) ---- */
+function hex2hsv(hx){ const n = parseInt(hx.slice(1),16), r=(n>>16&255)/255, g=(n>>8&255)/255, b=(n&255)/255, mx=Math.max(r,g,b), mn=Math.min(r,g,b), d=mx-mn;
+  let hh = 0; if (d){ hh = mx===r ? ((g-b)/d)%6 : mx===g ? (b-r)/d+2 : (r-g)/d+4; hh*=60; if (hh<0) hh+=360 } return [hh, mx ? d/mx : 0, mx] }
+function hsv2hex(hh, s, v){ hh = ((hh%360)+360)%360; const c=v*s, x=c*(1-Math.abs((hh/60)%2-1)), m=v-c; let r=0,g=0,b=0;
+  if (hh<60)[r,g,b]=[c,x,0]; else if(hh<120)[r,g,b]=[x,c,0]; else if(hh<180)[r,g,b]=[0,c,x]; else if(hh<240)[r,g,b]=[0,x,c]; else if(hh<300)[r,g,b]=[x,0,c]; else [r,g,b]=[c,0,x];
+  return '#'+[r,g,b].map(q=>Math.round((q+m)*255).toString(16).padStart(2,'0')).join('') }
+const isWhite = hx => hex2hsv(hx)[1] < 0.15;
+const led = (hh, s, v) => hsv2hex(hh, s < 0.15 ? s : Math.max(0.7, s), Math.max(0.9, v));
+const hueDist = (a, b) => { const d = Math.abs(a-b)%360; return d > 180 ? 360-d : d };
+const RELS = [['Complement',180],['Split',150],['Split',210],['Triad',120],['Triad',240],['Analogous',30],['Analogous',-30]];
+function pairsFor(hx){
+  if (isWhite(hx)) return [['Warm white','#ffcf8a'],['Ice blue','#4da6ff'],['Gold','#ffc400'],['Red','#ff1a1a'],['Emerald','#00d46a'],['Violet','#9b30ff']];
+  const [hh,s,v] = hex2hsv(hx); return RELS.map(([n,d]) => [n, led(hh+d, s, v)]).concat([['White sparkle','#ffffff']]) }
+function suggestFor(cols){
+  const vivid = cols.filter(c => !isWhite(c)); const out = [];
+  if (!vivid.length) return pairsFor(cols[0] || '#ff0000');
+  const hsv = vivid.map(hex2hsv), hues = hsv.map(x=>x[0]);
+  const s = hsv.reduce((a,x)=>a+x[1],0)/hsv.length, v = hsv.reduce((a,x)=>a+x[2],0)/hsv.length;
+  const cands = [];
+  vivid.forEach((c,k) => RELS.forEach(([n,d]) => cands.push({hue:(hues[k]+d+360)%360, why:`${n} of colour ${cols.indexOf(c)+1}`})));
+  if (hues.length > 1){ const hs = [...hues].sort((a,b)=>a-b); let best = 0, at = 0;
+    hs.forEach((x,k) => { const nx = k === hs.length-1 ? hs[0]+360 : hs[k+1]; if (nx - x > best){ best = nx - x; at = x + best/2 } });
+    cands.push({hue: at%360, why: 'Fills the biggest gap', bonus: 1}) }
+  cands.forEach(c => { c.agree = cands.filter(o => hueDist(o.hue, c.hue) < 14).length; c.min = Math.min(...hues.map(h0 => hueDist(h0, c.hue))) });
+  cands.filter(c => c.min >= 24).sort((a,b) => (b.agree + (b.bonus||0) + b.min/120) - (a.agree + (a.bonus||0) + a.min/120))
+    .forEach(c => { if (out.length < 6 && !out.some(o => hueDist(o.hue, c.hue) < 14)) out.push(c) });
+  const res = out.map(c => [c.why, led(c.hue, s, v)]);
+  if (!cols.some(isWhite)) res.push(['White sparkle', '#ffffff'], ['Warm white accent', '#ffcf8a']);
+  return res }
+function startersFor(hx){
+  const [hh,s,v] = isWhite(hx) ? [40, .9, 1] : hex2hsv(hx), L = (d, ss=s, vv=v) => led(hh+d, ss, vv);
+  return [['Analogous', [L(-30), L(0), L(30)]], ['Complementary', [L(0), L(180)]], ['Split complement', [L(0), L(150), L(210)]],
+          ['Triadic', [L(0), L(120), L(240)]], ['Four corners', [L(0), L(90), L(180), L(270)]],
+          ['Shades of one', [hsv2hex(hh,1,1), hsv2hex(hh,.65,1), hsv2hex(hh,.3,1), '#ffffff']], ['Colour + sparkle', [L(0), '#ffffff', L(20)]]] }
 async function savePalettes(user){ if (await post('palettes',{palettes:user})) { await loadPalettes(); toast('Palettes saved') } }
 async function editPalette(name){
   const r = await get('palettes'); const user = {}; r.user.forEach(n => user[n] = r.palettes[n]);
-  let nm = name || '', cols = [...(name ? r.palettes[name] : ['#ff0000','#0000ff'])];
-  const el = h(`<div><input type="text" id="pnm" placeholder="Palette name" value="${esc(nm)}"><div class="palbar" id="pbar"></div><div class="stops" id="pst"></div>
-    <p class="help">${r.builtin.includes(name)?'Built-in palette: saving under the same name overrides it.':'Tap a colour to change it.'}</p>
-    <div class="row"><button class="pri grow" id="psave">Save</button>${name && r.user.includes(name)?'<button class="bad" id="pdel">Delete</button>':''}</div></div>`);
-  const drawStops = () => { el.querySelector('#pbar').style.background = palCss(cols); const st = el.querySelector('#pst'); st.innerHTML='';
-    cols.forEach((c,k) => { const w = h(`<span class="c" style="position:relative"><input type="color" value="${c}">${cols.length>1?'<button class="sm x" style="position:absolute;right:-7px;top:-7px;padding:0 5px;font-size:11px">×</button>':''}</span>`);
-      w.querySelector('input').oninput = e => { cols[k]=e.target.value; el.querySelector('#pbar').style.background = palCss(cols) };
-      const x = w.querySelector('button'); if (x) x.onclick = () => { cols.splice(k,1); drawStops() }; st.appendChild(w) });
-    const add = h('<button class="sm">+</button>'); add.onclick = () => { cols.push(cols[cols.length-1]); drawStops() }; st.appendChild(add) };
-  drawStops();
+  let cols = [...(name ? r.palettes[name] : ['#ff3d00'])], selI = 0;
+  const el = h(`<div><input type="text" id="pnm" placeholder="Palette name" value="${esc(name||'')}">
+    <div class="grp">On the house</div><canvas id="pprev" style="display:block;width:100%;height:54px;border-radius:10px;background:#040608"></canvas>
+    <div class="grp">Colours <span class="dim" style="text-transform:none;letter-spacing:0">(tap one to select it)</span></div>
+    <div class="stops" id="pst"></div>
+    <div class="row" style="margin-top:6px"><input type="color" id="pedit"><span class="dim" style="font-size:12.5px">Change selected</span><span class="grow"></span><button class="sm" id="pdelc">Remove selected</button></div>
+    <div class="grp" id="pairT"></div><div class="sugg" id="pairs"></div>
+    <div class="grp">Would add well to this set</div><div class="sugg" id="adds"></div>
+    <div class="grp">Start a set from the selected colour</div><div id="starts"></div>
+    <p class="help">${r.builtin.includes(name)?'Built-in palette: saving under the same name overrides it.':''}</p>
+    <div class="row"><button class="pri grow" id="psave">Save palette</button>${name && r.user.includes(name)?'<button class="bad" id="pdel">Delete</button>':''}</div></div>`);
+  const sw = (label, hx) => { const b = h(`<button><i style="background:${hx}"></i>${esc(label)}</button>`); b.onclick = () => { cols.push(hx); selI = cols.length-1; draw() }; return b };
+  const draw = () => {
+    const st = el.querySelector('#pst'); st.innerHTML = '';
+    cols.forEach((c,k) => { const b = h(`<button class="stop ${k===selI?'sel':''}" style="background:${c}" aria-label="colour ${k+1}"></button>`); b.onclick = () => { selI = k; draw() }; st.appendChild(b) });
+    const add = h('<button class="sm">+</button>'); add.onclick = () => { cols.push(cols[selI]); selI = cols.length-1; draw() }; st.appendChild(add);
+    el.querySelector('#pedit').value = cols[selI]; el.querySelector('#pdelc').disabled = cols.length < 2;
+    el.querySelector('#pairT').textContent = 'Goes well with colour ' + (selI+1);
+    const pr = el.querySelector('#pairs'); pr.innerHTML = ''; pairsFor(cols[selI]).forEach(([n,hx]) => pr.appendChild(sw(n, hx)));
+    const ad = el.querySelector('#adds'); ad.innerHTML = ''; suggestFor(cols).forEach(([n,hx]) => ad.appendChild(sw(n, hx)));
+    const sb = el.querySelector('#starts'); sb.innerHTML = '';
+    startersFor(cols[selI]).forEach(([n, set]) => { const b = h(`<button class="starter"><b>${esc(n)}</b><i style="background:${palCss(set)}"></i></button>`);
+      b.onclick = () => { cols = [...set]; selI = 0; draw() }; sb.appendChild(b) });
+    mini.add(el.querySelector('#pprev'), {layers:[{effect:'gradient', params:{colors:cols, length:45, speed:4}, fx:[{type:'glitter', params:{base:0.7, density:0.25}}]}]});
+  };
+  el.querySelector('#pedit').oninput = e => { cols[selI] = e.target.value; clearTimeout(el._t); el._t = setTimeout(draw, 250);
+    el.querySelectorAll('.stop')[selI].style.background = e.target.value };
+  el.querySelector('#pdelc').onclick = () => { if (cols.length > 1){ cols.splice(selI,1); selI = Math.max(0, selI-1); draw() } };
+  draw();
   el.querySelector('#psave').onclick = () => { const n = el.querySelector('#pnm').value.trim(); if (!n) return toast('Name it first');
     if (name && name !== n && r.user.includes(name)) delete user[name]; user[n] = cols; savePalettes(user).then(closeSheet) };
   const del = el.querySelector('#pdel'); if (del) del.onclick = () => { delete user[name]; savePalettes(user).then(closeSheet) };
@@ -544,7 +633,8 @@ function effectPicker(L){
   Object.entries(groups).forEach(([gname, names]) => {
     el.appendChild(h(`<div class="grp">${gname}</div>`));
     const grid = h('<div class="pick"></div>');
-    names.filter(n => EFX[n]).forEach(n => { const e = EFX[n]; const b = h(`<button class="${n===L.effect?'on':''}"><b>${esc(e.label)}</b><span>${esc(e.description||'')}</span></button>`);
+    names.filter(n => EFX[n]).forEach(n => { const e = EFX[n]; const b = h(`<button class="${n===L.effect?'on':''}"><canvas></canvas><b>${esc(e.label)}</b><span>${esc(e.description||'')}</span></button>`);
+      mini.add(b.querySelector('canvas'), {layers:[{effect:n, params:{}, palette: L.palette || ''}]});
       b.onclick = () => { if (n !== L.effect){ L.effect = n; L.params = {}; L.mod = {} } closeSheet(); changed(true) }; grid.appendChild(b) });
     el.appendChild(grid);
   });
@@ -564,9 +654,14 @@ function fxPanel(L, card){
     card.appendChild(el);
   });
   const add = h('<button style="width:100%">+ Add FX</button>');
-  add.onclick = () => { const el = h('<div class="pick"></div>');
-    Object.values(FXD).forEach(d => { const b = h(`<button><b>${esc(d.label)}</b><span>${esc(d.description||'')}</span></button>`);
-      b.onclick = () => { L.fx.push({type:d.name, params:{}, mod:{}, enabled:true}); closeSheet(); changed(true) }; el.appendChild(b) });
+  add.onclick = () => { const el = h('<div><p class="help" style="margin-top:0">Each preview is <b>this layer</b> with that FX added.</p><div class="pick"></div></div>'), grid = el.querySelector('.pick');
+    const asIs = JSON.parse(JSON.stringify(L)); asIs.enabled = true;
+    const ref = h(`<button disabled style="opacity:1"><canvas></canvas><b>Your layer now</b><span>For comparison</span></button>`);
+    mini.add(ref.querySelector('canvas'), {layers:[asIs]}); grid.appendChild(ref);
+    Object.values(FXD).forEach(d => { const b = h(`<button><canvas></canvas><b>${esc(d.label)}</b><span>${esc(d.description||'')}</span></button>`);
+      const withFx = JSON.parse(JSON.stringify(asIs)); withFx.fx = [...(withFx.fx||[]), {type:d.name, params:{}, mod:{}, enabled:true}];
+      mini.add(b.querySelector('canvas'), {layers:[withFx]});
+      b.onclick = () => { L.fx.push({type:d.name, params:{}, mod:{}, enabled:true}); closeSheet(); changed(true) }; grid.appendChild(b) });
     openSheet('Add FX', el) };
   card.appendChild(add);
 }
@@ -574,9 +669,9 @@ function mixPanel(L, card){
   const tg = Array.isArray(L.target) ? L.target : [L.target || 'all'];
   const el = h(`<div>
     <div class="grp" style="margin-top:0">Where</div><div class="tgt" id="tg"></div>
-    <div class="grp">Blend with the layers below</div><div class="tgt" id="bl"></div>
+    <div class="grp">Blend with the layers below</div><div id="bl"></div>
     <div class="prm"><div class="top"><span class="lbl">Opacity</span><output>${Math.round((L.opacity??1)*100)}%</output></div><input type="range" min="0" max="1" step="0.01" value="${L.opacity??1}"></div>
-    <p class="help">The bottom layer always draws normally. add/lighten are great for sparkles over a base; mask lets this layer's brightness cut holes in what's below.</p></div>`);
+</div>`);
   const tgBox = el.querySelector('#tg');
   ['all', ...LAYOUT.targets].forEach(n => { const on = tg.includes(n); const b = h(`<button class="chip ${on?'on':''}">${n==='all'?'Everywhere':esc(n)}</button>`);
     b.onclick = () => { let cur = Array.isArray(L.target) ? [...L.target] : [L.target||'all'];
@@ -584,7 +679,12 @@ function mixPanel(L, card){
       L.target = cur.length===1 ? cur[0] : cur; highlight(L.target); changed(true) };
     b.addEventListener('pointerenter', () => highlight(n)); tgBox.appendChild(b) });
   const blBox = el.querySelector('#bl');
-  BLENDS.forEach(m => { const b = h(`<button class="chip ${(L.blend||'normal')===m?'on':''}" ${sel===0?'disabled':''}>${m}</button>`); b.onclick = () => { L.blend = m; changed(true) }; blBox.appendChild(b) });
+  if (sel === 0) blBox.innerHTML = '<p class="help">This is the bottom layer, so there is nothing below it to blend with. Add a layer above it and pick that layer to try blend modes.</p>';
+  else { const grid = h('<div class="blendc"></div>'); blBox.appendChild(h('<p class="help" style="margin-top:0">Each preview is your whole scene with this layer blended that way.</p>')); blBox.appendChild(grid);
+    BLENDS.forEach(m => { const b = h(`<button class="${(L.blend||'normal')===m?'on':''}"><canvas></canvas><b>${esc(m)}</b><span>${esc(BLEND_INFO[m]||'')}</span></button>`);
+      const sc = JSON.parse(JSON.stringify(draft)); sc.layers[sel].blend = m; sc.layers[sel].enabled = true;
+      mini.add(b.querySelector('canvas'), sc);
+      b.onclick = () => { L.blend = m; changed(true) }; grid.appendChild(b) }) }
   const r = el.querySelector('input[type=range]'); r.oninput = () => { L.opacity = +r.value; r.previousElementSibling.querySelector('output').textContent = Math.round(r.value*100)+'%'; changed() };
   card.appendChild(el);
 }
@@ -595,7 +695,8 @@ function paramRow(obj, p, owner){
   obj.params ||= {}; obj.mod ||= {};
   const el = h(`<div class="prm"><div class="top"><span class="lbl">${esc(p.label)}</span></div></div>`);
   const top = el.querySelector('.top');
-  if (p.help) el.title = p.help;
+  if (p.help){ const ib = h('<button class="info" aria-label="What does this do?">ⓘ</button>'); top.querySelector('.lbl').appendChild(ib);
+    const hp = h(`<div class="phelp">${esc(p.help)}</div>`); el.appendChild(hp); ib.onclick = () => hp.classList.toggle('on') }
   const set = v => { obj.params[p.name] = v; changed() };
   if (p.kind === 'number' || p.kind === 'int'){
     const hasRange = p.min != null && p.max != null;
@@ -793,7 +894,7 @@ async function security(){
 
 // ------------------------------------------------------------- boot
 (async function boot(){
-  const e = await get('effects'); e.effects.forEach(x => EFX[x.name] = x); e.fx.forEach(x => FXD[x.name] = x); BLENDS = e.blends; SHAPES = e.shapes;
+  const e = await get('effects'); e.effects.forEach(x => EFX[x.name] = x); e.fx.forEach(x => FXD[x.name] = x); BLENDS = e.blends; SHAPES = e.shapes; BLEND_INFO = e.blend_info || {};
   LAYOUT = await get('layout'); layoutPreview(); openStream();
   await loadPalettes(); PL = await get('playlists'); SCH = await get('schedule');
   await loadPresets(); plSelect(); schedForm(); await refresh(); setInterval(refresh, 2000); security();

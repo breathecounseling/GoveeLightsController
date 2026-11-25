@@ -590,3 +590,38 @@ def fireflies(t, p, P):
 @effect("off", "Off (black)", [])
 def off(t, p, P):
     return BLACK
+
+
+# ------------------------------------------------------------ what you'll see
+# Plain-language descriptions shown in the app's pickers (they override the short
+# ones above). Written as "what it looks like on the house".
+LOOKS = {
+    "solid": "Every bulb the same colour, holding still.",
+    "chase": "Evenly spaced dots marching along the lights, like a theatre marquee.",
+    "comet": "A bright head racing along with a tail that fades behind it. Several comets space themselves out.",
+    "scanner": "A single glowing eye sliding back and forth along each run, like a car's scanner light.",
+    "wipe": "Colour paints itself along the lights from one end, then the next colour paints over it.",
+    "wave": "Soft bands of light and dark rolling along, like ripples on water seen from the side.",
+    "candy_cane": "Crisp repeating stripes (red/white by default) sliding slowly along.",
+    "alternate": "Bulbs alternate colours in groups; every few seconds the colours swap places, with a fade.",
+    "gradient": "A smooth blend through the palette, stretched along the house and drifting slowly.",
+    "rainbow": "The full rainbow laid along the lights and scrolling.",
+    "ripple": "Rings spreading outward from a point (the front gable's apex by default), like a stone dropped in a pond.",
+    "sweep": "A beam rotating around a point like a lighthouse or radar, so its light swings across the gable and eaves.",
+    "plasma": "Big soft blobs of colour that swirl and merge, like a lava lamp spread over the house.",
+    "aurora": "Slow drifting curtains of light that brighten and fade, like the northern lights.",
+    "bursts": "Fireworks: rings of colour bursting from random spots and fading out.",
+    "twinkle": "Random bulbs gently fade in and out, like stars.",
+    "sparkle": "Quick sharp flashes on random single bulbs. Best on top of another layer.",
+    "fire": "Flickering orange flames. With axis 'y' on the peak, the flames rise up the zigzag.",
+    "breathe": "The whole layer slowly fades up and down, like breathing.",
+    "glitter": "A dim shimmering base with hot white flashes that cool into the colour, like glitter catching light.",
+    "shimmer": "Bright bands sweep across while bulbs inside them flicker and glint, like light passing over sequins.",
+    "sequins": "A brush sweeps along flipping every bulb between two colours, each one flashing as it turns.",
+    "fizz": "Tiny bright bubbles rising up the zigzag like champagne, twinkling along the flat eaves.",
+    "fireflies": "Soft warm points that glow up, drift a bulb or two, and fade away.",
+    "off": "Nothing: a dark layer. Useful as a mask or to blank part of the house.",
+}
+for _n, _d in LOOKS.items():
+    if _n in EFFECTS:
+        EFFECTS[_n].description = _d

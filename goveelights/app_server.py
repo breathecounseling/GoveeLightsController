@@ -20,7 +20,7 @@ from .effects import EFFECTS
 from .fx import FX
 from .modulation import SHAPES
 from .palettes import BUILTIN, all_palettes, categories
-from .scene import BLENDS
+from .scene import BLEND_INFO, BLENDS
 
 log = logging.getLogger("goveelights")
 WEB = Path(__file__).resolve().parent / "web"
@@ -114,6 +114,7 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                 if path == "/api/effects":
                     return self._json({"effects": [e.to_dict() for e in EFFECTS.values()],
                                        "fx": [f.to_dict() for f in FX.values()], "blends": BLENDS,
+                                       "blend_info": BLEND_INFO,
                                        "shapes": SHAPES})
                 if path == "/api/palettes":
                     return self._json({"palettes": all_palettes(ctl.user_palettes), "builtin": list(BUILTIN),
@@ -254,7 +255,10 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                 ctl.presets.set_meta(b["id"], b.get("favorite"), b.get("tags"))
                 return {"ok": True}
             if a == "thumb":                       # thumbnail for an unsaved scene (randomizer)
-                return ctl.thumbnail(b["scene"], frames=int(b.get("frames", 16)))
+                import hashlib
+                frames = max(4, min(32, int(b.get("frames", 16))))
+                key = ("adhoc", hashlib.sha1(json.dumps(b["scene"], sort_keys=True).encode()).hexdigest(), frames)
+                return ctl.thumbnail(b["scene"], key=key, frames=frames, fps=float(b.get("fps", 8)))
             if a == "live":
                 ctl.set_live(bool(b.get("on")))
                 return {"ok": True}

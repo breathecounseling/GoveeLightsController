@@ -323,3 +323,25 @@ def shimmer_fx(frame, ctx, P, st):
 
 
 __all__ = ["FX", "Ctx", "coord"]
+
+
+LOOKS = {
+    "trails": "Anything that moves leaves a glowing trail that fades behind it. Turns dots into streaks.",
+    "blur": "Softens hard edges, so stripes and dots become smooth glowing blobs.",
+    "glow": "Adds a halo: lit bulbs bleed soft light into their neighbours, without losing the bright centre.",
+    "mirror": "Folds the pattern in half so the second half is a reflection of the first. Things meet in the middle.",
+    "kaleido": "Repeats the first stretch of the layer over and over along the run, flipping every other copy, so any pattern becomes symmetric tiles.",
+    "echo": "A delayed, dimmer copy follows the original (optionally shifted along the lights), like an echo.",
+    "strobe": "Flashes the layer on and off rapidly. Keep it slow and short; it's intense on a house.",
+    "hue": "Rotates every colour around the colour wheel: reds become oranges, then yellows… Spin keeps it cycling.",
+    "adjust": "Brightness, colour intensity (saturation) and contrast for this layer.",
+    "colorize": "Throws away the layer's colours and repaints by brightness: dark parts get the first colour, bright parts the last.",
+    "pixelate": "Groups bulbs into chunky blocks of one colour, for a retro look.",
+    "invert": "Swaps light and dark (and colours to their opposites). Mostly useful as a mask.",
+    "gate": "Turns dim bulbs fully off, leaving only the brightest parts. Cleans up hazy effects.",
+    "glitter": "Dims this layer and makes random bulbs flash hot white in their own colour, like glitter.",
+    "shimmer": "Each bulb's brightness gently flickers on its own, like silk or water catching light. Optional bright sheen bands sweep across.",
+}
+for _n, _d in LOOKS.items():
+    if _n in FX:
+        FX[_n].description = _d
