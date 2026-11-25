@@ -10,7 +10,9 @@ class PresetStoreTests(unittest.TestCase):
             st = PresetStore(d)
             pid = st.save({"name": "My Scene!", "layers": [{"effect": "solid", "params": {"color": "#ff0000"}}]})
             self.assertEqual(pid, "my-scene")
-            self.assertEqual(st.list(), [{"id": "my-scene", "name": "My Scene!"}])
+            self.assertEqual([(p["id"], p["name"]) for p in st.list()], [("my-scene", "My Scene!")])
+            st.set_meta("my-scene", favorite=True, tags=["Holiday"])
+            self.assertTrue(st.list()[0]["favorite"])
             self.assertEqual(st.get("my-scene")["layers"][0]["effect"], "solid")
             with self.assertRaises(ValueError):
                 st.save({"name": "bad", "layers": [{"effect": "nope"}]})

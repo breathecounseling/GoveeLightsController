@@ -1,0 +1,24 @@
+{
+  "name": "Plasma party",
+  "tags": [
+    "Party"
+  ],
+  "layers": [
+    {
+      "effect": "plasma",
+      "params": {
+        "scale": 10,
+        "speed": 6
+      },
+      "palette": "Rainbow",
+      "fx": [
+        {
+          "type": "hue",
+          "params": {
+            "spin": 0.03
+          }
+        }
+      ]
+    }
+  ]
+}

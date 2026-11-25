@@ -6,25 +6,28 @@ LAN API over UDP. No cloud, no API key, no dependencies beyond Python 3.10+.
 **Status:** Phase 1 (diagnostics), Phase 2 (effects engine) and Phase 3 (creator app,
 playlists, scheduler) are done.
 
-## Creator app (Phase 3)
+## Creator app
 
 `start.bat` (or `python -m goveelights`) starts the app. Open the printed address on your
-phone or the PC.
+phone; the app is designed phone-first.
 
-* **Live preview** in the shape of the house, streamed from the real engine, so it shows
-  exactly what the lights are sent.
-* **Preview / Live** (top right): in Preview the lights are left alone. Live sends every
-  change to the lights instantly.
-* **Play:** tap a preset or playlist, and set the master brightness.
-* **Edit:** stack layers, pick effects, blend modes and which run each layer applies to,
-  then tune each control. Save as a preset (JSON in `presets/`).
-* **Playlists:** rotate presets on a timer, with crossfades and optional shuffle.
-* **Schedule:** on at sunset (with an offset) or a fixed time, off at a set time (it can
-  be after midnight), and a preset or playlist per date range (Christmas, Halloween…),
-  else a default. Playing something by hand pauses the schedule until its next on/off time.
-* **Settings:** fps (10-30), gamma, diagnostics (at `/diag`; opening it pauses the effects),
-  and Quit.
-* **Stop** blanks the lights and keeps control. **Release to Govee app** hands control back.
+* **Play:** animated preset cards rendered by the real engine, favourites (★) and tag
+  filters. Quick knobs for brightness, **master speed**, **hue** and **tap tempo**, plus
+  one-tap **palette restyle** of whatever is playing. Long-press a card to edit it.
+* **Create:** a rack per layer: **Source** (20 generators, including 2D ones that use the
+  house shape: ripple, sweep, plasma, aurora, bursts), then an **FX** chain (trails, blur,
+  glow, mirror, kaleidoscope, echo, strobe, hue shift, adjust, colorize, pixelate, invert,
+  gate), then **Mix** (blend mode, opacity, and where: runs or zones such as "North wall"
+  or "Whole front gable", outlined on the preview).
+  * **∿ on any slider** adds an LFO: sine/triangle/saw/square/random/step, free-running or
+    synced to the tempo in beats, with depth and phase.
+  * **Palettes** restyle a layer in one tap. Edit or create palettes under More.
+  * **Undo/redo, 🎲 randomize, ✨ mutate,** duplicate layers, and save with tags.
+  * Speed changes and LFOs never make motion jump: the engine integrates speed over time.
+* **Shows:** playlists (timed rotation with crossfades) and the schedule (sunset or a
+  fixed time, off time, and date-range rules).
+* **More:** palettes, fps, gamma, devices/diagnostics, quit.
+* **⏻ menu:** Go live / preview, blackout, stop, release to the Govee app.
 
 **Run in the background on Windows:** `python -m goveelights install-startup` adds a hidden
 launcher to your Startup folder. The app then starts at login with no window and logs to
@@ -115,7 +118,10 @@ Ctrl+C stops playback and hands the lights back to the Govee app.
 * **Geometry:** each run's `geometry` is `[[index, x, y], ...]` knots in bulb-spacing units,
   showing the house unrolled as seen from outside. `layouts/house.json` holds an
   approximate shape built from the landmarks. Phase 3's preview will make it editable.
-* **Effects** (`goveelights/effects.py`) are pure functions `(t, pixel, params) -> colour`:
+* **Effects** (`goveelights/effects.py`) are pure functions `(t, pixel, params) -> colour`
+  (motion reads the engine-integrated distance `P["_travel"]`). FX (`fx.py`) are frame
+  processors with state; LFOs live in `modulation.py`; palettes in `palettes.py`. Zones
+  are in the config (`zones`), imported from `layouts/house.json`. Original list:
   solid, chase, comet, wipe, wave, twinkle, sparkle, candy_cane, fire, breathe, rainbow,
   gradient, alternate. Positional effects take `axis`: `strip`, `run`, `x` or `y`. With `y`,
   an effect works bottom to top across the zigzag (fills, rising fire).
@@ -159,7 +165,10 @@ goveelights/config.py       single JSON config file
 goveelights/diag_server.py  Phase 1 web server + API
 goveelights/layout.py       virtual strip + geometry
 goveelights/effects.py      effect library (pure functions + param schemas)
-goveelights/scene.py        layers, blend modes, presets
+goveelights/scene.py        layers (source → FX chain → blend), modulation, palettes, master
+goveelights/fx.py           frame FX rack units
+goveelights/modulation.py   LFOs
+goveelights/palettes.py     palette library
 goveelights/engine.py       render loop, crossfades
 goveelights/output.py       output interface + Govee razer output
 goveelights/cli.py          command line

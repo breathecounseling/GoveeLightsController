@@ -1,0 +1,36 @@
+{
+  "name": "Lighthouse",
+  "tags": [
+    "Ambient"
+  ],
+  "layers": [
+    {
+      "effect": "solid",
+      "params": {
+        "color": "#08142a"
+      }
+    },
+    {
+      "effect": "sweep",
+      "params": {
+        "arms": 1,
+        "speed": 15,
+        "colors": [
+          "#fff2c0",
+          "#000000",
+          "#000000",
+          "#000000"
+        ]
+      },
+      "blend": "add",
+      "fx": [
+        {
+          "type": "blur",
+          "params": {
+            "radius": 2
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 {
- "_comment": "Geometry for this house. Import once: python -m goveelights layout import layouts/house.json",
+ "_comment": "Geometry + zones for this house. Import (again after updates): python -m goveelights layout import layouts/house.json",
  "devices": {
   "0B:CD:C9:01:76:1D:2E:80": {
    "name": "Eaves",
@@ -133,5 +133,112 @@
     ]
    ]
   }
- }
+ },
+ "zones": [
+  {
+   "name": "North wall",
+   "parts": [
+    {
+     "run": "Eaves",
+     "from": 0,
+     "to": 30
+    }
+   ]
+  },
+  {
+   "name": "Front gable outline",
+   "parts": [
+    {
+     "run": "Eaves",
+     "from": 30,
+     "to": 53
+    }
+   ]
+  },
+  {
+   "name": "Front eave",
+   "parts": [
+    {
+     "run": "Eaves",
+     "from": 53,
+     "to": 71
+    }
+   ]
+  },
+  {
+   "name": "South wall",
+   "parts": [
+    {
+     "run": "Eaves",
+     "from": 71,
+     "to": 92
+    }
+   ]
+  },
+  {
+   "name": "South gable",
+   "parts": [
+    {
+     "run": "Eaves",
+     "from": 71,
+     "to": 91
+    }
+   ]
+  },
+  {
+   "name": "Flat eaves",
+   "parts": [
+    {
+     "run": "Eaves",
+     "from": 0,
+     "to": 30
+    },
+    {
+     "run": "Eaves",
+     "from": 53,
+     "to": 71
+    },
+    {
+     "run": "Eaves",
+     "from": 91,
+     "to": 92
+    }
+   ]
+  },
+  {
+   "name": "Zigzag bottom half",
+   "parts": [
+    {
+     "run": "Peak",
+     "from": 0,
+     "to": 69
+    }
+   ]
+  },
+  {
+   "name": "Zigzag top half",
+   "parts": [
+    {
+     "run": "Peak",
+     "from": 70,
+     "to": 107
+    }
+   ]
+  },
+  {
+   "name": "Whole front gable",
+   "parts": [
+    {
+     "run": "Eaves",
+     "from": 30,
+     "to": 53
+    },
+    {
+     "run": "Peak",
+     "from": 0,
+     "to": 107
+    }
+   ]
+  }
+ ]
 }

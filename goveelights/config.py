@@ -13,6 +13,9 @@ DEFAULTS = {
     "server": {"host": "0.0.0.0", "port": 8080, "bind_ip": ""},
     "manual_ips": [],
     "engine": {"fps": 20, "gamma": 1.0, "refresh_s": 1.0, "brightness": 1.0},
+    "master": {"speed": 1.0, "hue": 0.0, "palette": "", "bpm": 120},
+    "palettes": {},
+    "zones": [],
     "playlists": {
         "Christmas": {"items": [{"preset": "candy-cane", "minutes": 5},
                                 {"preset": "christmas-twinkle", "minutes": 10},
@@ -114,5 +117,9 @@ class Config:
                     if k in entry and not (k == "name" and d.get("name")):
                         d[k] = entry[k]
                 changed.append(d.get("name") or mac)
+            if data.get("zones"):
+                new = {z["name"]: z for z in data["zones"]}
+                self.data["zones"] = [z for z in self.data.get("zones", []) if z.get("name") not in new] + list(new.values())
+                changed.append(f"{len(new)} zones")
             self.save()
         return changed

@@ -1,0 +1,23 @@
+{
+  "name": "Northern lights",
+  "tags": [
+    "Ambient"
+  ],
+  "layers": [
+    {
+      "effect": "aurora",
+      "params": {
+        "scale": 18,
+        "speed": 3,
+        "contrast": 1.8
+      },
+      "mod": {
+        "contrast": {
+          "shape": "random",
+          "rate": 0.05,
+          "depth": 0.3
+        }
+      }
+    }
+  ]
+}

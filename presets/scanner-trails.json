@@ -1,0 +1,38 @@
+{
+  "name": "Scanners",
+  "tags": [
+    "Party"
+  ],
+  "layers": [
+    {
+      "effect": "scanner",
+      "params": {
+        "color": "#ff1010",
+        "width": 4,
+        "speed": 40,
+        "axis": "run"
+      },
+      "mod": {
+        "speed": {
+          "shape": "sine",
+          "rate": 0.08,
+          "depth": 0.3
+        }
+      },
+      "fx": [
+        {
+          "type": "trails",
+          "params": {
+            "length": 0.5
+          }
+        },
+        {
+          "type": "mirror",
+          "params": {
+            "axis": "run"
+          }
+        }
+      ]
+    }
+  ]
+}

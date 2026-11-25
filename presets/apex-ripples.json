@@ -1,0 +1,38 @@
+{
+  "name": "Apex ripples",
+  "tags": [
+    "Ambient"
+  ],
+  "layers": [
+    {
+      "effect": "gradient",
+      "params": {
+        "length": 90,
+        "speed": 2
+      },
+      "palette": "Ocean",
+      "target": "Flat eaves"
+    },
+    {
+      "effect": "ripple",
+      "params": {
+        "wavelength": 6,
+        "sharpness": 2,
+        "speed": 6,
+        "center_x": 0.47,
+        "center_y": 1
+      },
+      "palette": "Ocean",
+      "target": "Whole front gable",
+      "fx": [
+        {
+          "type": "glow",
+          "params": {
+            "radius": 1,
+            "amount": 0.5
+          }
+        }
+      ]
+    }
+  ]
+}

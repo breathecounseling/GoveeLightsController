@@ -32,6 +32,8 @@ class Engine:
         self.layout, self.output = layout, output
         self.fps, self.gamma, self.brightness = fps, gamma, brightness
         self.live = False          # False: render for preview only, lights untouched
+        self.master = {"speed": 1.0, "hue": 0.0, "palette": "", "bpm": 120.0}
+        self.blackout = False
         self.scene: Scene | None = None
         self._prev: Scene | None = None
         self._fade_start, self._fade_s = 0.0, 0.0
@@ -46,8 +48,11 @@ class Engine:
     def now(self) -> float:
         return time.monotonic() - self.t0
 
-    def set_scene(self, scene: Scene | None, fade_s: float = 0.0):
+    def set_scene(self, scene: Scene | None, fade_s: float = 0.0, continuous: bool = False):
+        """continuous=True: an edited version of the playing scene (keeps motion state)."""
         with self._lock:
+            if continuous and scene is not None:
+                scene.adopt_state(self.scene)
             if self.scene is not None and scene is not None and fade_s > 0:
                 self._prev, self._fade_start, self._fade_s = self.scene, self.now(), fade_s
             else:
@@ -60,14 +65,14 @@ class Engine:
             fade_start, fade_s = self._fade_start, self._fade_s
         if scene is None:
             return [(0.0, 0.0, 0.0)] * self.layout.n
-        cols = scene.render(t, self.layout)
+        cols = scene.render(t, self.layout, self.master)
         if prev is not None:
             f = (t - fade_start) / fade_s
             if f >= 1:
                 with self._lock:
                     self._prev = None
             else:
-                old = prev.render(t, self.layout)
+                old = prev.render(t, self.layout, self.master)
                 cols = [(a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f)
                         for a, b in zip(old, cols)]
         return cols
@@ -75,7 +80,9 @@ class Engine:
     def tick(self):
         t0 = time.perf_counter()
         cols = self.render(self.now())
-        if self.brightness != 1.0:
+        if self.blackout:
+            cols = [(0.0, 0.0, 0.0)] * len(cols)
+        elif self.brightness != 1.0:
             b = self.brightness
             cols = [(c[0] * b, c[1] * b, c[2] * b) for c in cols]
         self.last_colors = cols

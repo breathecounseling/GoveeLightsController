@@ -62,8 +62,10 @@ class Run:
 
 
 class Layout:
-    def __init__(self, runs: list[Run]):
+    def __init__(self, runs: list[Run], zones: list[dict] | None = None):
         self.runs = runs
+        self.zone_specs = zones or []
+        self._targets: dict = {}
         self.pixels: list[Pixel] = []
         pos_all = {r.mac: r.positions() for r in runs}
         for r in runs:
@@ -91,9 +93,48 @@ class Layout:
             for p in r.pixels:
                 p.rny = (p.y - lo) / (hi - lo) if hi > lo else 0.0
 
+        # zones: named groups of bulbs, e.g. {"name": "North wall",
+        #   "parts": [{"run": "Eaves", "from": 0, "to": 30}]}   (physical indexes, inclusive)
+        self.zones: dict[str, list[int]] = {}
+        for z in self.zone_specs:
+            members = set()
+            for part in z.get("parts", []):
+                r = self.run(part.get("run", ""))
+                if not r:
+                    continue
+                lo, hi = int(part.get("from", 0)), int(part.get("to", r.count - 1))
+                members |= {p.i for p in r.pixels if lo <= p.local <= hi}
+            if members and z.get("name"):
+                self.zones[z["name"]] = sorted(members)
+
     @property
     def n(self) -> int:
         return len(self.pixels)
+
+    def target_names(self) -> list[str]:
+        return [r.name for r in self.runs] + [z for z in self.zones if z not in {r.name for r in self.runs}]
+
+    def indices(self, target) -> list[int]:
+        """Virtual indexes for a layer target: "all", a run name, a zone name, or a list of those."""
+        key = tuple(target) if isinstance(target, list) else target
+        hit = self._targets.get(key)
+        if hit is not None:
+            return hit
+        names = target if isinstance(target, list) else [target]
+        if not names or "all" in names or "" in names or None in names:
+            out = list(range(self.n))
+        else:
+            s = set()
+            for nm in names:
+                if nm in self.zones:
+                    s.update(self.zones[nm])
+                else:
+                    r = self.run(nm)
+                    if r:
+                        s.update(p.i for p in r.pixels)
+            out = sorted(s)
+        self._targets[key] = out
+        return out
 
     def run(self, name_or_mac: str) -> Run | None:
         for r in self.runs:
@@ -113,7 +154,7 @@ class Layout:
             runs.append(Run(mac=mac, name=d.get("name") or mac, count=int(count),
                             reverse=bool(d.get("reversed")), hidden=set(d.get("hidden") or []),
                             geometry=d.get("geometry") or []))
-        return cls(runs)
+        return cls(runs, cfg.data.get("zones", []))
 
     def summary(self) -> str:
         lines = [f"virtual strip: {self.n} visible bulbs, x {self.minx:.1f}..{self.maxx:.1f}, y {self.miny:.1f}..{self.maxy:.1f}"]
@@ -121,4 +162,6 @@ class Layout:
             if r.pixels:
                 lines.append(f"  {r.name:<12} {r.mac}  bulbs {r.count}, visible {len(r.pixels)}, hidden {sorted(r.hidden)}"
                              f", reverse={r.reverse}, virtual {r.pixels[0].i}..{r.pixels[-1].i}")
+        for z, idx in self.zones.items():
+            lines.append(f"  zone {z!r}: {len(idx)} bulbs")
         return "\n".join(lines)

@@ -109,6 +109,23 @@ def coord(p: Pixel, axis: str) -> tuple[float, float]:
     return float(p.i), float(p.n)
 
 
+def travel(t: float, P: dict) -> float:
+    """Distance moved so far. The engine integrates speed frame by frame into
+    P["_travel"], so changing or modulating speed never makes the pattern jump."""
+    return P.get("_travel", P.get("speed", 0.0) * t)
+
+
+def P_center():
+    return [Param("center_x", "number", 0.47, "Centre left/right", 0, 1, 0.01),
+            Param("center_y", "number", 1.0, "Centre height", 0, 1, 0.01)]
+
+
+def dist_from_center(p: Pixel, P: dict) -> tuple[float, float, float]:
+    dx = p.sx - P["center_x"] * p.spanx
+    dy = (p.sy - P["center_y"] * p.spany) * 2.0     # unrolled view squashes height
+    return dx, dy, math.hypot(dx, dy)
+
+
 def P_axis(default="strip"):
     return Param("axis", "choice", default, options=AXES, help="direction the effect travels / is laid out along")
 
@@ -132,7 +149,7 @@ def solid(t, p, P):
 ], "Evenly spaced dots marching along.")
 def chase(t, p, P):
     s, _ = coord(p, P["axis"])
-    x = s - P["speed"] * t
+    x = s - travel(t, P)
     sp = P["spacing"]
     k = math.floor(x / sp)
     if (x - k * sp) < P["width"]:
@@ -154,7 +171,7 @@ def comet(t, p, P):
     s, span = coord(p, P["axis"])
     period = (span + P["gap"]) / P["count"]
     v = P["speed"]
-    head = v * t
+    head = travel(t, P)
     d = ((head - s) if v >= 0 else (s - head)) % period
     if d >= P["tail"]:
         return P["background"]
@@ -171,11 +188,10 @@ def comet(t, p, P):
 def wipe(t, p, P):
     s, span = coord(p, P["axis"])
     cols = P["colors"]
-    fill_t = span / P["speed"]
-    cycle = fill_t + P["hold"]
-    k = int(t // cycle)
-    into = t - k * cycle
-    filled = into * P["speed"]
+    cycle = span + P["hold"] * P["speed"]          # distance per fill, including the hold
+    d = abs(travel(t, P))
+    k = int(d // cycle)
+    filled = d - k * cycle
     return cols[k % len(cols)] if s < filled else cols[(k - 1) % len(cols)]
 
 
@@ -188,7 +204,7 @@ def wipe(t, p, P):
 ], "A travelling sine wave between two colours.")
 def wave(t, p, P):
     s, _ = coord(p, P["axis"])
-    ph = (s - P["speed"] * t) / P["wavelength"]
+    ph = (s - travel(t, P)) / P["wavelength"]
     v = 0.5 + 0.5 * math.sin(2 * math.pi * ph)
     return lerp(P["color2"], P["color"], v ** P["sharpness"])
 
@@ -241,7 +257,7 @@ def sparkle(t, p, P):
 ], "Moving stripes of repeating colours.")
 def candy_cane(t, p, P):
     s, _ = coord(p, P["axis"])
-    x = (s - P["speed"] * t) / P["width"]
+    x = (s - travel(t, P)) / P["width"]
     cols = P["colors"]
     k = math.floor(x)
     f = x - k
@@ -256,6 +272,7 @@ FIRE = [hex_to_rgb(c) for c in ("#000000", "#3a0000", "#a01000", "#ff4000", "#ff
 
 
 @effect("fire", "Fire", [
+    Param("colors", "colors", ["#3a0000", "#a01000", "#ff4000", "#ff9a10", "#ffe070"], help="cold to hot"),
     Param("intensity", "number", 1.0, "Intensity", 0.2, 2, 0.05),
     Param("scale", "number", 4, "Flame size (bulbs)", 0.5, 40, 0.5),
     Param("speed", "number", 1.5, "Flicker speed", 0.1, 10, 0.1),
@@ -275,7 +292,7 @@ def fire(t, p, P):
     heat = clamp((n - 0.25) * 1.8 * P["intensity"])
     if P["rise"] > 0:
         heat *= clamp(1.0 - p.rny * P["rise"] * 1.2)
-    return palette(FIRE, heat, cyclic=False)
+    return palette([BLACK, *P["colors"]], heat, cyclic=False)
 
 
 @effect("breathe", "Breathing", [
@@ -298,7 +315,7 @@ def breathe(t, p, P):
 ], "Scrolling rainbow.")
 def rainbow(t, p, P):
     s, _ = coord(p, P["axis"])
-    return hsv((s - P["speed"] * t) / P["wavelength"], P["saturation"], 1.0)
+    return hsv((s - travel(t, P)) / P["wavelength"], P["saturation"], 1.0)
 
 
 @effect("gradient", "Gradient drift", [
@@ -308,7 +325,7 @@ def rainbow(t, p, P):
 ], "Smooth blend through colours, slowly drifting.")
 def gradient(t, p, P):
     s, _ = coord(p, P["axis"])
-    return palette(P["colors"], (s - P["speed"] * t) / P["length"])
+    return palette(P["colors"], (s - travel(t, P)) / P["length"])
 
 
 @effect("alternate", "Alternating colours", [
@@ -332,6 +349,101 @@ def alternate(t, p, P):
     if fade > 0 and into > per - fade:
         return lerp(a, cols[(g + k + 1) % len(cols)], (into - (per - fade)) / fade)
     return a
+
+
+@effect("scanner", "Scanner", [
+    Param("color", "color", "#ff0000"),
+    Param("background", "color", "#000000"),
+    Param("width", "number", 6, "Eye width (bulbs)", 1, 60, 0.5),
+    P_speed(30, 1, 200), P_axis("run"),
+], "A light bouncing back and forth.")
+def scanner(t, p, P):
+    s, span = coord(p, P["axis"])
+    span = max(1.0, span - 1)
+    f = (travel(t, P) / span) % 2.0
+    pos = (f if f <= 1 else 2 - f) * span
+    v = max(0.0, 1 - abs(s - pos) / P["width"])
+    return lerp(P["background"], P["color"], v * v)
+
+
+@effect("ripple", "Ripple", [
+    Param("colors", "colors", ["#00a0ff", "#000000", "#ffffff", "#000000"]),
+    Param("wavelength", "number", 12, "Ring spacing", 2, 100, 0.5),
+    Param("sharpness", "number", 0, "Ring sharpness", 0, 8, 0.1, help="0 = smooth colour rings, higher = thin bright rings"),
+    P_speed(8, -60, 60, "Speed (outward)"), *P_center(),
+], "Rings spreading out from a point (default: the front gable apex).")
+def ripple(t, p, P):
+    _, _, d = dist_from_center(p, P)
+    f = (d - travel(t, P)) / P["wavelength"]
+    c = palette(P["colors"], f)
+    if P["sharpness"] > 0:
+        c = scale(c, (0.5 + 0.5 * math.cos(2 * math.pi * f)) ** P["sharpness"])
+    return c
+
+
+@effect("sweep", "Sweep", [
+    Param("colors", "colors", ["#ffffff", "#000000", "#000000"]),
+    Param("arms", "int", 1, "Arms", 1, 12, 1),
+    P_speed(20, -240, 240, "Speed (turns/min)"), *P_center(),
+], "A beam rotating around a point, like a lighthouse.")
+def sweep(t, p, P):
+    dx, dy, _ = dist_from_center(p, P)
+    a = (math.atan2(dy, dx) / (2 * math.pi)) % 1.0
+    return palette(P["colors"], a * P["arms"] - travel(t, P) / 60.0)
+
+
+@effect("plasma", "Plasma", [
+    Param("colors", "colors", ["#ff0080", "#ff8000", "#00c0ff", "#8000ff"]),
+    Param("scale", "number", 12, "Blob size (bulbs)", 2, 80, 0.5),
+    P_speed(3, -20, 20, "Flow"),
+], "Swirling colour blobs across the whole house.")
+def plasma(t, p, P):
+    x, y, sc = p.sx / P["scale"], p.sy * 2 / P["scale"], travel(t, P) * 0.1
+    v = (math.sin(x + sc) + math.sin(y * 1.3 - sc * 0.7) + math.sin((x + y) * 0.7 + sc * 0.5)
+         + math.sin(math.hypot(x - 3, y - 1) - sc * 1.1))
+    return palette(P["colors"], v / 8 + 0.5)
+
+
+@effect("aurora", "Aurora", [
+    Param("colors", "colors", ["#00ff80", "#00a0ff", "#8000ff", "#00ff40"]),
+    Param("scale", "number", 15, "Curtain size (bulbs)", 2, 80, 0.5),
+    Param("contrast", "number", 1.5, "Contrast", 0.5, 4, 0.1),
+    P_speed(4, -20, 20, "Drift"),
+], "Slow drifting curtains of colour.")
+def aurora(t, p, P):
+    tr = travel(t, P) * 0.05
+    n = fbm2(p.sx / P["scale"] + tr, p.sy / P["scale"] * 2 + t * 0.03, 3, 11)
+    v = clamp((n - 0.5) * P["contrast"] + 0.5)
+    c = palette(P["colors"], fbm2(p.sx / (P["scale"] * 3) - tr * 0.5, 0.0, 2, 5) * 2)
+    return scale(c, v * v)
+
+
+@effect("bursts", "Bursts", [
+    Param("colors", "colors", ["#ff2020", "#20ff40", "#4060ff", "#ffd020", "#ffffff"]),
+    Param("interval", "number", 1.2, "Time between bursts (s)", 0.1, 10, 0.1),
+    Param("life", "number", 1.5, "Burst life (s)", 0.2, 6, 0.1),
+    Param("burst_speed", "number", 12, "Burst speed (bulbs/s)", 1, 60, 0.5),
+    Param("ring", "number", 2.5, "Ring width", 0.5, 10, 0.5),
+    Param("seed", "int", 9, "Seed", 0, 9999, 1),
+], "Fireworks: rings bursting from random spots.")
+def bursts(t, p, P):
+    iv, life = P["interval"], P["life"]
+    k0 = math.floor(t / iv)
+    best = BLACK
+    for k in range(k0, k0 - min(8, int(life / iv) + 2), -1):
+        age = t - k * iv
+        if age < 0 or age > life:
+            continue
+        cx = hash01(k, P["seed"], 1) * p.spanx
+        cy = hash01(k, P["seed"], 2) * p.spany
+        d = math.hypot(p.sx - cx, (p.sy - cy) * 2)
+        r = age * P["burst_speed"]
+        v = max(0.0, 1 - abs(d - r) / P["ring"]) * (1 - age / life) ** 1.5
+        if v > 0:
+            cols = P["colors"]
+            c = scale(cols[int(hash01(k, P["seed"], 3) * len(cols))], v)
+            best = (max(best[0], c[0]), max(best[1], c[1]), max(best[2], c[2]))
+    return best
 
 
 @effect("off", "Off (black)", [])

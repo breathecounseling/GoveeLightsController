@@ -16,6 +16,9 @@ from .config import Config
 from .controller import Controller
 from .diag_server import build_report, lan_ips
 from .effects import EFFECTS
+from .fx import FX
+from .modulation import SHAPES
+from .palettes import BUILTIN, all_palettes
 from .scene import BLENDS
 
 log = logging.getLogger("goveelights")
@@ -62,7 +65,18 @@ def make_handler(ctl: Controller, on_quit):
                 if path == "/api/layout":
                     return self._json(ctl.layout_info())
                 if path == "/api/effects":
-                    return self._json({"effects": [e.to_dict() for e in EFFECTS.values()], "blends": BLENDS})
+                    return self._json({"effects": [e.to_dict() for e in EFFECTS.values()],
+                                       "fx": [f.to_dict() for f in FX.values()], "blends": BLENDS,
+                                       "shapes": SHAPES})
+                if path == "/api/palettes":
+                    return self._json({"palettes": all_palettes(ctl.user_palettes), "builtin": list(BUILTIN),
+                                       "user": list(ctl.user_palettes)})
+                if path == "/api/thumb":
+                    pid = q.get("id", [""])[0]
+                    meta = next((p for p in ctl.presets.list() if p["id"] == pid), None)
+                    if not meta:
+                        raise KeyError(pid)
+                    return self._json(ctl.thumbnail(ctl.presets.get(pid), (pid, meta["mtime"])))
                 if path == "/api/presets":
                     return self._json(ctl.presets.list())
                 if path == "/api/preset":
@@ -133,8 +147,24 @@ def make_handler(ctl: Controller, on_quit):
                 return {"ok": True}
             if a == "scene":                       # editor: replace the playing scene instantly
                 ctl.play_scene(b["scene"], {"kind": "scene", "name": b["scene"].get("name", "untitled"),
-                                            "id": b.get("id")}, fade=0)
+                                            "id": b.get("id")}, fade=0, continuous=True)
                 return {"ok": True}
+            if a == "master":
+                ctl.set_master(b)
+                return {"ok": True}
+            if a == "palettes":
+                pals = b["palettes"]
+                if not isinstance(pals, dict) or not all(isinstance(v, list) and v for v in pals.values()):
+                    raise ValueError("palettes must be {name: [colours]}")
+                with cfg.lock:
+                    cfg.data["palettes"] = pals
+                    cfg.save()
+                return {"ok": True}
+            if a == "preset/meta":
+                ctl.presets.set_meta(b["id"], b.get("favorite"), b.get("tags"))
+                return {"ok": True}
+            if a == "thumb":                       # thumbnail for an unsaved scene (randomizer)
+                return ctl.thumbnail(b["scene"], frames=int(b.get("frames", 16)))
             if a == "live":
                 ctl.set_live(bool(b.get("on")))
                 return {"ok": True}

@@ -44,10 +44,20 @@ class PresetStore:
         out = []
         for f in sorted(self.dir.glob("*.json")):
             try:
-                out.append({"id": f.stem, "name": json.loads(f.read_text(encoding="utf-8")).get("name", f.stem)})
+                d = json.loads(f.read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 continue
+            out.append({"id": f.stem, "name": d.get("name", f.stem), "tags": d.get("tags", []),
+                        "favorite": bool(d.get("favorite")), "mtime": f.stat().st_mtime})
         return sorted(out, key=lambda x: x["name"].lower())
+
+    def set_meta(self, pid: str, favorite=None, tags=None):
+        d = self.get(pid)
+        if favorite is not None:
+            d["favorite"] = bool(favorite)
+        if tags is not None:
+            d["tags"] = [str(t).strip() for t in tags if str(t).strip()]
+        self._path(pid).write_text(json.dumps(d, indent=2) + "\n", encoding="utf-8")
 
     def get(self, pid: str) -> dict:
         return json.loads(self._path(pid).read_text(encoding="utf-8"))
@@ -100,6 +110,8 @@ class Controller:
                 old.stop(release=False)
             e = Engine(layout, out, fps=float(self.ecfg.get("fps", 20)), gamma=float(self.ecfg.get("gamma", 1.0)),
                        brightness=float(self.ecfg.get("brightness", 1.0)))
+            e.master.update(self.cfg.data.get("master", {}))
+            self._thumbs = {}
             if old and old.scene:
                 e.set_scene(old.scene)
             e.start(live=False)
@@ -129,6 +141,42 @@ class Controller:
                 e.brightness = self.ecfg["brightness"] = max(0.0, min(1.0, float(b["brightness"])))
             self.cfg.save()
 
+    def set_master(self, b: dict):
+        m = self.engine.master
+        with self.cfg.lock:
+            if "speed" in b:
+                m["speed"] = max(0.0, min(5.0, float(b["speed"])))
+            if "hue" in b:
+                m["hue"] = float(b["hue"]) % 1.0
+            if "palette" in b:
+                m["palette"] = str(b["palette"] or "")
+            if "bpm" in b:
+                m["bpm"] = max(20.0, min(300.0, float(b["bpm"])))
+            self.cfg.data["master"] = dict(m)
+            self.cfg.save()
+        if "blackout" in b:
+            self.engine.blackout = bool(b["blackout"])
+
+    @property
+    def user_palettes(self) -> dict:
+        return self.cfg.data.setdefault("palettes", {})
+
+    def thumbnail(self, scene_dict: dict, key=None, frames: int = 24, fps: float = 8.0) -> dict:
+        """A short loop rendered by the real engine, for animated preset cards."""
+        if key is not None and key in self._thumbs:
+            return self._thumbs[key]
+        sc = Scene.from_dict(scene_dict, self.user_palettes)
+        L = self.engine.layout
+        out = []
+        for k in range(frames):
+            cols = sc.render(2.0 + k / fps, L)
+            out.append("".join(f"{int(c[0] * 255 + .5):02x}{int(c[1] * 255 + .5):02x}{int(c[2] * 255 + .5):02x}"
+                               for c in cols))
+        res = {"fps": fps, "frames": out}
+        if key is not None:
+            self._thumbs[key] = res
+        return res
+
     # -------------------------------------------------------- playback
     def _manual(self):
         """A manual action pauses the schedule until its next on/off change."""
@@ -137,8 +185,8 @@ class Controller:
             self.override_until = datetime.fromisoformat(ev["next_change"])
 
     def play_scene(self, d: dict, label: dict | None = None, fade: float = 0.0, manual: bool = True,
-                   keep_playlist: bool = False):
-        scene = Scene.from_dict(d)
+                   keep_playlist: bool = False, continuous: bool = False):
+        scene = Scene.from_dict(d, self.user_palettes)
         with self.lock:
             if manual:
                 self._manual()
@@ -146,7 +194,7 @@ class Controller:
                 self.playlist = None
             self.scene_dict = scene.to_dict()
             self.playing = label or {"kind": "scene", "name": scene.name}
-            self.engine.set_scene(scene, fade)
+            self.engine.set_scene(scene, fade, continuous=continuous)
 
     def play_preset(self, pid: str, fade: float = 1.0, manual: bool = True, keep_playlist: bool = False):
         d = self.presets.get(pid)
@@ -268,6 +316,7 @@ class Controller:
         return {
             "live": e.live, "playing": self.playing, "playlist": pl, "diag_active": self.diag_active,
             "fps": e.fps, "gamma": e.gamma, "brightness": e.brightness, "stats": e.stats,
+            "master": e.master, "blackout": e.blackout,
             "schedule": {"enabled": bool(sch.get("enabled")), **self.sched_status,
                          "override_until": self.override_until.isoformat(timespec="minutes") if self.override_until else None},
             "runs": [{"name": r.name, "mac": r.mac, "count": r.count, "visible": len(r.pixels),
@@ -277,7 +326,8 @@ class Controller:
 
     def layout_info(self) -> dict:
         L = self.engine.layout
-        return {"runs": [r.name for r in L.runs],
+        return {"runs": [r.name for r in L.runs], "targets": L.target_names(), "zones": L.zones,
+                "runs_idx": {r.name: [p.i for p in r.pixels] for r in L.runs},
                 "pixels": [[round(p.x, 2), round(p.y, 2), L.runs.index(L.run(p.mac))] for p in L.pixels],
                 "bounds": [L.minx, L.miny, L.maxx, L.maxy]}
 
