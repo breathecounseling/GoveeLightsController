@@ -132,8 +132,8 @@ class Streamer:
                 continue
 
             now = time.perf_counter()
-            if not next_t:
-                next_t = now
+            if not next_t or not self.stats["started"]:   # new play(): restart timing
+                next_t, prev = now, 0.0
                 self.stats["started"] = time.time()
             if now < next_t:
                 time.sleep(next_t - now)

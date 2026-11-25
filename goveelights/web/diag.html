@@ -215,6 +215,20 @@ label.inl{display:flex;gap:8px;align-items:center;color:var(--dim);font-size:14p
       <button onclick="act('colorwc',{kelvin:2700})">C: colorwc 2700 K</button>
       <button onclick="act('rgbw_probe',{rgbw:[0,0,0,255]})">D: RGBW probe (W only)</button>
     </div>
+    <h2 style="margin-top:14px">E: decisive RGBW test</h2>
+    <p class="help">Sends 4-byte colours of pure red (255,0,0,0). Look at a few bulbs <b>up close</b>.
+      If every bulb is red, the box reads 4 bytes per bulb, so the W channel is real.
+      If bulbs cycle red, green, blue, off, it is reading the bytes as RGB, so D's "white" was just mixed colours.</p>
+    <button class="pri" style="width:100%" onclick="act('rgbw_probe',{rgbw:[255,0,0,0]})">E: RGBW probe, red</button>
+    <div class="grid2" style="margin-top:8px">
+      <button onclick="note('rgbw_red_probe','every bulb solid red: RGBW frames supported')">All solid red</button>
+      <button onclick="note('rgbw_red_probe','red/green/blue/off pattern: misparsed, RGB only')">R/G/B/off pattern</button>
+    </div>
+    <p class="help">If all red: tap D again and look closely. Is it a warm or neutral white (the W diode) rather than a bluish RGB white?</p>
+    <div class="grid2">
+      <button onclick="note('rgbw_w_diode','D looks like real W diode white')">D = W diode</button>
+      <button onclick="note('rgbw_w_diode','D looks like RGB mix / unclear')">D unclear</button>
+    </div>
     <p class="help">After C, did realtime stay active? Tap a colour in the Razer tab to see. Record what you saw:</p>
     <div class="grid2">
       <button onclick="note('white','RGB only (A differs from C)')">RGB only</button>
