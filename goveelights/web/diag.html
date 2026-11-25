@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
+<title>Govee Diagnostics</title>
+<style>
+:root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--text:#e6edf3;--dim:#8b949e;--acc:#3fb950;--warn:#d29922;--bad:#f85149;--blue:#58a6ff}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:10px 12px 0}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+select,input,button{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+select{flex:1;min-width:0}
+input{min-width:0}
+button{cursor:pointer;touch-action:manipulation;user-select:none}
+button:active{transform:scale(.97);filter:brightness(1.3)}
+button.pri{background:#238636;border-color:#2ea043}
+button.bad{background:#3d1214;border-color:var(--bad)}
+button.big{font-size:22px;font-weight:700;padding:18px 0;flex:1}
+nav{display:flex;gap:4px;overflow-x:auto;padding:10px 0 0;scrollbar-width:none}
+nav button{flex:none;border-radius:10px 10px 0 0;border-bottom:none;padding:8px 12px;color:var(--dim);background:transparent}
+nav button.on{background:var(--panel);color:var(--text)}
+main{padding:12px 12px 110px;max-width:720px;margin:0 auto}
+section{display:none}section.on{display:block}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+h2{font-size:18px;margin:0 0 8px}
+p.help{color:var(--dim);margin:6px 0 10px;font-size:14px}
+.badge{font-size:12px;padding:3px 8px;border-radius:99px;border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+.badge.on{color:var(--acc);border-color:var(--acc)}
+.idx{font-size:96px;font-weight:800;text-align:center;line-height:1;margin:8px 0 2px;font-variant-numeric:tabular-nums}
+.sub{text-align:center;color:var(--dim)}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.sw{height:52px;border-radius:10px;border:2px solid var(--line)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:14px}
+.kv b{color:var(--dim);font-weight:500}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:13px;word-break:break-all}
+.lm{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.swatch-big{height:90px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:800;color:#fff;text-shadow:0 0 4px #000,0 0 2px #000;margin:8px 0}
+.timer{font-size:64px;font-weight:800;text-align:center;font-variant-numeric:tabular-nums}
+.foot{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:10px 12px calc(10px + env(safe-area-inset-bottom));display:flex;gap:8px;z-index:6}
+.foot button{flex:1}
+#toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#30363d;padding:8px 14px;border-radius:10px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;z-index:7}
+#toast.show{opacity:1}
+textarea{width:100%;min-height:80px;font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px}
+pre{white-space:pre-wrap;word-break:break-word;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;font-size:12px;max-height:50vh;overflow:auto}
+.ok{color:var(--acc)}.warn{color:var(--warn)}.err{color:var(--bad)}
+label.inl{display:flex;gap:8px;align-items:center;color:var(--dim);font-size:14px}
+</style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <select id="dev" aria-label="Device"></select>
+    <span id="rt" class="badge">realtime off</span>
+  </div>
+  <nav id="tabs">
+    <button data-t="devices" class="on">Devices</button>
+    <button data-t="razer">1 Razer</button>
+    <button data-t="count">2 Count</button>
+    <button data-t="walk">3 Walk &amp; map</button>
+    <button data-t="fps">4 FPS</button>
+    <button data-t="timeout">5 Timeout</button>
+    <button data-t="white">6 White</button>
+    <button data-t="report">Report</button>
+  </nav>
+</header>
+
+<main>
+<!-- DEVICES -->
+<section id="s-devices" class="on">
+  <div class="card">
+    <div class="row"><button class="pri" onclick="act('scan')">Scan network</button>
+      <input id="addip" placeholder="Add by IP (192.168.1.x)" style="flex:1"><button onclick="addIp()">Add</button></div>
+    <p class="help">Devices reply to a multicast scan. If one is missing, check that LAN Control is on in the Govee app, then add it by IP.</p>
+  </div>
+  <div id="devlist"></div>
+</section>
+
+<!-- RAZER -->
+<section id="s-razer">
+  <div class="card">
+    <h2>Is realtime (razer) mode supported?</h2>
+    <p class="help">1) Enable realtime. The string may blink once per enable packet; 3 are sent, 0.5 s apart. 2) Tap a colour. The <b>whole run</b> should change to it.</p>
+    <div class="grid2"><button class="pri" onclick="act('realtime',{on:true})">Enable realtime</button>
+      <button onclick="act('realtime',{on:false})">Disable</button></div>
+    <div class="grid4" style="margin-top:10px">
+      <button class="sw" style="background:#ff0000" onclick="solid('#ff0000')"></button>
+      <button class="sw" style="background:#00ff00" onclick="solid('#00ff00')"></button>
+      <button class="sw" style="background:#0000ff" onclick="solid('#0000ff')"></button>
+      <button class="sw" style="background:#ffffff" onclick="solid('#ffffff')"></button>
+    </div>
+    <p class="help">Result:</p>
+    <div class="grid3">
+      <button onclick="note('razer_works','yes')" class="pri">Whole run changed</button>
+      <button onclick="note('razer_works','partial')">Partly / odd</button>
+      <button onclick="note('razer_works','no')" class="bad">Nothing</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Gradient flag check</h2>
+    <p class="help">Sends red → blue with gradient = 01. You should see a smooth blend, not two hard halves.</p>
+    <div class="grid2"><button onclick="act('gradient_test',{colors:['#ff0000','#0000ff']})">Red→Blue (gradient)</button>
+      <button onclick="act('solid',{color:'#ff0000',n:2}).then(()=>0)">Hard halves (n=2, flag 00)</button></div>
+    <div class="grid2" style="margin-top:8px"><button onclick="note('gradient_flag','blends')">Blends</button><button onclick="note('gradient_flag','no difference')">No difference</button></div>
+  </div>
+  <div class="card">
+    <h2>Status while in realtime</h2>
+    <div class="row"><button onclick="status()">Query devStatus</button><span id="stat" class="mono"></span></div>
+  </div>
+  <div class="card">
+    <h2>Fallback: Finger Sketch (ptReal), experimental</h2>
+    <p class="help">Use this only if razer did nothing. It sends a Finger Sketch frame with one green bulb on black, plus the activation packet <span class="mono">33 05 0A 20 03</span>. Reports say other models applied the background colour but ignored the bulb list. Note what you see.</p>
+    <div class="row"><input id="fsidx" type="number" value="0" style="width:90px"><button onclick="act('finger_sketch',{index:+$('fsidx').value}).then(r=>r&&toast(r.packets.length+' packets sent'))">Send</button></div>
+    <div class="grid3" style="margin-top:8px"><button onclick="note('finger_sketch','single bulb lit')">1 bulb lit</button><button onclick="note('finger_sketch','background only')">Background only</button><button onclick="note('finger_sketch','nothing')">Nothing</button></div>
+  </div>
+</section>
+
+<!-- COUNT -->
+<section id="s-count">
+  <div class="card">
+    <h2>Find the bulb count from any spot</h2>
+    <p class="help">Each test sends n copies of one colour (flag 00). On the H706B a frame with n <b>larger than the bulb count is rejected and the run goes dark</b>. So you only need to see part of the run. Tell me what you see and I'll bisect. The colour changes every test, so "ignored" frames show up too.</p>
+    <div class="row"><button class="pri" onclick="cfStart()">Start / restart</button><span id="cfRange" class="mono"></span></div>
+    <div id="cfBox" style="display:none">
+      <div class="sub" style="margin-top:10px">Testing n =</div>
+      <div class="idx" id="cfN">-</div>
+      <div class="swatch-big" id="cfSw">expect this colour</div>
+      <div class="grid2">
+        <button class="big pri" onclick="cfAns('lit')">Lit in that colour</button>
+        <button class="big bad" onclick="cfAns('dark')">Went dark</button>
+      </div>
+      <div class="grid2" style="margin-top:8px">
+        <button onclick="cfAns('ignored')">Stayed old colour</button>
+        <button onclick="cfAns('other')">Something else</button>
+      </div>
+    </div>
+    <p id="cfResult" style="font-weight:700"></p>
+  </div>
+  <div class="card">
+    <h2>Set count manually</h2>
+    <div class="row"><input id="pc" type="number" min="1" max="255" style="width:100px"><button onclick="setCount(+$('pc').value)">Save as pixel count</button></div>
+  </div>
+</section>
+
+<!-- WALK -->
+<section id="s-walk">
+  <div class="card">
+    <div class="row" style="justify-content:space-between"><span class="badge" id="wN">n = ?</span>
+      <label class="inl">n <input id="wNin" type="number" min="1" max="255" style="width:80px"></label>
+      <label class="inl">colour <input id="wCol" type="color" value="#00ff00" style="width:54px;padding:2px"></label></div>
+    <div class="idx" id="wIdx">0</div>
+    <div class="sub" id="wSub">index (0-based)</div>
+    <div class="grid4" style="margin-top:12px">
+      <button class="big" onclick="step(-10)">-10</button><button class="big" onclick="step(-1)">-1</button>
+      <button class="big" onclick="step(1)">+1</button><button class="big" onclick="step(10)">+10</button>
+    </div>
+    <div class="row" style="margin-top:10px"><input id="jump" type="number" placeholder="jump to" style="flex:1"><button onclick="go(+$('jump').value)">Go</button><button onclick="go(0)">First</button><button onclick="go(wn()-1)">Last</button></div>
+    <p class="help">Only <b>one</b> bulb should light. If a step moves 2 bulbs or lights a group, n is smaller than the real count. Finish the Count tab first.</p>
+    <div class="grid2"><button onclick="note('walker_single_bulb','yes, n='+wn())">Exactly 1 bulb</button><button onclick="note('walker_single_bulb','group/skip seen, n='+wn())">Group / skips</button></div>
+  </div>
+  <div class="card">
+    <h2>Mark a landmark at this index</h2>
+    <div class="row"><input id="lmLabel" list="lmSug" placeholder="e.g. front-left corner" style="flex:1"><button class="pri" onclick="mark()">Mark</button></div>
+    <datalist id="lmSug"><option>start (index 0)</option><option>end</option><option>back-left corner</option><option>front-left corner</option><option>front-right corner</option><option>back-right corner</option><option>garage peak</option><option>front door</option></datalist>
+    <div id="lmList" style="margin-top:8px"></div>
+  </div>
+</section>
+
+<!-- FPS -->
+<section id="s-fps">
+  <div class="card">
+    <h2>Frame-rate test</h2>
+    <p class="help">Runs a single-pixel chase (one bulb per frame). Watch one stretch you can see and note where motion stops being smooth.</p>
+    <div class="grid3">
+      <button class="big" onclick="chase(5)">5</button><button class="big" onclick="chase(10)">10</button><button class="big" onclick="chase(15)">15</button>
+      <button class="big" onclick="chase(20)">20</button><button class="big" onclick="chase(30)">30</button><button class="big bad" onclick="act('stop')">Stop</button>
+    </div>
+    <div class="row" style="margin-top:8px"><label class="inl">custom fps <input id="fpsC" type="number" value="25" style="width:80px"></label><button onclick="chase(+$('fpsC').value)">Run</button></div>
+    <div class="kv" style="margin-top:10px" id="fpsStats"></div>
+    <p class="help">Rate the current fps:</p>
+    <div class="grid3"><button onclick="rate('smooth')" class="pri">Smooth</button><button onclick="rate('stutter')">Stutters</button><button onclick="rate('freezes/drops')" class="bad">Freezes / drops</button></div>
+  </div>
+</section>
+
+<!-- TIMEOUT -->
+<section id="s-timeout">
+  <div class="card">
+    <h2>Does realtime time out without frames?</h2>
+    <p class="help">Sends one magenta frame and then stops sending. Watch the lights. If they go back to their previous scene or colour, tap the button.</p>
+    <button class="pri" style="width:100%" onclick="act('timeout_test',{color:'#ff00ff'})">Send 1 frame, then silence</button>
+    <div class="sub" style="margin-top:12px">seconds since last frame</div>
+    <div class="timer" id="tmr">-</div>
+    <div class="grid2"><button class="big bad" onclick="reverted()">It reverted now</button><button class="big" onclick="note('realtime_timeout','held > '+lastSince()+' s')">Still holding</button></div>
+  </div>
+  <div class="card">
+    <h2>Keepalive</h2>
+    <p class="help">Resends the last frame every N seconds while idle. Set it below the timeout you measured.</p>
+    <div class="grid4"><button onclick="ka(0)">Off</button><button onclick="ka(1)">1 s</button><button onclick="ka(5)">5 s</button><button onclick="ka(30)">30 s</button></div>
+    <p id="kaS" class="help"></p>
+  </div>
+</section>
+
+<!-- WHITE -->
+<section id="s-white">
+  <div class="card">
+    <h2>Is the white diode reachable in realtime?</h2>
+    <p class="help">Compare these by eye at one bulb. A: realtime RGB full white (likely RGB diodes only, slightly blue or pink). B: realtime warm mix. C: the official colorwc at 2700 K, which probably uses the W diode and may exit realtime. D: speculative RGBW (4-byte) frame. Rejected or garbled means unsupported.</p>
+    <div class="grid2">
+      <button onclick="act('solid',{color:'#ffffff',enable_first:true})">A: RGB 255,255,255</button>
+      <button onclick="act('solid',{color:'#ffb46b',enable_first:true})">B: RGB warm mix</button>
+      <button onclick="act('colorwc',{kelvin:2700})">C: colorwc 2700 K</button>
+      <button onclick="act('rgbw_probe',{rgbw:[0,0,0,255]})">D: RGBW probe (W only)</button>
+    </div>
+    <p class="help">After C, did realtime stay active? Tap a colour in the Razer tab to see. Record what you saw:</p>
+    <div class="grid2">
+      <button onclick="note('white','RGB only (A differs from C)')">RGB only</button>
+      <button onclick="note('white','RGBW probe lit white')">D gave real white</button>
+      <button onclick="note('colorwc_exits_realtime','yes')">C exited realtime</button>
+      <button onclick="note('colorwc_exits_realtime','no')">C kept realtime</button>
+    </div>
+  </div>
+</section>
+
+<!-- REPORT -->
+<section id="s-report">
+  <div class="card">
+    <h2>Notes for this device</h2>
+    <textarea id="freeNote" placeholder="Anything odd: lag, flicker, which end is index 0, ..."></textarea>
+    <button onclick="note('notes',$('freeNote').value)" style="margin-top:8px">Save note</button>
+  </div>
+  <div class="card">
+    <h2>Report (all devices)</h2>
+    <p class="help">Everything is also saved in the config file on the PC. Copy this and paste it back to Claude.</p>
+    <div class="row"><button class="pri" onclick="loadReport()">Refresh</button><button onclick="copyReport()">Copy</button></div>
+    <pre id="report"></pre>
+  </div>
+</section>
+</main>
+
+<div class="foot">
+  <button onclick="act('stop')">Stop anim</button>
+  <button class="bad" onclick="act('release',{mac:null}).then(()=>toast('Released all to Govee app'))">Release to Govee app</button>
+</div>
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let S = {devices:[]}, cur = localStorage.getItem('dev') || null, widx = 0, wcolor = '#00ff00', curFps = 0;
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),1800)}
+function dev(){return S.devices.find(d=>d.mac===cur)}
+async function api(path, body){
+  const r = await fetch('/api/'+path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
+  const j = await r.json(); if(!r.ok||j.ok===false){toast('Error: '+(j.error||r.status)); return null} return j;
+}
+async function act(a, extra={}){ if(!('mac' in extra)) extra.mac=cur; const r=await api(a, extra); refresh(); return r }
+function note(key,value){ return act('note',{key,value}).then(r=>r&&toast('Saved: '+key+' = '+value)) }
+function solid(c){ return act('solid',{color:c}) }
+async function status(){ const r=await act('status'); $('stat').textContent = r? JSON.stringify(r.status): 'no reply' }
+
+// tabs
+document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));
+  document.querySelectorAll('main section').forEach(s=>s.classList.toggle('on',s.id==='s-'+b.dataset.t));
+  localStorage.setItem('tab',b.dataset.t); if(b.dataset.t==='report') loadReport();
+});
+{const t=localStorage.getItem('tab'); const b=t&&document.querySelector(`#tabs button[data-t="${t}"]`); if(b) b.click()}
+$('dev').onchange = e => { cur = e.target.value; localStorage.setItem('dev',cur); render() };
+
+async function refresh(){ const r = await fetch('/api/state').then(r=>r.json()).catch(()=>null); if(r){S=r; render()} }
+function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function render(){
+  if(!cur || !dev()) cur = S.devices[0]?.mac || null;
+  const sel = $('dev'), opts = S.devices.map(d=>`<option value="${d.mac}" ${d.mac===cur?'selected':''}>${esc(d.name)} · ${esc(d.sku)} · ${esc(d.ip)}</option>`).join('') || '<option>No devices yet, tap Scan</option>';
+  if (sel.innerHTML !== opts && document.activeElement !== sel) sel.innerHTML = opts;
+  const d = dev();
+  $('rt').textContent = d ? (d.realtime ? (d.animating?'streaming':'realtime on') : 'realtime off') : '-';
+  $('rt').classList.toggle('on', !!d?.realtime);
+  // device list
+  const dl = S.devices.map(x=>`<div class="card"><div class="row" style="justify-content:space-between">
+     <input value="${esc(x.name)}" onchange="act('device',{mac:'${x.mac}',name:this.value})" style="flex:1;font-weight:700">
+     <button onclick="act('identify',{mac:'${x.mac}'})">Identify</button></div>
+     <div class="kv" style="margin-top:8px"><b>IP</b><span>${esc(x.ip)}</span><b>MAC</b><span class="mono">${esc(x.mac)}</span><b>SKU</b><span>${esc(x.sku)}</span>
+     <b>Firmware</b><span class="mono">${esc(Object.entries(x.firmware||{}).map(([k,v])=>k.replace('Version','')+' '+v).join(', '))}</span>
+     <b>Seen</b><span>${x.seen_ago==null?'<span class=warn>not this session</span>':x.seen_ago+' s ago'}</span>
+     <b>Bulbs</b><span>${x.pixel_count?'<span class=ok>'+x.pixel_count+' confirmed</span>':'~'+x.estimated_count+' estimated'}</span>
+     <b>Landmarks</b><span>${x.landmarks.length}</span></div></div>`).join('');
+  if ($('devlist')._h !== dl && !$('devlist').contains(document.activeElement)) { $('devlist').innerHTML = dl; $('devlist')._h = dl }
+  if(!d) return;
+  // walker
+  $('wN').textContent = 'n = '+wn() + (d.pixel_count?' (confirmed)':' (estimate)');
+  if(document.activeElement!==$('wNin')) $('wNin').placeholder = d.n;
+  $('wIdx').textContent = widx;
+  const lm = d.landmarks.find(l=>l.index===widx);
+  $('wSub').innerHTML = (widx>=wn()?'<span class=err>beyond n, nothing lit</span>':'index (0-based)') + (lm?` · <span class=ok>${esc(lm.label)}</span>`:'');
+  $('lmList').innerHTML = d.landmarks.map((l,i)=>`<div class="lm"><span><b>${l.index}</b> · ${esc(l.label)}</span><span><button onclick="go(${l.index})">Show</button> <button onclick="act('landmark',{delete:${i}})">✕</button></span></div>`).join('') || '<p class="help">No landmarks yet.</p>';
+  // fps
+  const st = d.stats;
+  $('fpsStats').innerHTML = st&&st.target_fps ? `<b>target</b><span>${st.target_fps} fps</span><b>actual send</b><span>${st.actual_fps} fps</span><b>frames</b><span>${st.frames}</span><b>max gap</b><span>${st.max_gap_ms.toFixed(1)} ms</span><b>late resyncs</b><span>${st.late}</span>` : '';
+  // timeout
+  $('tmr').textContent = d.since_last_frame==null?'-':d.since_last_frame.toFixed(0);
+  $('kaS').textContent = d.keepalive_s ? `Keepalive every ${d.keepalive_s} s` : 'Keepalive off';
+}
+setInterval(refresh, 1000); refresh();
+
+// walker
+function wn(){ const v=+$('wNin').value; return v>0? v : (dev()?.n||72) }
+let wT=null;
+function sendPixel(){ clearTimeout(wT); wT=setTimeout(()=>act('pixel',{index:widx,n:wn(),color:$('wCol').value}),40) }
+function go(i){ widx=Math.max(0,Math.min(254,i|0)); render(); sendPixel() }
+function step(k){ go(widx+k) }
+$('wCol').onchange=sendPixel; $('wNin').onchange=sendPixel;
+function mark(){ const label=$('lmLabel').value.trim()||('mark '+widx); act('landmark',{index:widx,label}).then(r=>r&&toast('Marked '+widx+': '+label)); $('lmLabel').value='' }
+document.addEventListener('keydown',e=>{ if(!$('s-walk').classList.contains('on')||e.target.tagName==='INPUT')return;
+  if(e.key==='ArrowRight')step(e.shiftKey?10:1); if(e.key==='ArrowLeft')step(e.shiftKey?-10:-1) });
+
+// count finder (bisection)
+const CF_COLORS=[['#ff0000','RED'],['#00ff00','GREEN'],['#0000ff','BLUE'],['#ffff00','YELLOW'],['#00ffff','CYAN'],['#ff00ff','MAGENTA']];
+let cf=null;
+function cfStart(){ cf={lo:0,hi:256,k:0,log:[],n:1,lastDark:false}; $('cfBox').style.display=''; $('cfResult').textContent=''; cfSend() }
+async function cfSend(){
+  const [c,name]=CF_COLORS[cf.k++%CF_COLORS.length]; cf.color=name;
+  $('cfN').textContent=cf.n; $('cfSw').style.background=c; $('cfSw').textContent=name;
+  $('cfRange').textContent = `count is between ${Math.max(cf.lo,1)} and ${cf.hi-1}`;
+  // after a dark (rejected) frame, re-assert with a known-good frame so the next answer is clean
+  await act('solid',{color:c,n:cf.n,enable_first:true});
+}
+function cfAns(a){
+  cf.log.push({n:cf.n,expected:cf.color,saw:a});
+  if(a==='lit') cf.lo=Math.max(cf.lo,cf.n);
+  else if(a==='dark') cf.hi=Math.min(cf.hi,cf.n);
+  else { note('count_oversize_behaviour', a+' at n='+cf.n+' (log '+JSON.stringify(cf.log)+')');
+         $('cfResult').innerHTML='<span class=warn>Not a simple lit/dark answer, so bisection stopped. Saved to notes. Use the walker instead.</span>'; $('cfBox').style.display='none'; return }
+  if(cf.lo===0 && a==='dark'){ $('cfResult').innerHTML='<span class=err>Even n=1 went dark, so realtime is not working. Check the Razer tab.</span>'; $('cfBox').style.display='none'; return }
+  if(cf.hi-cf.lo<=1){
+    const n=cf.lo; $('cfBox').style.display='none';
+    $('cfResult').innerHTML = n>=255 ? 'Accepted n=255 (the max), so count is ≥ 255.' : `Largest accepted n = <b>${n}</b>, rejected at ${n+1}.<br>Confirm with the walker that index ${n-1} is the last bulb, then save.<br><button class="pri" onclick="setCount(${n})">Save ${n} as pixel count</button>`;
+    note('count_bisection', {largest_accepted:n, log:cf.log}); act('solid',{color:'#00ff00',n:Math.max(1,n)}); return }
+  // first step: confirm n=1 works, then jump to a sensible guess
+  cf.n = cf.lo===1 && cf.log.length===1 ? Math.min(255,(dev()?.estimated_count||72)) : Math.floor((cf.lo+cf.hi)/2);
+  if(cf.n<=cf.lo||cf.n>=cf.hi) cf.n=Math.floor((cf.lo+cf.hi)/2);
+  cfSend();
+}
+function setCount(n){ if(n>0) act('device',{pixel_count:n}).then(()=>toast('pixel_count = '+n)) }
+
+// fps
+function chase(f){ curFps=f; act('chase',{fps:f,color:'#ffffff'}) }
+function rate(r){ if(!curFps) return toast('Run a speed first'); const d=dev(); note('fps_'+curFps, {rating:r, actual_send_fps:d?.stats?.actual_fps, max_gap_ms:d?.stats?.max_gap_ms}) }
+
+// timeout
+function lastSince(){ return dev()?.since_last_frame ?? '?' }
+function reverted(){ note('realtime_timeout','reverted after ~'+lastSince()+' s without frames') }
+function ka(s){ act('keepalive',{seconds:s}) }
+
+// report
+async function loadReport(){ const r=await fetch('/api/report').then(r=>r.text()); $('report').textContent=r }
+function copyReport(){ const t=$('report').textContent; (navigator.clipboard?.writeText(t)||Promise.reject()).then(()=>toast('Copied'),()=>{const r=document.createRange();r.selectNode($('report'));getSelection().removeAllRanges();getSelection().addRange(r);toast('Selected; copy it manually')}) }
+
+function addIp(){ const ip=$('addip').value.trim(); if(ip) act('add_ip',{ip}).then(()=>$('addip').value='') }
+</script>
+</body>
+</html>
