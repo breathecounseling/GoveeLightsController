@@ -3,8 +3,8 @@
     python tools/fake_govee.py --count 72 --devices 2
 
 Each fake device binds 127.0.0.<2+i> on ports 4001 (scan) and 4003 (control),
-mimicking the H706B behaviour reported in govee-local-api issue #404:
-razer frames with n > bulb count are rejected and the string goes dark.
+razer frames with n > bulb count are ignored (as observed on H805A), or with
+--oversize dark the string goes dark (H706B, govee-local-api issue #404).
 Add the devices in the web UI with "Add by IP" (127.0.0.2, ...)."""
 from __future__ import annotations
 
@@ -22,7 +22,8 @@ from goveelights import protocol as p  # noqa: E402
 
 
 class FakeDevice:
-    def __init__(self, ip, count, timeout, sku, idx, quiet):
+    def __init__(self, ip, count, timeout, sku, idx, quiet, oversize="ignore"):
+        self.oversize = oversize
         self.ip, self.count, self.timeout, self.sku, self.quiet = ip, count, timeout, sku, quiet
         self.mac = f"AA:BB:CC:DD:EE:FF:00:{idx:02X}"
         self.on, self.bright, self.color = 1, 100, (255, 160, 60)
@@ -92,8 +93,12 @@ class FakeDevice:
         cols, n = r["colors"], len(r["colors"])
         self.last_frame = time.time(); self.frames += 1
         if n > self.count:
-            self.pixels = [(0, 0, 0)] * self.count
-            self._p(f"frame n={n} > {self.count}: REJECTED, dark"); return
+            if self.oversize == "dark":
+                self.pixels = [(0, 0, 0)] * self.count
+                self._p(f"frame n={n} > {self.count}: REJECTED, dark")
+            else:
+                self._p(f"frame n={n} > {self.count}: IGNORED, previous frame stays")
+            return
         if r["gradient"] and n > 1:
             out = []
             for i in range(self.count):
@@ -121,8 +126,10 @@ def main():
     ap.add_argument("--count", type=int, default=72)
     ap.add_argument("--timeout", type=float, default=0, help="simulate realtime timeout (s), 0 = none")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--oversize", choices=["ignore", "dark"], default="ignore",
+                    help="frames with n > bulbs: ignore (seen on H805A) or go dark (H706B)")
     a = ap.parse_args()
-    devs = [FakeDevice(f"127.0.0.{2 + i}", a.count + i, a.timeout, ("H705E", "H805A")[i % 2], i, a.quiet)
+    devs = [FakeDevice(f"127.0.0.{2 + i}", a.count + i, a.timeout, ("H705E", "H805A")[i % 2], i, a.quiet, a.oversize)
             for i in range(a.devices)]
     print("fake devices:", ", ".join(f"{d.ip} ({d.sku}, {d.count} bulbs)" for d in devs), flush=True)
     while True:

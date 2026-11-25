@@ -123,7 +123,7 @@ label.inl{display:flex;gap:8px;align-items:center;color:var(--dim);font-size:14p
 <section id="s-count">
   <div class="card">
     <h2>Find the bulb count from any spot</h2>
-    <p class="help">Each test sends n copies of one colour (flag 00). On the H706B a frame with n <b>larger than the bulb count is rejected and the run goes dark</b>. So you only need to see part of the run. Tell me what you see and I'll bisect. The colour changes every test, so "ignored" frames show up too.</p>
+    <p class="help">Each test sends n copies of one colour (flag 00). A frame with n <b>larger than the bulb count is refused</b>: the run goes dark (H706B) or keeps its previous colour (H805A). Either answer counts as "too big". So you only need to see part of the run. Tell me what you see and I'll bisect. The colour changes every test, so "ignored" frames show up too.</p>
     <div class="row"><button class="pri" onclick="cfStart()">Start / restart</button><span id="cfRange" class="mono"></span></div>
     <div id="cfBox" style="display:none">
       <div class="sub" style="margin-top:10px">Testing n =</div>
@@ -134,7 +134,7 @@ label.inl{display:flex;gap:8px;align-items:center;color:var(--dim);font-size:14p
         <button class="big bad" onclick="cfAns('dark')">Went dark</button>
       </div>
       <div class="grid2" style="margin-top:8px">
-        <button onclick="cfAns('ignored')">Stayed old colour</button>
+        <button onclick="cfAns('ignored')">Stayed previous colour</button>
         <button onclick="cfAns('other')">Something else</button>
       </div>
     </div>
@@ -320,9 +320,11 @@ document.addEventListener('keydown',e=>{ if(!$('s-walk').classList.contains('on'
 // count finder (bisection)
 const CF_COLORS=[['#ff0000','RED'],['#00ff00','GREEN'],['#0000ff','BLUE'],['#ffff00','YELLOW'],['#00ffff','CYAN'],['#ff00ff','MAGENTA']];
 let cf=null;
-function cfStart(){ cf={lo:0,hi:256,k:0,log:[],n:1,lastDark:false}; $('cfBox').style.display=''; $('cfResult').textContent=''; cfSend() }
+function cfStart(){ cf={lo:0,hi:256,k:0,log:[],n:1,shown:-1}; $('cfBox').style.display=''; $('cfResult').textContent=''; cfSend() }
 async function cfSend(){
-  const [c,name]=CF_COLORS[cf.k++%CF_COLORS.length]; cf.color=name;
+  // never reuse the colour the lights are currently showing, so "changed" is unambiguous
+  let k=cf.k%CF_COLORS.length; if(k===cf.shown) k=(k+1)%CF_COLORS.length; cf.k=k+1; cf.sent=k;
+  const [c,name]=CF_COLORS[k]; cf.color=name;
   $('cfN').textContent=cf.n; $('cfSw').style.background=c; $('cfSw').textContent=name;
   $('cfRange').textContent = `count is between ${Math.max(cf.lo,1)} and ${cf.hi-1}`;
   // after a dark (rejected) frame, re-assert with a known-good frame so the next answer is clean
@@ -330,11 +332,12 @@ async function cfSend(){
 }
 function cfAns(a){
   cf.log.push({n:cf.n,expected:cf.color,saw:a});
-  if(a==='lit') cf.lo=Math.max(cf.lo,cf.n);
-  else if(a==='dark') cf.hi=Math.min(cf.hi,cf.n);
+  if(a==='lit'){ cf.lo=Math.max(cf.lo,cf.n); cf.shown=cf.sent }
+  else if(a==='dark'||a==='ignored'){ cf.hi=Math.min(cf.hi,cf.n); if(a==='dark') cf.shown=-1;
+    if(!cf.noted){ cf.noted=1; note('count_oversize_behaviour', a==='dark'?'frame rejected, run goes dark':'frame ignored, previous colour stays') } }
   else { note('count_oversize_behaviour', a+' at n='+cf.n+' (log '+JSON.stringify(cf.log)+')');
-         $('cfResult').innerHTML='<span class=warn>Not a simple lit/dark answer, so bisection stopped. Saved to notes. Use the walker instead.</span>'; $('cfBox').style.display='none'; return }
-  if(cf.lo===0 && a==='dark'){ $('cfResult').innerHTML='<span class=err>Even n=1 went dark, so realtime is not working. Check the Razer tab.</span>'; $('cfBox').style.display='none'; return }
+         $('cfResult').innerHTML='<span class=warn>Unexpected result, so bisection stopped. Saved to notes. Use the walker instead.</span>'; $('cfBox').style.display='none'; return }
+  if(cf.lo===0 && a!=='lit'){ $('cfResult').innerHTML='<span class=err>Even n=1 went dark, so realtime is not working. Check the Razer tab.</span>'; $('cfBox').style.display='none'; return }
   if(cf.hi-cf.lo<=1){
     const n=cf.lo; $('cfBox').style.display='none';
     $('cfResult').innerHTML = n>=255 ? 'Accepted n=255 (the max), so count is ≥ 255.' : `Largest accepted n = <b>${n}</b>, rejected at ${n+1}.<br>Confirm with the walker that index ${n-1} is the last bulb, then save.<br><button class="pri" onclick="setCount(${n})">Save ${n} as pixel count</button>`;
