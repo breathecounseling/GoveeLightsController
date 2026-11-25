@@ -13,7 +13,22 @@ creator UI, scheduler) come after the hardware results are in.
 3. Double-click `start.bat`, or run `python -m goveelights` in this folder.
 4. When Windows Firewall asks, allow Python on **Private networks**. Discovery replies
    arrive on UDP 4002, so blocking them means no devices show up.
-5. Open the URL it prints (e.g. `http://192.168.1.50:8080/`) on your phone, on the same Wi-Fi.
+5. Open the URL it prints (e.g. `http://192.168.1.50:8080/`) on your phone, on the same network as the PC.
+
+### Phone page never loads ("connection aborted" / spins for minutes)
+
+Windows is dropping the incoming connection. This happens when the network is marked
+**Public** (the default for a newly joined network). In an **admin** PowerShell:
+
+```powershell
+Get-NetConnectionProfile            # check NetworkCategory for the lights network
+New-NetFirewallRule -DisplayName "Govee tool (web)" -Direction Inbound -Protocol TCP -LocalPort 8080 -Action Allow -Profile Any
+New-NetFirewallRule -DisplayName "Govee tool (discovery)" -Direction Inbound -Protocol UDP -LocalPort 4002 -Action Allow -Profile Any
+```
+
+Or mark the network Private: `Set-NetConnectionProfile -InterfaceAlias "Wi-Fi" -NetworkCategory Private`
+(use the alias shown by `Get-NetConnectionProfile`). If it still fails, the router may have
+client/AP isolation turned on for that network, which blocks phone-to-PC traffic.
 
 Ctrl+C (or closing the window) sends the realtime-disable packet to every device, so the
 Govee app takes back control. The page also has a **Release to Govee app** button.

@@ -295,13 +295,23 @@ def build_report(app: App) -> dict:
     return {"generated": time.strftime("%Y-%m-%d %H:%M:%S"), "devices": out}
 
 
-def lan_ip() -> str:
+def lan_ips() -> list[str]:
+    """All IPv4 addresses of this PC (best guess first). A PC with several
+    adapters (lights network, main network, VPN, Hyper-V) has several."""
+    ips = []
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("10.255.255.255", 1))
-            return s.getsockname()[0]
+            ips.append(s.getsockname()[0])
     except OSError:
-        return "127.0.0.1"
+        pass
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ips.append(info[4][0])
+    except OSError:
+        pass
+    out = [ip for ip in dict.fromkeys(ips) if not ip.startswith("127.")]
+    return out or ["127.0.0.1"]
 
 
 def main(argv=None):
@@ -338,7 +348,11 @@ def main(argv=None):
 
     app.scan()
     threading.Thread(target=lambda: (time.sleep(1.5), app.scan()), daemon=True).start()
-    print(f"\n  Govee diagnostic tool running.\n  On your phone (same Wi-Fi) open:  http://{lan_ip()}:{port}/\n"
+    urls = "\n".join(f"      http://{ip}:{port}/" for ip in lan_ips())
+    print(f"\n  Govee diagnostic tool running.\n"
+          f"  On this PC open:  http://localhost:{port}/\n"
+          f"  On your phone (same network as this PC) try the address on that network:\n{urls}\n"
+          f"  If the phone just spins: allow TCP port {port} in Windows Firewall (see README).\n"
           f"  Config file: {cfg.path}\n  Press Ctrl+C to stop (lights are released to the Govee app).\n", flush=True)
     try:
         srv.serve_forever(poll_interval=0.5)
