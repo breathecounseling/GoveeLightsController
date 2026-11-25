@@ -29,8 +29,18 @@ phone; the app is designed phone-first.
 * **More:** palettes, fps, gamma, devices/diagnostics, quit.
 * **⏻ menu:** Go live / preview, blackout, stop, release to the Govee app.
 
-**Run in the background on Windows:** `python -m goveelights install-startup` adds a hidden
-launcher to your Startup folder. The app then starts at login with no window and logs to
+**Sparkle family:** generators *Glitter, Shimmer, Sequins, Champagne fizz, Fireflies*,
+plus *Glitter* and *Shimmer* FX that make **any** layer sparkle. Glints have a fast attack
+and exponential decay, run white-hot and cool into the bulb's own colour, and bloom into
+neighbouring bulbs; the base shimmers underneath. **62 palettes** in categories (Classic,
+Warm, Cool, Nature, Neon, Elegant, Soft, Holidays), tuned for LEDs.
+
+**Remote access and login:** see [REMOTE.md](REMOTE.md) (Cloudflare Tunnel + Access on
+your own subdomain; the app adds its own password, lockout and CSRF protection). Set the
+password under More → Security, or with `python -m goveelights set-password`.
+
+**Run in the background on Windows:** for always-on, `python -m goveelights install-service`
+(admin PowerShell; starts at boot with no login, restarts if it stops). The lighter option is `python -m goveelights install-startup`, which adds a hidden launcher to your Startup folder. The app then starts at login with no window and logs to
 `goveelights.log`. `python -m goveelights uninstall-startup` removes it.
 
 ## Run it (Windows)

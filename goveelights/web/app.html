@@ -216,6 +216,11 @@ h2 .sp{flex:1}
     <p class="help">Bulb counts, landmarks, identify: diagnostics (pauses effects while open).</p>
     <a href="/diag"><button>Open diagnostics</button></a>
   </div>
+  <div class="card" id="secCard">
+    <h2>Security</h2>
+    <div id="secStatus" class="help"></div>
+    <div id="secForm"></div>
+  </div>
   <div class="card">
     <h2>App</h2>
     <p class="help">Run at login, hidden: <code>python -m goveelights install-startup</code> on the PC.</p>
@@ -239,14 +244,16 @@ h2 .sp{flex:1}
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const h = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild };
-let ST = {}, EFX = {}, FXD = {}, BLENDS = [], SHAPES = [], PRESETS = [], LAYOUT = null, PL = {}, SCH = {}, PALS = {}, PAL_BUILTIN = [];
+let ST = {}, EFX = {}, FXD = {}, BLENDS = [], SHAPES = [], PRESETS = [], LAYOUT = null, PL = {}, SCH = {}, PALS = {}, PAL_BUILTIN = [], PAL_CATS = {};
 let draft = null, draftId = null, sel = 0, panel = 'source', filter = 'all';
 const hist = {u: [], r: [], last: null};
 
 function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2000) }
-async function get(p){ const r = await fetch('/api/'+p); if(!r.ok) throw new Error(r.status); return r.json() }
+function authFail(r){ if (r.status === 401) { location.href = '/login'; return true } return false }
+async function get(p){ const r = await fetch('/api/'+p); if (authFail(r)) throw new Error('login'); if(!r.ok) throw new Error(r.status); return r.json() }
 async function post(p, body={}){
-  const r = await fetch('/api/'+p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const r = await fetch('/api/'+p,{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'lights'},body:JSON.stringify(body)});
+  if (authFail(r)) return null;
   const j = await r.json().catch(()=>({})); if(!r.ok||j.ok===false){ toast('Error: '+(j.error||r.status)); return null } return j;
 }
 const store = { get(k,d){ try{ const v=localStorage.getItem(k); return v==null?d:v }catch(e){ return d } }, set(k,v){ try{ localStorage.setItem(k,v) }catch(e){} } };
@@ -343,7 +350,7 @@ async function refresh(){
   else if (s.devices_without_count.length) b.push(`<div class="banner">Not in the effects yet (no bulb count): ${esc(s.devices_without_count.join(', '))}</div>`);
   if ($('banners')._h !== b.join('')) $('banners').innerHTML = $('banners')._h = b.join('');
   document.querySelectorAll('.pc').forEach(el => el.classList.toggle('on', !!p && p.kind==='preset' && el.dataset.id===p.id));
-  document.querySelectorAll('#palChips .pal').forEach(el => el.classList.toggle('on', el.dataset.p === (s.master.palette||'')));
+  document.querySelectorAll('#palChips .pals .pal').forEach(el => el.classList.toggle('on', el.dataset.p === (s.master.palette||'')));
   $('devInfo').innerHTML = s.runs.map(r => `<b>${esc(r.name)}</b><span>${r.visible}/${r.count} bulbs · ${esc(r.ip||'no IP')}</span>`).join('');
   schedStatus();
 }
@@ -375,14 +382,29 @@ function powerSheet(){
 
 // ------------------------------------------------------------- palettes
 const palCss = cols => cols.length === 1 ? cols[0] : `linear-gradient(90deg,${cols.join(',')})`;
-async function loadPalettes(){ const r = await get('palettes'); PALS = r.palettes; PAL_BUILTIN = r.builtin; drawPalChips(); drawPalList() }
+async function loadPalettes(){ const r = await get('palettes'); PALS = r.palettes; PAL_BUILTIN = r.builtin; PAL_CATS = r.categories; drawPalChips(); drawPalList() }
+const catOf = name => Object.keys(PAL_CATS).find(c => PAL_CATS[c].includes(name));
+/* A palette picker: category chips, then that category's palettes. `first` is the leading "none" swatch. */
+function palettePicker(current, onPick, first){
+  const el = h('<div><div class="chips cats" style="margin-bottom:6px"></div><div class="chips pals"></div></div>');
+  let cat = catOf(current) || store.get('palcat', Object.keys(PAL_CATS)[0]);
+  if (!PAL_CATS[cat]) cat = Object.keys(PAL_CATS)[0];
+  const draw = () => {
+    el.querySelector('.cats').innerHTML = Object.keys(PAL_CATS).map(c => `<button class="chip ${c===cat?'on':''}" data-c="${esc(c)}">${esc(c)}</button>`).join('');
+    el.querySelectorAll('.cats .chip').forEach(b => b.onclick = () => { cat = b.dataset.c; store.set('palcat', cat); draw() });
+    el.querySelector('.pals').innerHTML = (first ? `<button class="pal ${!current?'on':''}" data-p=""><i style="background:${first.bg}"></i>${esc(first.label)}</button>` : '') +
+      PAL_CATS[cat].filter(n => PALS[n]).map(n => `<button class="pal ${current===n?'on':''}" data-p="${esc(n)}"><i style="background:${palCss(PALS[n])}"></i>${esc(n)}</button>`).join('');
+    el.querySelectorAll('.pals .pal').forEach(b => b.onclick = () => { current = b.dataset.p; onPick(current); draw() });
+  };
+  draw(); return el;
+}
 function drawPalChips(){
-  $('palChips').innerHTML = `<button class="pal" data-p=""><i style="background:repeating-linear-gradient(45deg,#333 0 6px,#222 6px 12px)"></i>Original</button>` +
-    Object.entries(PALS).map(([n,c]) => `<button class="pal" data-p="${esc(n)}"><i style="background:${palCss(c)}"></i>${esc(n)}</button>`).join('');
-  $('palChips').querySelectorAll('.pal').forEach(b => b.onclick = () => post('master',{palette:b.dataset.p}).then(refresh));
+  const box = $('palChips'); box.className = ''; box.innerHTML = '';
+  box.appendChild(palettePicker(ST.master?.palette || '', p => post('master',{palette:p}).then(refresh),
+    {label:'Original', bg:'repeating-linear-gradient(45deg,#333 0 6px,#222 6px 12px)'}));
 }
 function drawPalList(){
-  $('palList').innerHTML = Object.entries(PALS).map(([n,c]) => `<div class="row" style="margin-bottom:8px"><div class="grow"><div style="font-size:13px">${esc(n)}${PAL_BUILTIN.includes(n)?' <span class="dim">· built-in</span>':''}</div><div class="palbar" style="background:${palCss(c)}"></div></div><button class="sm" data-e="${esc(n)}">Edit</button></div>`).join('');
+  $('palList').innerHTML = Object.entries(PAL_CATS).map(([cat, names]) => `<div class="grp">${esc(cat)}</div>` + names.filter(n => PALS[n]).map(n => [n, PALS[n]]).map(([n,c]) => `<div class="row" style="margin-bottom:8px"><div class="grow"><div style="font-size:13px">${esc(n)}${PAL_BUILTIN.includes(n)?' <span class="dim">· built-in</span>':''}</div><div class="palbar" style="background:${palCss(c)}"></div></div><button class="sm" data-e="${esc(n)}">Edit</button></div>`).join('')).join('');
   $('palList').querySelectorAll('[data-e]').forEach(b => b.onclick = () => editPalette(b.dataset.e));
 }
 async function savePalettes(user){ if (await post('palettes',{palettes:user})) { await loadPalettes(); toast('Palettes saved') } }
@@ -505,12 +527,8 @@ function sourcePanel(L, card){
   top.querySelector('button').onclick = () => effectPicker(L);
   card.appendChild(top);
   if (g.params.some(p => p.kind==='colors' || p.kind==='color')){
-    const chips = h(`<div><div class="grp">Palette</div><div class="chips"></div></div>`);
-    const ch = chips.querySelector('.chips');
-    ch.innerHTML = `<button class="pal ${!L.palette?'on':''}" data-p=""><i style="background:${swatchOwn(L)}"></i>Own colours</button>` +
-      Object.entries(PALS).map(([n,c]) => `<button class="pal ${L.palette===n?'on':''}" data-p="${esc(n)}"><i style="background:${palCss(c)}"></i>${esc(n)}</button>`).join('');
-    ch.querySelectorAll('.pal').forEach(b => b.onclick = () => { L.palette = b.dataset.p; changed(true) });
-    card.appendChild(chips);
+    card.appendChild(h('<div class="grp">Palette</div>'));
+    card.appendChild(palettePicker(L.palette || '', p => { L.palette = p; changed(true) }, {label:'Own colours', bg: swatchOwn(L)}));
   }
   const plist = h('<div style="margin-top:6px"></div>');
   g.params.forEach(p => { if (L.palette && (p.kind==='colors' || (p.kind==='color' && p.name!=='background'))) return; plist.appendChild(paramRow(L, p)) });
@@ -518,9 +536,10 @@ function sourcePanel(L, card){
 }
 function swatchOwn(L){ const g = EFX[L.effect]; let cols=[]; g.params.forEach(p => { if (p.kind==='colors') cols = cols.concat(val(L,p)); else if (p.kind==='color' && p.name!=='background') cols.push(val(L,p)) }); return cols.length ? palCss(cols) : '#333' }
 function effectPicker(L){
-  const groups = {'Along the lights': ['solid','chase','comet','scanner','wipe','wave','candy_cane','alternate','gradient','rainbow'],
+  const groups = {'Sparkle & glitter': ['glitter','shimmer','sequins','fizz','fireflies','twinkle','sparkle'],
+                  'Along the lights': ['solid','chase','comet','scanner','wipe','wave','candy_cane','alternate','gradient','rainbow'],
                   'Across the house (2D)': ['ripple','sweep','plasma','aurora','bursts'],
-                  'Texture & time': ['twinkle','sparkle','fire','breathe','off']};
+                  'Texture & time': ['fire','breathe','off']};
   const el = h('<div></div>');
   Object.entries(groups).forEach(([gname, names]) => {
     el.appendChild(h(`<div class="grp">${gname}</div>`));
@@ -654,10 +673,10 @@ function randParams(def, bias=0.6){ const out = {};
     else if (p.kind==='choice') out[p.name] = pickOne(p.options) });
   return out }
 function randomize(){
-  const bases = ['chase','comet','scanner','wave','candy_cane','gradient','rainbow','ripple','sweep','plasma','aurora','bursts','fire','twinkle','alternate'];
+  const bases = ['chase','comet','scanner','wave','candy_cane','gradient','rainbow','ripple','sweep','plasma','aurora','bursts','fire','twinkle','alternate','glitter','shimmer','sequins'];
   const pals = Object.keys(PALS); const base = pickOne(bases);
   const L0 = blankLayer(base, {params: randParams(EFX[base]), palette: pickOne(pals)});
-  if (Math.random() < .6) L0.fx.push({type: pickOne(['trails','glow','mirror','hue','kaleido','echo','blur']), params:{}, mod:{}, enabled:true});
+  if (Math.random() < .6) L0.fx.push({type: pickOne(['trails','glow','mirror','hue','kaleido','echo','blur','glitter','glitter','shimmer']), params:{}, mod:{}, enabled:true});
   const nums = EFX[base].params.filter(p => (p.kind==='number') && p.min!=null && p.name!=='seed');
   if (nums.length && Math.random() < .5) L0.mod[pickOne(nums).name] = {shape: pickOne(SHAPES.slice(0,3)), rate: +rnd(.03,.3).toFixed(3), depth: +rnd(.2,.6).toFixed(2), sync:false, beats:4, phase:0};
   const layers = [L0];
@@ -751,12 +770,33 @@ function schedStatus(){ const s = ST.schedule || {}; let x;
   if (s.enabled && s.override_until) x += `<div style="color:var(--warn);margin-top:6px">Paused by a manual change until ${tfmt(s.override_until)}. <button class="sm" onclick="post('schedule/resume').then(()=>setTimeout(refresh,300))">Resume</button></div>`;
   $('schedStatus').innerHTML = x }
 
+// ------------------------------------------------------------- security
+async function security(){
+  const a = await get('auth').catch(()=>null); if (!a) return;
+  $('secStatus').innerHTML = (a.password_set ? 'A password is set. Remote access is <b>allowed</b> with it.' : 'No password yet: remote access is <b>switched off</b>.')
+    + '<br>' + (a.trusted ? 'You are on the home network.' : a.logged_in ? 'You are signed in remotely.' : '')
+    + (a.sessions ? ` Signed-in devices: ${a.sessions}.` : '');
+  const f = h(`<div>
+    ${a.password_set ? '<input type="password" id="pwCur" placeholder="Current password" autocomplete="current-password" style="margin-bottom:6px">' : ''}
+    <input type="password" id="pwNew" placeholder="${a.password_set?'New password':'Choose a password'} (10+ characters)" autocomplete="new-password" style="margin-bottom:6px">
+    <button class="pri" id="pwSet" style="width:100%">${a.password_set?'Change password':'Set password'}</button>
+    <label class="row" style="margin-top:12px"><input type="checkbox" id="lanOk" ${a.lan_without_login?'checked':''}> <span>No login needed on home Wi-Fi</span></label>
+    <div class="row" style="margin-top:10px">${a.sessions?'<button class="sm" id="revoke">Sign out all devices</button>':''}${a.logged_in?'<button class="sm" id="logout">Sign out</button>':''}</div>
+    <p class="help">To reach this page from anywhere at your own subdomain, see REMOTE.md in the project folder (Cloudflare Tunnel + Access).</p></div>`);
+  f.querySelector('#pwSet').onclick = async () => { const r = await post('auth/password', {current: f.querySelector('#pwCur')?.value || '', new: f.querySelector('#pwNew').value});
+    if (r) { toast('Password saved'); security() } };
+  f.querySelector('#lanOk').onchange = e => post('auth/lan', {on: e.target.checked}).then(security);
+  const rv = f.querySelector('#revoke'); if (rv) rv.onclick = () => post('auth/revoke').then(() => { toast('All devices signed out'); security() });
+  const lo = f.querySelector('#logout'); if (lo) lo.onclick = () => post('logout').then(() => location.href = '/login');
+  $('secForm').innerHTML = ''; $('secForm').appendChild(f);
+}
+
 // ------------------------------------------------------------- boot
 (async function boot(){
   const e = await get('effects'); e.effects.forEach(x => EFX[x.name] = x); e.fx.forEach(x => FXD[x.name] = x); BLENDS = e.blends; SHAPES = e.shapes;
   LAYOUT = await get('layout'); layoutPreview(); openStream();
   await loadPalettes(); PL = await get('playlists'); SCH = await get('schedule');
-  await loadPresets(); plSelect(); schedForm(); await refresh(); setInterval(refresh, 2000);
+  await loadPresets(); plSelect(); schedForm(); await refresh(); setInterval(refresh, 2000); security();
   const t = store.get('tab', 'play'); if (t !== 'play') tabTo(t);
 })();
 </script>

@@ -261,4 +261,65 @@ def gate(frame, ctx, P, st):
     return out
 
 
+# ------------------------------------------------------------ brightness FX
+from .sparkle import glint, wobble  # noqa: E402
+
+
+@fx("glitter", "Glitter", [
+    Param("density", "number", 0.6, "Glints per bulb per second", 0.01, 6, 0.01),
+    Param("decay", "number", 0.2, "Flash decay (s)", 0.02, 2, 0.01),
+    Param("attack", "number", 0.02, "Flash attack (s)", 0.005, 0.5, 0.005),
+    Param("whiteness", "number", 0.7, "Hot white core", 0, 1, 0.05),
+    Param("sparkle", "color", "#ffffff", "Sparkle colour"),
+    Param("base", "number", 0.45, "Base brightness", 0, 1, 0.01, help="how much the layer is dimmed so glints pop"),
+    Param("bloom", "number", 0.3, "Bloom into neighbours", 0, 1, 0.05),
+    Param("seed", "int", 21, "Seed", 0, 9999, 1),
+], "Turns any layer into glitter: dims it, then flashes random bulbs hot white in that bulb's own colour.")
+def glitter_fx(frame, ctx, P, st):
+    nb = _neighbours(ctx)
+    out = list(frame)
+    sp, wh, base, bl = P["sparkle"], P["whiteness"], P["base"], P["bloom"]
+    own = {}
+    for i in ctx.idx:
+        own[i] = glint(i, ctx.clock, P["density"], P["attack"], P["decay"], P["seed"])[0]
+    for i in ctx.idx:
+        g = own[i]
+        if bl > 0:
+            l, r = nb[i]
+            if l is not None and l in own:
+                g = max(g, own[l] * bl)
+            if r is not None and r in own:
+                g = max(g, own[r] * bl)
+        c = frame[i]
+        m = max(c) or 0.0
+        full = (c[0] / m, c[1] / m, c[2] / m) if m > 0.02 else sp
+        k = wh * g
+        hot = (full[0] + (sp[0] - full[0]) * k, full[1] + (sp[1] - full[1]) * k, full[2] + (sp[2] - full[2]) * k)
+        out[i] = (c[0] * base + hot[0] * g, c[1] * base + hot[1] * g, c[2] * base + hot[2] * g)
+    return out
+
+
+@fx("shimmer", "Shimmer", [
+    Param("depth", "number", 0.5, "Depth", 0, 1, 0.05),
+    Param("rate", "number", 3, "Speed", 0.2, 30, 0.1),
+    Param("sheen", "number", 0.0, "Travelling sheen", 0, 1, 0.05, help="adds bright bands sweeping along"),
+    Param("sheen_speed", "number", 20, "Sheen speed (bulbs/s)", -80, 80, 1),
+    Param("sheen_width", "number", 8, "Sheen width (bulbs)", 1, 60, 0.5),
+    Param("seed", "int", 5, "Seed", 0, 9999, 1),
+], "Every bulb's brightness flickers on its own, like silk or water catching light.")
+def shimmer_fx(frame, ctx, P, st):
+    out = list(frame)
+    d, sh = P["depth"], P["sheen"]
+    span = 70.0
+    for k, i in enumerate(ctx.idx):
+        v = 1 - d + d * wobble(i, ctx.clock, P["rate"], P["seed"]) * 1.25
+        if sh > 0:
+            x = ((k - P["sheen_speed"] * ctx.clock) / span) % 1.0
+            u = (x - 0.5) * span / P["sheen_width"]
+            v *= 1 - sh + sh * (0.4 + 1.6 * math.exp(-u * u * 2.5))
+        c = frame[i]
+        out[i] = (c[0] * v, c[1] * v, c[2] * v)
+    return out
+
+
 __all__ = ["FX", "Ctx", "coord"]

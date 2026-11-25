@@ -1,0 +1,21 @@
+{
+  "name": "Diamond glitter",
+  "tags": [
+    "Sparkle",
+    "Elegant"
+  ],
+  "layers": [
+    {
+      "effect": "glitter",
+      "palette": "Platinum",
+      "params": {
+        "level": 0.14,
+        "shimmer": 0.6,
+        "density": 0.45,
+        "decay": 0.14,
+        "whiteness": 1,
+        "bloom": 0.4
+      }
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "name": "Summer fireflies",
+  "tags": [
+    "Ambient",
+    "Sparkle"
+  ],
+  "layers": [
+    {
+      "effect": "solid",
+      "params": {
+        "color": "#021a06"
+      }
+    },
+    {
+      "effect": "fireflies",
+      "params": {
+        "density": 0.05,
+        "life": 2.5
+      },
+      "blend": "lighten"
+    }
+  ]
+}

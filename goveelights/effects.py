@@ -446,6 +446,147 @@ def bursts(t, p, P):
     return best
 
 
+# ------------------------------------------------------------ sparkle family
+from .sparkle import envelope, glint, glint_bloom, wobble  # noqa: E402
+
+
+def P_glint(density=0.5, attack=0.03, decay=0.25):
+    return [Param("density", "number", density, "Glints per bulb per second", 0.01, 6, 0.01),
+            Param("attack", "number", attack, "Flash attack (s)", 0.005, 0.5, 0.005),
+            Param("decay", "number", decay, "Flash decay (s)", 0.02, 2, 0.01),
+            Param("bloom", "number", 0.35, "Bloom into neighbours", 0, 1, 0.05)]
+
+
+def glint_color(base: Color, spark: Color, whiteness: float, g: float) -> Color:
+    """A glint is hot (sparkle colour) at its peak and cools to the base colour."""
+    m = max(base) or 1.0
+    full = (base[0] / m, base[1] / m, base[2] / m)          # base hue at full brightness
+    hot = lerp(full, spark, whiteness * g)
+    return (hot[0] * g, hot[1] * g, hot[2] * g)
+
+
+@effect("glitter", "Glitter", [
+    Param("colors", "colors", ["#ffb030", "#ff6a10", "#ffd890"], help="the fabric under the glitter"),
+    Param("sparkle", "color", "#ffffff", "Sparkle colour"),
+    Param("whiteness", "number", 0.8, "Hot white core", 0, 1, 0.05),
+    Param("level", "number", 0.22, "Base brightness", 0, 1, 0.01),
+    Param("shimmer", "number", 0.5, "Base shimmer", 0, 1, 0.05),
+    *P_glint(0.6, 0.02, 0.22),
+    Param("length", "number", 60, "Colour spread (bulbs)", 2, 500, 1),
+    P_speed(2, -30, 30, "Colour drift"),
+    Param("seed", "int", 4, "Seed", 0, 9999, 1),
+], "Professional glitter: a shimmering base with hot flashes that cool into its colour.")
+def glitter(t, p, P):
+    s = float(p.i)
+    base = palette(P["colors"], (s - travel(t, P)) / P["length"])
+    w = 1 - P["shimmer"] + P["shimmer"] * wobble(p.i, t, 0.7, P["seed"])
+    g, _ = glint_bloom(p, t, P["density"], P["attack"], P["decay"], P["seed"], P["bloom"])
+    b = scale(base, P["level"] * w)
+    hot = glint_color(base, P["sparkle"], P["whiteness"], g)
+    return (b[0] + hot[0], b[1] + hot[1], b[2] + hot[2])
+
+
+@effect("shimmer", "Shimmer", [
+    Param("colors", "colors", ["#d8e8ff", "#7fb0ff", "#ffffff"]),
+    Param("level", "number", 0.3, "Base brightness", 0, 1, 0.01),
+    Param("width", "number", 8, "Sheen width (bulbs)", 1, 60, 0.5),
+    Param("spacing", "number", 70, "Sheen spacing (bulbs)", 10, 400, 1),
+    Param("flicker", "number", 0.6, "Flicker depth", 0, 1, 0.05),
+    Param("flicker_rate", "number", 6, "Flicker speed", 0.5, 30, 0.5),
+    Param("density", "number", 3, "Glints inside the sheen /s", 0, 12, 0.1),
+    Param("decay", "number", 0.15, "Glint decay (s)", 0.02, 1, 0.01),
+    P_speed(18), P_axis(),
+    Param("seed", "int", 8, "Seed", 0, 9999, 1),
+], "Bands of light sweep across like light catching sequins, flickering and glinting inside.")
+def shimmer(t, p, P):
+    s, _ = coord(p, P["axis"])
+    sp = P["spacing"]
+    x = ((s - travel(t, P)) / sp) % 1.0
+    u = (x - 0.5) * sp / P["width"]
+    sheen = math.exp(-u * u * 2.5)
+    fl = 1 - P["flicker"] + P["flicker"] * wobble(p.i, t, P["flicker_rate"], P["seed"])
+    base = palette(P["colors"], p.i / 37.0)
+    v = P["level"] + (1 - P["level"]) * sheen * fl
+    g, _ = glint(p.i, t, P["density"] * sheen, 0.01, P["decay"], P["seed"]) if sheen > 0.05 else (0.0, 0)
+    c = scale(base, v)
+    return (c[0] + g, c[1] + g, c[2] + g)
+
+
+@effect("sequins", "Sequins", [
+    Param("colors", "colors", ["#ffd000", "#ff0060"], help="the two sides of each sequin"),
+    Param("spacing", "number", 90, "Brush stroke spacing (bulbs)", 10, 500, 1),
+    Param("ragged", "number", 6, "Ragged edge (bulbs)", 0, 40, 0.5),
+    Param("flash", "number", 0.9, "Flip flash", 0, 1, 0.05),
+    Param("decay", "number", 0.3, "Flash decay (s)", 0.03, 2, 0.01),
+    Param("level", "number", 0.55, "Resting brightness", 0.05, 1, 0.01),
+    P_speed(12, -60, 60, "Brush speed"), P_axis(),
+    Param("seed", "int", 2, "Seed", 0, 9999, 1),
+], "A brush sweeps along flipping sequins between two colours, each catching the light as it turns.")
+def sequins(t, p, P):
+    s, _ = coord(p, P["axis"])
+    s += (hash01(p.i, P["seed"]) - 0.5) * 2 * P["ragged"]
+    d = travel(t, P) - s
+    n = math.floor(d / P["spacing"])
+    cols = P["colors"]
+    c = cols[n % len(cols)]
+    v = P["speed"]
+    age = ((d - n * P["spacing"]) / abs(v)) if v else 99.0
+    g = envelope(age, 0.02, P["decay"]) * P["flash"]
+    base = scale(c, P["level"])
+    hot = glint_color(c, (1.0, 1.0, 1.0), 0.7, g)
+    return (base[0] + hot[0], base[1] + hot[1], base[2] + hot[2])
+
+
+@effect("fizz", "Champagne fizz", [
+    Param("colors", "colors", ["#ffcf70", "#fff2c8"]),
+    Param("level", "number", 0.12, "Glow", 0, 1, 0.01),
+    Param("rise", "number", 3.0, "Rise speed (units/s)", 0.3, 20, 0.1),
+    Param("columns", "number", 1.2, "Bubble column width", 0.3, 6, 0.1),
+    Param("density", "number", 0.8, "Bubbles per column /s", 0.05, 6, 0.05),
+    Param("decay", "number", 0.12, "Bubble size (s)", 0.02, 1, 0.01),
+    Param("seed", "int", 6, "Seed", 0, 9999, 1),
+], "Bubbles rising up the zigzag (and twinkling along flat runs) like champagne.")
+def fizz(t, p, P):
+    col = int(p.sx / P["columns"])
+    tt = t - p.sy / P["rise"]                    # the same bubble reaches higher rows later
+    g, key = glint(col * 131 + sum(map(ord, p.run)) % 97, tt, P["density"], 0.02, P["decay"], P["seed"], 1)
+    cols = P["colors"]
+    c = cols[key % len(cols)] if cols else (1.0, 0.8, 0.4)
+    base = scale(cols[0], P["level"] * (0.7 + 0.3 * wobble(p.i, t, 0.5, P["seed"])))
+    return (base[0] + c[0] * g, base[1] + c[1] * g, base[2] + c[2] * g)
+
+
+@effect("fireflies", "Fireflies", [
+    Param("colors", "colors", ["#c8ff40", "#ffd040"]),
+    Param("density", "number", 0.06, "Fireflies per bulb /s", 0.005, 1, 0.005),
+    Param("life", "number", 2.2, "Glow length (s)", 0.3, 8, 0.1),
+    Param("drift", "number", 2.0, "Drift (bulbs)", 0, 8, 0.5),
+    Param("seed", "int", 12, "Seed", 0, 9999, 1),
+], "Soft glowing points that fade in, drift a little and fade out.")
+def fireflies(t, p, P):
+    best = BLACK
+    reach = int(P["drift"]) + 1
+    for j in range(p.i - reach, p.i + reach + 1):
+        if j < p.i - p.ri or j > p.i - p.ri + p.rn - 1:
+            continue                                     # stay inside this run
+        L = P["life"] * 1.3
+        k = math.floor((t + hash01(j, P["seed"], 1) * L) / L)
+        if hash01(j, k, P["seed"]) >= min(1.0, P["density"] * L):
+            continue
+        age = (t + hash01(j, P["seed"], 1) * L) - k * L
+        f = age / P["life"]
+        if f > 1:
+            continue
+        env = math.sin(math.pi * f) ** 2
+        center = j + (hash01(j, k, P["seed"], 2) - 0.5) * 2 * P["drift"] * f
+        v = env * max(0.0, 1 - abs(p.i - center))
+        if v > 0:
+            cols = P["colors"]
+            c = scale(cols[int(hash01(j, k, 3) * len(cols))], v)
+            best = (max(best[0], c[0]), max(best[1], c[1]), max(best[2], c[2]))
+    return best
+
+
 @effect("off", "Off (black)", [])
 def off(t, p, P):
     return BLACK

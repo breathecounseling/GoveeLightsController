@@ -256,7 +256,7 @@ label.inl{display:flex;gap:8px;align-items:center;color:var(--dim);font-size:14p
 </main>
 
 <div class="foot">
-  <button id="backBtn" style="display:none" onclick="fetch('/api/diag/exit',{method:'POST',body:'{}'}).then(()=>location.href='/')">← Back to effects</button>
+  <button id="backBtn" style="display:none" onclick="fetch('/api/diag/exit',{method:'POST',headers:{'X-Requested-With':'lights'},body:'{}'}).then(()=>location.href='/')">← Back to effects</button>
   <button onclick="act('stop')">Stop anim</button>
   <button class="bad" onclick="act('release',{mac:null}).then(()=>toast('Released all to Govee app'))">Release to Govee app</button>
 </div>
@@ -270,7 +270,8 @@ let S = {devices:[]}, cur = localStorage.getItem('dev') || null, widx = 0, wcolo
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),1800)}
 function dev(){return S.devices.find(d=>d.mac===cur)}
 async function api(path, body){
-  const r = await fetch(API+path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
+  const r = await fetch(API+path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json','X-Requested-With':'lights'},body:body===undefined?undefined:JSON.stringify(body)});
+  if (r.status === 401) { location.href = '/login'; return null }
   const j = await r.json(); if(!r.ok||j.ok===false){toast('Error: '+(j.error||r.status)); return null} return j;
 }
 async function act(a, extra={}){ if(!('mac' in extra)) extra.mac=cur; const r=await api(a, extra); refresh(); return r }

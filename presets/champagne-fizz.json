@@ -1,0 +1,27 @@
+{
+  "name": "Champagne fizz",
+  "tags": [
+    "Sparkle",
+    "Elegant",
+    "Holiday"
+  ],
+  "layers": [
+    {
+      "effect": "glitter",
+      "palette": "Champagne",
+      "params": {
+        "level": 0.2,
+        "density": 0.4
+      },
+      "target": "Eaves"
+    },
+    {
+      "effect": "fizz",
+      "params": {
+        "rise": 3.5,
+        "density": 1.2
+      },
+      "target": "Peak"
+    }
+  ]
+}

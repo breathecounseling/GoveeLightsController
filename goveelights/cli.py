@@ -3,7 +3,9 @@
   python -m goveelights                 creator app (phone/PC web UI)  [same as 'serve']
   python -m goveelights diag            Phase 1 diagnostic tool on its own
   python -m goveelights play <preset>   play without the UI
-  python -m goveelights effects | layout | install-startup | uninstall-startup
+  python -m goveelights effects | layout | set-password
+  python -m goveelights install-service | uninstall-service      (Windows, at boot, admin)
+  python -m goveelights install-startup | uninstall-startup      (Windows, at login)
 """
 from __future__ import annotations
 
@@ -163,6 +165,51 @@ def cmd_install_startup(uninstall=False):
     return 0
 
 
+TASK = "GoveeLightsController"
+
+
+def cmd_service(uninstall=False):
+    """Windows: run at boot (before anyone logs in) via Task Scheduler, restart on failure.
+    Needs an administrator PowerShell."""
+    import subprocess
+    from pathlib import Path
+    if os.name != "nt":
+        raise SystemExit("install-service is for Windows. On Linux use a systemd unit running 'python -m goveelights'.")
+    if uninstall:
+        r = subprocess.run(["schtasks", "/Delete", "/TN", TASK, "/F"], capture_output=True, text=True)
+        print(r.stdout or r.stderr)
+        return r.returncode
+    root = Path(__file__).resolve().parent.parent
+    exe = Path(sys.executable)
+    pyw = exe.with_name("pythonw.exe") if exe.with_name("pythonw.exe").exists() else exe
+    xml = f"""<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <Triggers><BootTrigger><Delay>PT30S</Delay><Enabled>true</Enabled></BootTrigger></Triggers>
+  <Principals><Principal id="Author"><UserId>S-1-5-18</UserId><RunLevel>HighestAvailable</RunLevel></Principal></Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries><StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <RestartOnFailure><Interval>PT1M</Interval><Count>999</Count></RestartOnFailure>
+    <StartWhenAvailable>true</StartWhenAvailable><Enabled>true</Enabled>
+  </Settings>
+  <Actions Context="Author"><Exec><Command>{pyw}</Command><Arguments>"{root / 'run.pyw'}"</Arguments>
+    <WorkingDirectory>{root}</WorkingDirectory></Exec></Actions>
+</Task>"""
+    tmp = root / "govee_task.xml"
+    tmp.write_text(xml, encoding="utf-16")
+    try:
+        r = subprocess.run(["schtasks", "/Create", "/TN", TASK, "/XML", str(tmp), "/F"], capture_output=True, text=True)
+    finally:
+        tmp.unlink(missing_ok=True)
+    if r.returncode:
+        raise SystemExit((r.stderr or r.stdout).strip() + "\n(Run this in an administrator PowerShell.)")
+    print(f"Installed scheduled task '{TASK}': starts 30 s after boot, no login needed, restarts if it stops.\n"
+          f"Start it now: schtasks /Run /TN {TASK}    Log: {root / 'goveelights.log'}\n"
+          f"Remove the login-time launcher if you installed it: python -m goveelights uninstall-startup")
+    return 0
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv or argv[0].startswith("-") or argv[0] == "serve":
@@ -171,6 +218,20 @@ def main(argv=None):
     if argv[0] == "diag":
         from .diag_server import main as diag_main
         return diag_main(argv[1:])
+    if argv[0] == "set-password":
+        import getpass
+        from pathlib import Path
+        from .auth import Auth
+        from .config import DEFAULT_PATH
+        a = Auth(Path(os.environ.get("GOVEE_AUTH", Path(DEFAULT_PATH).with_name("govee_auth.json"))))
+        pw = getpass.getpass("New password (10+ characters): ")
+        if pw != getpass.getpass("Again: "):
+            raise SystemExit("Passwords don't match.")
+        a.set_password(pw)
+        print(f"Password set ({a.path}). Remote access is now allowed with this password; all devices were signed out.")
+        return 0
+    if argv[0] in ("install-service", "uninstall-service"):
+        return cmd_service(uninstall=argv[0] == "uninstall-service")
     if argv[0] in ("install-startup", "uninstall-startup"):
         return cmd_install_startup(uninstall=argv[0] == "uninstall-startup")
 

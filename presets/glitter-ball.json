@@ -1,0 +1,27 @@
+{
+  "name": "Glitter ball",
+  "tags": [
+    "Sparkle",
+    "Party"
+  ],
+  "layers": [
+    {
+      "effect": "sweep",
+      "palette": "Neon city",
+      "params": {
+        "arms": 6,
+        "speed": 25
+      },
+      "fx": [
+        {
+          "type": "glitter",
+          "params": {
+            "density": 1.2,
+            "decay": 0.12,
+            "base": 0.35
+          }
+        }
+      ]
+    }
+  ]
+}

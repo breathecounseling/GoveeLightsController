@@ -1,0 +1,28 @@
+{
+  "name": "Festive glitter",
+  "tags": [
+    "Sparkle",
+    "Holiday"
+  ],
+  "layers": [
+    {
+      "effect": "gradient",
+      "palette": "Christmas gold",
+      "params": {
+        "length": 40,
+        "speed": 1.5
+      },
+      "fx": [
+        {
+          "type": "glitter",
+          "params": {
+            "density": 0.7,
+            "decay": 0.22,
+            "base": 0.4,
+            "whiteness": 0.75
+          }
+        }
+      ]
+    }
+  ]
+}

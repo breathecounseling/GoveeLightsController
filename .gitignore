@@ -3,3 +3,7 @@ __pycache__/
 govee_config.json
 govee_config.tmp
 .venv/
+
+govee_auth.json
+govee_auth.tmp
+goveelights.log

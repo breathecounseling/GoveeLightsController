@@ -1,0 +1,22 @@
+{
+  "name": "Paparazzi",
+  "tags": [
+    "Sparkle",
+    "Party"
+  ],
+  "layers": [
+    {
+      "effect": "glitter",
+      "palette": "Black tie",
+      "params": {
+        "level": 0.06,
+        "shimmer": 0.3,
+        "density": 0.25,
+        "attack": 0.005,
+        "decay": 0.06,
+        "whiteness": 1,
+        "bloom": 0.55
+      }
+    }
+  ]
+}
