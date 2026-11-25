@@ -3,8 +3,8 @@
 Local-only controller for Govee permanent outdoor lights (H705E / H805A), using the
 LAN API over UDP. No cloud, no API key, no dependencies beyond Python 3.10+.
 
-**Status: Phase 1 (diagnostic + phone mapping tool).** Phases 2 and 3 (effects engine,
-creator UI, scheduler) come after the hardware results are in.
+**Status:** Phase 1 (diagnostic + phone mapping tool) done. Phase 2 (effects engine,
+command line) done. Phase 3 (creator UI, preview, playlists, scheduler) is next.
 
 ## Run it (Windows)
 
@@ -60,6 +60,48 @@ walker instead (step until the bulb falls off the end: last lit index = count - 
 If razer does nothing, try the **Finger Sketch (ptReal)** fallback at the bottom of the
 Razer tab and note what happens.
 
+## Hardware findings (Phase 1, Nov 2026)
+
+| | H805A "Eaves" | H805A "Peak" | H705E |
+|---|---|---|---|
+| razer per-bulb realtime | works | works | no response to any command (Wi-Fi fw 1.01.17 vs 1.02.06 on the others) |
+| bulbs (one colour per bulb at n = count) | 96 (93-95 hidden) | 108 (6-row zigzag) | - |
+| frame with n > bulbs | ignored, previous frame stays | same | - |
+| frame rate | 10-25 fps smooth, 30 stutters | same | - |
+| realtime timeout | none seen in 45 s without frames | - | - |
+| white diode | not reachable: 4-byte frames are read as RGB triplets, so realtime is RGB only | same | - |
+
+## Phase 2: effects engine
+
+```
+python -m goveelights layout import layouts/house.json   # once: geometry + hidden bulbs
+python -m goveelights layout                              # show the virtual strip
+python -m goveelights effects -v                          # list effects and their params
+python -m goveelights play candy-cane                     # a preset from presets/
+python -m goveelights play rainbow --set speed=5          # a single effect with overrides
+python -m goveelights play presets/peak-fire.json --terminal   # with a live preview in the console
+python -m goveelights play comets --dry-run --terminal    # preview only, lights untouched
+```
+
+Ctrl+C stops playback and hands the lights back to the Govee app.
+
+* **Virtual strip:** all runs end to end (config `order`, `reversed`, `hidden`), so effects
+  travel continuously around the roofline. Runs without a confirmed `pixel_count` are left out.
+* **Geometry:** each run's `geometry` is `[[index, x, y], ...]` knots in bulb-spacing units,
+  showing the house unrolled as seen from outside. `layouts/house.json` holds an
+  approximate shape built from the landmarks. Phase 3's preview will make it editable.
+* **Effects** (`goveelights/effects.py`) are pure functions `(t, pixel, params) -> colour`:
+  solid, chase, comet, wipe, wave, twinkle, sparkle, candy_cane, fire, breathe, rainbow,
+  gradient, alternate. Positional effects take `axis`: `strip`, `run`, `x` or `y`. With `y`,
+  an effect works bottom to top across the zigzag (fills, rising fire).
+* **Scenes/presets** (`presets/*.json`) stack layers with blend modes `normal`, `add`,
+  `multiply`, `screen`, `lighten` and `mask`, plus `opacity` and `target` (a run name).
+* **Output** is behind `Output.send_frame(run_id, pixels)` (`goveelights/output.py`), so a
+  WLED output can replace the Govee razer one without touching effects. Unchanged frames
+  are resent once a second, so the lights recover if a UDP packet is lost.
+* Engine settings live in the config's `engine` block: `fps` (default 20) and `gamma`
+  (default 1.0, i.e. off).
+
 ## Protocol notes (verified against sources and checked in unit tests)
 
 * `razer` packet: `BB <len_hi> <len_lo> <cmd> <payload> <xor>`. `len` = payload bytes
@@ -77,7 +119,7 @@ Razer tab and note what happens.
 ## Testing without hardware
 
 ```
-python tools/fake_govee.py --devices 2 --count 74 --timeout 8   # simulated boxes on 127.0.0.2/.3
+python tools/fake_govee.py --counts 96,108                      # simulated boxes on 127.0.0.2/.3
 python -m goveelights                                           # then "Add by IP" 127.0.0.2
 python -m unittest discover -s tests
 ```
@@ -90,6 +132,14 @@ goveelights/lan.py          UDP discovery / send / devStatus
 goveelights/streamer.py     per-device realtime streamer (frames, fps, keepalive, stats)
 goveelights/config.py       single JSON config file
 goveelights/diag_server.py  Phase 1 web server + API
+goveelights/layout.py       virtual strip + geometry
+goveelights/effects.py      effect library (pure functions + param schemas)
+goveelights/scene.py        layers, blend modes, presets
+goveelights/engine.py       render loop, crossfades
+goveelights/output.py       output interface + Govee razer output
+goveelights/cli.py          command line
+layouts/house.json          this house's geometry
+presets/                    example presets
 goveelights/web/diag.html   phone page
 tools/fake_govee.py         device simulator
 ```

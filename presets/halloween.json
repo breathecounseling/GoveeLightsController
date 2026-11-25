@@ -1,0 +1,26 @@
+{
+  "name": "Halloween",
+  "layers": [
+    {
+      "effect": "alternate",
+      "params": {
+        "colors": [
+          "#ff5000",
+          "#7000ff"
+        ],
+        "group": 4,
+        "period": 3,
+        "fade": 1
+      }
+    },
+    {
+      "effect": "sparkle",
+      "params": {
+        "color": "#40ff40",
+        "rate": 8,
+        "decay": 0.3
+      },
+      "blend": "add"
+    }
+  ]
+}

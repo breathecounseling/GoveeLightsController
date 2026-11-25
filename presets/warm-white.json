@@ -1,0 +1,11 @@
+{
+  "name": "Warm white",
+  "layers": [
+    {
+      "effect": "solid",
+      "params": {
+        "color": "#ffb060"
+      }
+    }
+  ]
+}

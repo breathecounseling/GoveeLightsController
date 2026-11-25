@@ -1,0 +1,15 @@
+{
+  "name": "Comets",
+  "layers": [
+    {
+      "effect": "comet",
+      "params": {
+        "color": "#ffffff",
+        "tail_color": "#0040ff",
+        "tail": 20,
+        "count": 3,
+        "speed": 30
+      }
+    }
+  ]
+}

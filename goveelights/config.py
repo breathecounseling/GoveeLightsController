@@ -12,6 +12,7 @@ DEFAULT_PATH = Path(os.environ.get("GOVEE_CONFIG", Path(__file__).resolve().pare
 DEFAULTS = {
     "server": {"host": "0.0.0.0", "port": 8080, "bind_ip": ""},
     "manual_ips": [],
+    "engine": {"fps": 20, "gamma": 1.0, "refresh_s": 1.0},
     "devices": {},
 }
 
@@ -26,6 +27,9 @@ DEVICE_DEFAULTS = {
     "reversed": False,
     "order": 0,
     "landmarks": [],           # [{"index": int, "label": str}]
+    "hidden": [],              # bulb indexes that are not visible
+    "geometry": [],            # [[index, x, y], ...] knots, see layout.py
+    "enabled": True,
     "diag": {},                # Phase 1 test results / observations
 }
 
@@ -83,3 +87,18 @@ class Config:
                              if k in info}
             self.save()
             return new
+
+    def import_layout(self, path) -> list[str]:
+        """Merge a layout file ({"devices": {mac: {...}}}) into this config."""
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        changed = []
+        with self.lock:
+            for mac, entry in data.get("devices", {}).items():
+                d = self.devices.setdefault(mac, copy.deepcopy(DEVICE_DEFAULTS))
+                for k in ("name", "order", "reversed", "hidden", "pixel_count", "geometry", "enabled"):
+                    if k in entry and not (k == "name" and d.get("name")):
+                        d[k] = entry[k]
+                changed.append(d.get("name") or mac)
+            self.save()
+        return changed

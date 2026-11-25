@@ -1,0 +1,16 @@
+{
+  "name": "Candy cane",
+  "layers": [
+    {
+      "effect": "candy_cane",
+      "params": {
+        "colors": [
+          "#ff0000",
+          "#ffffff"
+        ],
+        "width": 3,
+        "speed": 2
+      }
+    }
+  ]
+}

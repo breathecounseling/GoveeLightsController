@@ -1,0 +1,13 @@
+{
+  "name": "Rainbow around the roofline",
+  "layers": [
+    {
+      "effect": "rainbow",
+      "params": {
+        "wavelength": 120,
+        "speed": 15,
+        "axis": "strip"
+      }
+    }
+  ]
+}

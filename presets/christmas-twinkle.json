@@ -1,0 +1,28 @@
+{
+  "name": "Christmas gradient + twinkle",
+  "layers": [
+    {
+      "effect": "gradient",
+      "params": {
+        "colors": [
+          "#ff0000",
+          "#00a000"
+        ],
+        "length": 60,
+        "speed": 1.5
+      }
+    },
+    {
+      "effect": "twinkle",
+      "params": {
+        "colors": [
+          "#ffffff",
+          "#ffd070"
+        ],
+        "density": 0.15,
+        "duration": 1.2
+      },
+      "blend": "lighten"
+    }
+  ]
+}

@@ -124,13 +124,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--devices", type=int, default=2)
     ap.add_argument("--count", type=int, default=72)
+    ap.add_argument("--counts", help="comma-separated bulb count per device, e.g. 96,108")
     ap.add_argument("--timeout", type=float, default=0, help="simulate realtime timeout (s), 0 = none")
     ap.add_argument("--quiet", action="store_true")
     ap.add_argument("--oversize", choices=["ignore", "dark"], default="ignore",
                     help="frames with n > bulbs: ignore (seen on H805A) or go dark (H706B)")
     a = ap.parse_args()
-    devs = [FakeDevice(f"127.0.0.{2 + i}", a.count + i, a.timeout, ("H705E", "H805A")[i % 2], i, a.quiet, a.oversize)
-            for i in range(a.devices)]
+    counts = [int(x) for x in a.counts.split(",")] if a.counts else [a.count + i for i in range(a.devices)]
+    devs = [FakeDevice(f"127.0.0.{2 + i}", counts[i], a.timeout, ("H705E", "H805A")[i % 2], i, a.quiet, a.oversize)
+            for i in range(len(counts) if a.counts else a.devices)]
     print("fake devices:", ", ".join(f"{d.ip} ({d.sku}, {d.count} bulbs)" for d in devs), flush=True)
     while True:
         time.sleep(3600)
