@@ -76,6 +76,13 @@ async function call(p, opt){
 const get = p => call(p);
 const post = (p, b) => call(p, {method:'POST', headers:{'Content-Type':'application/json','X-Requested-With':'lights'}, body: JSON.stringify(b||{})});
 let saidAt = 0;
+// The server's refusals are short and generic on purpose; the friendly ones start with a capital.
+function nice(r){ const e = r && r.error;
+  if (!e || typeof e !== 'string') return 'Try again in a moment';
+  if (/^(not available|that one isn.t available)$/i.test(e)) return 'That one is resting right now, try something else!';
+  return /^[A-Z]/.test(e) ? e : 'Something went wrong. Try again in a moment.' }
+// After a refusal, settings may have changed (the owner switched something off): redraw soon.
+function refused(r){ if (r && !r.offline) setTimeout(refresh, 300) }
 function say(t, quiet){ if (quiet && Date.now() - saidAt < 6000) return; $('status').textContent = t; if (!quiet) saidAt = Date.now() }
 function draw(c, hex, glow){
   if (!L || !L.pixels) return;
@@ -106,7 +113,7 @@ async function livePoll(){
 }
 
 // ------------------------------------------------ shake for snow
-const SNOW_GAP = 20000; let snowAt = 0, motionOn = false, motionSeen = false, jolts = [], lastA = null;
+const SNOW_GAP = 20000; let snowAt = 0, motionDenied = false, motionOn = false, motionSeen = false, jolts = [], lastA = null;
 function onMotion(e){
   const a = e.accelerationIncludingGravity || e.acceleration; if (!a || a.x == null) return;
   if (!motionSeen){ motionSeen = true; drawSnowBtn() }        // a real motion sensor: offer the shake
@@ -118,8 +125,10 @@ function onMotion(e){
 function startMotion(){ if (motionOn) return; motionOn = true; window.addEventListener('devicemotion', onMotion) }
 const needsPermission = () => typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function';
 async function snowTap(){
-  if (needsPermission() && !motionOn){
-    try { const r = await DeviceMotionEvent.requestPermission(); if (r === 'granted'){ startMotion(); say('Now shake your phone! ❄️'); drawSnowBtn(); return } } catch (e) {}
+  if (needsPermission() && !motionOn && !motionDenied){
+    try { const r = await DeviceMotionEvent.requestPermission(); if (r === 'granted'){ startMotion(); say('Now shake your phone! ❄️'); drawSnowBtn(); return }
+      motionDenied = true } catch (e) { motionDenied = true }
+    drawSnowBtn();                                    // no motion: the button just says "Let it snow"
   }
   letItSnow(false);
 }
@@ -128,13 +137,13 @@ async function letItSnow(shaken){
   if (left > 0){ if (!shaken) say(`More snow in ${Math.ceil(left/1000)} s ❄️`); return }
   snowAt = Date.now(); drawSnowBtn();
   const r = await post('snow');
-  if (r.ok){ say(shaken ? 'You shook the snow loose! Look at the roof ❄️' : 'Let it snow! Look at the roof ❄️'); if (navigator.vibrate) navigator.vibrate(60) }
-  else { if (r.offline) snowAt = 0; say(r.error || 'Try again in a moment'); drawSnowBtn() }
-  setTimeout(drawSnowBtn, SNOW_GAP + 100);
+  if (r.ok){ say(shaken ? 'You shook the snow loose! Look at the roof ❄️' : 'Let it snow! Look at the roof ❄️'); if (navigator.vibrate) navigator.vibrate(60);
+    setTimeout(drawSnowBtn, SNOW_GAP + 100) }
+  else { snowAt = 0; say(nice(r)); drawSnowBtn(); refused(r) }     // no snow fell: no cooldown either
 }
 function drawSnowBtn(){
   const b = document.querySelector('button.snow'); if (!b) return;
-  const wait = Date.now() - snowAt < SNOW_GAP, ask = needsPermission() && !motionOn;
+  const wait = Date.now() - snowAt < SNOW_GAP, ask = needsPermission() && !motionOn && !motionDenied;
   const label = motionSeen ? 'Shake your phone for snow' : ask ? 'Tap, then shake your phone' : 'Let it snow';
   const sub = wait ? 'more snow in a few seconds' : motionSeen ? 'or tap here' : 'a flurry over the whole house';
   b.innerHTML = `❄️ ${wait ? 'Snowing…' : esc(label)}<small>${esc(sub)}</small>`;
@@ -148,7 +157,7 @@ async function sendColour(c, btn){
   colourAt = Date.now(); document.querySelectorAll('.sw button').forEach(b => b.disabled = true); btn.classList.add('sent');
   const r = await post('colour', {hex: c.hex});
   if (r.ok){ say(`${c.name} is rippling across the house! 👀`); if (navigator.vibrate) navigator.vibrate(30) }
-  else { if (r.offline) colourAt = 0; say(r.error || 'Try again in a moment') }
+  else { colourAt = 0; say(nice(r)); refused(r) }                // that colour never played: no cooldown
   setTimeout(() => { document.querySelectorAll('.sw button').forEach(b => { b.disabled = false; b.classList.remove('sent') }) }, r.ok ? COLOUR_GAP : 600);
 }
 
@@ -177,7 +186,7 @@ async function refresh(){
   const fx = document.createElement('div'); fx.className = 'fx';
   if (S.snow){ const b = document.createElement('button'); b.className = 'big snow' + (S.sparkle ? '' : ' wide'); b.onclick = snowTap; fx.appendChild(b) }
   if (S.sparkle){ const sp = document.createElement('button'); sp.className = 'big sparkle' + (S.snow ? '' : ' wide'); sp.textContent = '✨ Make it sparkle!';
-    sp.onclick = async () => { const r = await post('sparkle'); say(r.ok ? 'Sparkle! ✨' : r.error) }; fx.appendChild(sp) }
+    sp.onclick = async () => { const r = await post('sparkle'); say(r.ok ? 'Sparkle! ✨' : nice(r)); if (!r.ok) refused(r) }; fx.appendChild(sp) }
   if (fx.children.length) $('body').appendChild(fx);
   if (S.snow){ drawSnowBtn(); if (typeof DeviceMotionEvent !== 'undefined' && !needsPermission()) startMotion() }
   if (S.colours && S.colours.length){
@@ -192,8 +201,8 @@ async function refresh(){
   for (const p of S.presets){
     const b = document.createElement('button'); b.className = 'card'; b.innerHTML = `<canvas></canvas><b>${esc(p.name)}</b>`;
     b.onclick = async () => { const r = await post('pick', {id: p.id});
-      if (r.ok) say(r.position <= 1 && !r.wait ? `“${p.name}” is coming up now! Look at the house 👀` : `You're #${r.position} in line, about ${Math.max(1, Math.round(r.wait/60))} min. We'll show it here when it's on!`);
-      else say(r.error || 'Try again in a moment'); refresh() };
+      if (r.ok) say(r.position <= 1 && !r.wait ? `“${p.name}” is coming up now! Look at the house 👀` : `You're in line! We'll show it here when it's on. ✨`);
+      else say(nice(r)); refresh() };
     grid.appendChild(b); cards.set(b.querySelector('canvas'), p.id);
     if (!thumbs[p.id]) get('thumb?id=' + encodeURIComponent(p.id)).then(d => { if (d && d.frames) thumbs[p.id] = d });
   }

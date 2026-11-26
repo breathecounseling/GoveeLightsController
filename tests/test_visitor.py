@@ -345,6 +345,131 @@ class PageTests(unittest.TestCase):
                   'data-f="only_when_on"', 'data-f="date"', "Countdown to ${esc(c.countdown_to)} (${"):
             self.assertIn(s, html)
 
+    def test_refusals_lift_the_page_cooldown(self):
+        html = Path("goveelights/web/visit.html").read_text(encoding="utf-8")
+        self.assertIn("else { snowAt = 0;", html)
+        self.assertIn("else { colourAt = 0;", html)
+        self.assertIn("motionDenied", html)
+        self.assertIn("function nice(", html)
+
+
+class FollowUpTests(unittest.TestCase):
+    """Review follow-ups: slots per kind, one shared veil, mapping, shows, the budget,
+    and weather overlays with nothing playing."""
+
+    def rig(self, visitor=None):
+        r = Rig(self, EVENING, {"visitor": {"enabled": True, "token": "tok-123", **(visitor or {})}})
+        r.ctl.play_preset("warm-white")
+        r.ctl.engine.set_live(True)
+        return r
+
+    def test_a_new_moment_never_cuts_off_a_running_one_of_its_kind(self):
+        r = self.rig()
+        ctl, ov = r.ctl, r.ctl.engine.overlays
+        ctl.visitor_snow("a")
+        first = {k: v for k, v in ov.items() if k.startswith("visit:snow")}
+        r.clock.t += 1.6
+        ctl.visitor_colour("#ff1a1a", "b")
+        r.clock.t += 2.5
+        ctl.visitor_snow("c")                       # 4.1 s on: the first flurry is still running
+        for k, v in first.items():
+            self.assertIs(ov.get(k), v)
+        self.assertEqual(len([k for k in ov if k.startswith("visit:snow")]), 2)
+        # colour, snow, colour, colour 1.6 s apart: every ripple plays to its end
+        ov.clear()
+        r.clock.t += 20
+        ctl.visitor_colour("#ff1a1a", "a")
+        r.clock.t += 0.8
+        ctl.visitor_snow("b")
+        r.clock.t += 0.8
+        ctl.visitor_colour("#00d040", "b")
+        firsts = dict(ov)
+        r.clock.t += 1.6
+        ctl.visitor_colour("#1a4dff", "c")          # 3.2 s after the first 4 s ripple
+        for k, v in firsts.items():
+            if k.startswith("visit:colour"):
+                self.assertIs(ov.get(k), v)
+        self.assertEqual(sorted(k for k in ov if k.startswith("visit:colour")),
+                         ["visit:colour0", "visit:colour1", "visit:colour2"])
+
+    def test_overlapping_flurries_share_one_veil(self):
+        r = self.rig()
+        ctl, ov = r.ctl, r.ctl.engine.overlays
+        ctl.visitor_snow("a")
+        veil = ov["visit:veil"]
+        r.clock.t += 4.1
+        ctl.visitor_snow("b")
+        self.assertEqual([k for k in ov if "veil" in k], ["visit:veil"])
+        self.assertIs(ov["visit:veil"][0], veil[0])            # extended, not restarted
+        self.assertGreater(ov["visit:veil"][3], veil[3])
+        self.assertGreaterEqual(veil[0].layers[0].resolved["seconds"], 6.0)
+        e = ctl.engine
+        t0 = e.now()
+        e.render(t0)                                             # the veil starts on its first frame
+        for t in (t0 + 0.6, t0 + 2.0, t0 + 6.0):                # fade-in, hold, the extended hold
+            cols = e.render(t)
+            base = e.scene.render(t, e.layout, e.master)
+            dim = min(sum(c) / sum(b) for c, b in zip(cols, base) if sum(b) > 0.3 and sum(c) < sum(b))
+            self.assertGreater(dim, 0.45)                       # never below about half
+
+    def test_mapping_clears_visitor_and_pad_overlays(self):
+        r = self.rig()
+        ctl = r.ctl
+        ctl.visitor_colour("#ff1a1a", "a")
+        r.clock.t += 4.1
+        ctl.visitor_snow("b")
+        ctl.pad("sparkle")
+        ctl.engine.overlays["weather"] = (Scene.from_dict({"layers": [{"effect": "solid"}]}), "add", 0.2)
+        ctl.map_start()
+        try:
+            self.assertFalse([k for k in ctl.engine.overlays if k.startswith(("visit:", "pad:"))])
+            self.assertIn("weather", ctl.engine.overlays)
+        finally:
+            ctl.map_stop()
+
+    def test_no_moments_during_a_show(self):
+        r = self.rig()
+        ctl = r.ctl
+        ctl.play_show("Winter wonderland loop")
+        for f in (lambda: ctl.visitor_snow("a"), lambda: ctl.visitor_colour("#ff1a1a", "a"),
+                  lambda: ctl.visitor_sparkle("a")):
+            with self.assertRaises(ValueError) as e:
+                f()
+            self.assertIn("show", str(e.exception))
+        self.assertFalse([k for k in ctl.engine.overlays if k.startswith("visit:")])
+
+    def test_budget_across_kinds(self):
+        r = self.rig()
+        ctl = r.ctl
+        n, win = C.VISITOR_BUDGET
+        times = []
+        for k in range(30):                 # many visitors, each within every per-kind limit
+            r.clock.t += 0.8
+            try:
+                [lambda: ctl.visitor_colour("#ff1a1a", f"c{k}"), lambda: ctl.visitor_snow(f"s{k}"),
+                 lambda: ctl.visitor_sparkle(f"p{k}")][k % 3]()
+                times.append(r.clock.t)
+            except ValueError:
+                pass
+        for t in times:
+            self.assertLessEqual(len([u for u in times if 0 <= u - t < win]), n)
+        self.assertLessEqual(len(ctl._vmoments), n)
+        r.clock.t += win + 1
+        ctl.visitor_colour("#ff1a1a", "late")
+
+    def test_persistent_overlays_need_a_scene(self):
+        from goveelights.engine import Engine
+        from goveelights.output import MemoryOutput
+        e = Engine(house(), MemoryOutput())
+        sc = Scene.from_dict({"layers": [{"effect": "solid", "params": {"color": "#ffffff"}}]})
+        e.overlays["weather"] = (sc, "add", 1.0)
+        self.assertEqual(set(e.render(1.0)), {(0.0, 0.0, 0.0)})
+        now = time.time()
+        e.overlays["visit:colour0"] = (Scene.from_dict({"layers": [{"effect": "solid", "params": {"color": "#00ff00"}}]}),
+                                       "over", 1.0, now + 5, now, 0)
+        self.assertEqual(e.render(1.1)[0], (0.0, 1.0, 0.0))     # timed ones play; weather still doesn't
+        self.assertIn("weather", e.overlays)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -101,9 +101,11 @@ class Engine:
             scene, prev = self.scene, self._prev
             fade_start, fade_s = self._fade_start, self._fade_s
         if scene is None:
-            if not self.overlays:
+            # Only timed overlays (pad hits, visitor moments) play and expire over black;
+            # persistent ones (weather) need a scene under them.
+            if not any(len(o) > 3 for o in list(self.overlays.values())):
                 return [(0.0, 0.0, 0.0)] * self.layout.n
-            cols = [(0.0, 0.0, 0.0)] * self.layout.n   # overlays still play (and expire) over black
+            cols = [(0.0, 0.0, 0.0)] * self.layout.n
         else:
             cols = scene.render(t, self.layout, self.master)
         if prev is not None and scene is not None:
@@ -125,6 +127,8 @@ class Engine:
                     continue
                 if decay:
                     op *= math.exp(-(now - start) / decay)
+            elif scene is None:
+                continue
             oc = sc.render(t, self.layout)
             cols = [blend(mode, a, b, op) for a, b in zip(cols, oc)]
         if self.hue_sweep:

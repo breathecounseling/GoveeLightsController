@@ -32,6 +32,8 @@ VISITOR_COLOURS = [("Red", "#ff1a1a"), ("Orange", "#ff6a00"), ("Gold", "#ffb000"
                    ("Ice blue", "#00d8ff"), ("Blue", "#1a4dff"), ("Purple", "#a030ff"), ("Pink", "#ff2fa8")]
 # Visitor moments: (seconds between two from one visitor, seconds between any two at all).
 VISITOR_LIMITS = {"sparkle": (15.0, 3.0), "snow": (20.0, 4.0), "colour": (8.0, 1.5)}
+# And for all of them together: at most this many moments in any window of this many seconds.
+VISITOR_BUDGET = (4, 10.0)
 
 
 def slug(name: str) -> str:
@@ -107,7 +109,7 @@ class Controller:
         self.vqueue: list[dict] = []                # visitor requests waiting
         self._vlast: dict[str, float] = {}          # visitor cooldowns by client
         self._vframe: tuple = (0.0, "")             # cached live frame for the visitor page
-        self._vslot = 0                             # rotates the visitor overlay slots
+        self._vmoments: list[float] = []            # recent visitor moment times (all kinds, capped)
         self._showtimes_done: set = set()
         self.dusk_intro: dict | None = None         # {"until", "program", "on"}: the dusk sky at lights-on
         self._dusk_done: str | None = None          # the evening window ("on" time) an intro already ran for
@@ -736,6 +738,14 @@ class Controller:
             raise ValueError("Give it a few seconds!")
         if not self.engine.live or self.engine.blackout or self.map_state or self.diag_active:
             raise ValueError("The lights are off right now.")
+        it = self.interrupt or {}
+        if it and not it.get("visitor"):     # a show, countdown, scoreboard or celebration: hands off
+            raise ValueError("A show is on right now: try again after it!")
+        n, win = VISITOR_BUDGET
+        self._vmoments = [m for m in self._vmoments if 0 <= now - m < win][-n:]
+        if len(self._vmoments) >= n:
+            raise ValueError("Lots of fun at once! Give it a few seconds.")
+        self._vmoments.append(now)
         self._vlast[f"{kind}:{client}"] = self._vlast[f"{kind}:*"] = now
         if kind == "sparkle":
             return self.pad("sparkle")
@@ -747,18 +757,34 @@ class Controller:
             secs, slots = 4.0, 3
             d = {"layers": [{"effect": "colour_ripple",
                              "params": {"repeat": False, "seconds": secs, "color": hexcol, "seed": seed}}]}
-        # A few can overlap (a new one never cuts off the last one); the newest is on top.
-        self._vslot = (self._vslot + 1) % 6
-        key = f"visit:{kind}{self._vslot % slots}"
+        # A few can overlap: each kind takes a free slot, or else the one ending soonest,
+        # so a new one never cuts off a running one while a slot is free. Newest on top.
         ov = self.engine.overlays
+
+        def ends(s):
+            o = ov.get(f"visit:{kind}{s}")
+            return o[3] if o and len(o) > 3 and o[3] > now else 0.0
+        key = f"visit:{kind}{min(range(slots), key=ends)}"
         ov.pop(key, None)
         if kind == "snow":          # the scene dims a little so white flakes show over white lights
-            vk = key + ":veil"
-            ov.pop(vk, None)
-            ov[vk] = (Scene.from_dict({"layers": [{"effect": "veil", "params": {"seconds": secs, "depth": 0.5}}]}),
-                      "multiply", 1.0, now + secs + 0.2, now, 0)
+            self._visitor_veil(now, secs)
         ov[key] = (Scene.from_dict(d), "over", 1.0, now + secs + 0.2, now, 0)
         return kind
+
+    def _visitor_veil(self, now: float, secs: float):
+        """One shared dim for every flurry: a new one extends the veil that's on (so
+        overlapping flurries never dim the scene below the intended half)."""
+        ov, vk, et = self.engine.overlays, "visit:veil", self.engine.now()
+        cur = ov.get(vk)
+        if cur and len(cur) > 3 and cur[3] > now and hasattr(cur[0], "veil_t0"):
+            lay = cur[0].layers[0]
+            lay.resolved["seconds"] = max(float(lay.resolved["seconds"]), et - cur[0].veil_t0 + secs)
+            ov[vk] = cur[:3] + (max(cur[3], now + secs + 0.2),) + cur[4:]
+            return
+        sc = Scene.from_dict({"layers": [{"effect": "veil", "params": {"seconds": secs, "depth": 0.5}}]})
+        sc.veil_t0 = et
+        ov.pop(vk, None)
+        ov[vk] = (sc, "multiply", 1.0, now + secs + 0.2, now, 0)
 
     def _visitor_tick(self):
         if not self.vqueue or not self.engine.live or self.map_state or self.diag_active:
@@ -1035,6 +1061,8 @@ class Controller:
                                   "speed": self.engine.master.get("speed", 1.0), "blackout": self.engine.blackout}
             self.engine.master["speed"] = 1.0
             self.engine.blackout = False
+            for k in [k for k in self.engine.overlays if k.startswith(("visit:", "pad:"))]:
+                self.engine.overlays.pop(k, None)      # nothing timed may spoil the capture
             self.engine.set_scene(Scene.from_dict({"layers": [{"effect": "mapcode",
                                                                "params": {"level": max(0.05, min(1.0, float(level)))}}]}))
             self.playing = {"kind": "event", "name": "Camera mapping pattern"}
