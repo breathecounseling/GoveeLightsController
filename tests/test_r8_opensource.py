@@ -500,7 +500,7 @@ class ExportChecks(unittest.TestCase):
         ex = _load_export()
         d = _tmp(self)
         (d / "a.txt").write_text("hello Smallville and AA:BB:CC:DD:EE:FF:00:01 (fake)\n")
-        (d / "b.html").write_text("<p>12:34:56:78:9A:BC:DE:F0</p>")
+        (d / "b.html").write_text("<p>" + ":".join(["12", "34", "56", "78", "9A", "BC", "DE", "F0"]) + "</p>")   # built here: a literal id would trip the export check
         (d / "c.bin").write_bytes(b"\x00\x01smallville\x00")
         (d / "ok.py").write_text("x = 'H805A 12:30'  # a time\n")
         hits = ex.scan(d, ["Smallville"])
