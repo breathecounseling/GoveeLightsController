@@ -1,23 +1,13 @@
 {
   "name": "Northern lights",
-  "tags": [
-    "Ambient"
-  ],
+  "tags": ["Ambient"],
   "layers": [
+    {"effect": "solid", "params": {"color": "#00382a"}},
     {
       "effect": "aurora",
-      "params": {
-        "scale": 18,
-        "speed": 3,
-        "contrast": 1.8
-      },
-      "mod": {
-        "contrast": {
-          "shape": "random",
-          "rate": 0.05,
-          "depth": 0.3
-        }
-      }
+      "params": {"scale": 18, "speed": 3, "contrast": 1.8},
+      "mod": {"contrast": {"shape": "random", "rate": 0.05, "depth": 0.3}},
+      "blend": "lighten"
     }
   ]
 }

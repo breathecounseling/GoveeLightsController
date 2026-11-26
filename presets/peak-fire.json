@@ -1,28 +1,10 @@
 {
   "name": "Fire on the peak, embers on the eaves",
   "layers": [
-    {
-      "effect": "fire",
-      "params": {
-        "intensity": 0.7,
-        "scale": 5,
-        "speed": 1.0
-      },
-      "target": "Eaves"
-    },
-    {
-      "effect": "fire",
-      "params": {
-        "axis": "y",
-        "rise": 0.7,
-        "scale": 2,
-        "speed": 1.5
-      },
-      "target": "Peak"
-    }
+    {"effect": "solid", "params": {"color": "#3a0400"}, "target": "Peak"},
+    {"effect": "fire", "params": {"intensity": 0.85, "scale": 5, "speed": 1.0}, "target": "Eaves"},
+    {"effect": "fire", "params": {"axis": "y", "rise": 0.55, "scale": 2, "speed": 1.5, "intensity": 1.25}, "target": "Peak", "blend": "lighten"},
+    {"effect": "fire", "params": {"intensity": 0.6, "scale": 4, "speed": 0.7, "seed": 9}, "target": "Accent"}
   ],
-  "tags": [
-    "Ambient",
-    "Halloween"
-  ]
+  "tags": ["Ambient", "Halloween"]
 }

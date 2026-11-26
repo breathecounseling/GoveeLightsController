@@ -48,7 +48,7 @@
           "#ffe060",
           "#b080ff"
         ],
-        "density": 0.05,
+        "density": 0.1,
         "life": 3,
         "drift": 1.5,
         "seed": 8
@@ -59,10 +59,10 @@
       "target": "Front gable outline",
       "params": {
         "colors": [
-          "#ffc000"
+          "#ffa000"
         ],
         "period": 6,
-        "min": 0.6
+        "min": 0.82
       }
     }
   ]

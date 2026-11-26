@@ -9,9 +9,9 @@
       "effect": "gradient",
       "params": {
         "colors": [
-          "#001060",
-          "#000a40",
-          "#00186e"
+          "#0018a0",
+          "#00137a",
+          "#0020b0"
         ],
         "length": 80,
         "speed": 1
@@ -33,9 +33,13 @@
     {
       "effect": "snowdrift",
       "params": {
-        "rate": 10,
-        "accumulate": 1.0,
-        "melt": 0.15
+        "rate": 18,
+        "size": 1.25,
+        "accumulate": 3.5,
+        "melt": 0.15,
+        "max_snow": 0.9,
+        "color": "#ffffff",
+        "tint": 0.1
       },
       "blend": "screen"
     }
