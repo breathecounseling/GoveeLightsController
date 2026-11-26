@@ -176,6 +176,45 @@ camera mapping. `tools/fake_wled.py` simulates one for testing.
 your own subdomain; the app adds its own password, lockout and CSRF protection). Set the
 password under More → Security, or with `python -m goveelights set-password`.
 
+**Listen to the music (beat sync):** Play → **🎤 Listen** under the tempo. The phone's
+microphone hears the music and the house keeps time with it:
+* The phone does the listening (Web Audio, nothing is recorded or uploaded): it finds the
+  kicks from the low end (40-180 Hz spectral flux against an adaptive threshold), works out
+  the tempo from them (60-180 BPM; missed and extra hits don't throw it, syncopated kicks
+  settle on the beat, a slow song counts double time and a very fast one half time), locks
+  onto the beat (an off-beat bass line doesn't pull it), and follows the loudness and bass.
+  About 11 small updates a second go to the PC (`POST /api/beat`), with the time since the
+  last kick and the measured network delay; the PC phase-locks its own beat grid to them,
+  so jitter doesn't reach the lights.
+* **Sync offset** (under Listen, saved): the lights run this far ahead of the music to make
+  up for the microphone, a frame of rendering and the Govee controllers (default +70 ms).
+  If the house flashes after the kick, move it right; before the kick, left.
+* The detected tempo becomes the master tempo (the one *Tap tempo* sets; never saved, so
+  your own tap tempo comes back after a restart), and every tempo-synced LFO glides onto
+  the music's beat, whatever the master Speed.
+* Effects see the music for about 2 seconds after the last update, then it fades out in a
+  second, so nothing sticks if the phone locks. In a quiet room or between songs the
+  effects go back to the master tempo. The screen is kept on while listening (where the
+  browser allows it; otherwise the app asks you to keep it on); listening stops by itself
+  when the screen goes off or you switch apps (battery); tap Listen again to restart.
+  Several phones can listen at once: the first one leads until it stops.
+* **Presets:** *Music pulse* (the gable zigzag is a bass meter: rows light from the bottom
+  up on every kick, flash and change colour on the beat, the apex flashes white) and
+  *Party beat* (dots that jump ahead on every beat and turn round every 8 beats). Both keep
+  time with the master tempo when no music is playing. *Plasma party* and *Glitter ball*
+  speed up with the loudness and pulse on the beat when music is heard (unchanged
+  otherwise).
+* **Make anything dance:** in Create, the ∿ on any slider can follow **Loudness**, **Bass**
+  or **Beat** instead of an LFO, and the **Beat & loudness (music)** FX makes any layer's
+  brightness pulse on the beat or follow the loudness (with an optional white flash).
+* **The microphone needs a secure page.** Phones only allow it on `https://` (your
+  Cloudflare tunnel address from [REMOTE.md](REMOTE.md)) or on `http://localhost`, not on
+  the home address `http://192.168.x.x:8080`. On the home address the app says so and
+  links the tunnel address once you have opened the app through it. If you refused the
+  microphone, allow it for the site in the browser's settings.
+* `python3 tools/preview.py music-pulse --audio 120` previews a preset with a made-up
+  120 BPM song.
+
 **Run in the background on Windows:** for always-on, `python -m goveelights install-service`
 (admin PowerShell; starts at boot with no login, restarts if it stops; it also adds
 firewall rules for UDP 4002 and the web port on Private networks, because the boot task

@@ -12,6 +12,12 @@
         "arms": 3,
         "speed": 10
       },
+      "mod": {
+        "speed": {
+          "source": "level",
+          "depth": 0.2
+        }
+      },
       "fx": [
         {
           "type": "glitter",
@@ -21,6 +27,22 @@
             "base": 0.6,
             "whiteness": 0.95,
             "bloom": 0.4
+          },
+          "mod": {
+            "density": {
+              "source": "beat",
+              "depth": 0.4,
+              "decay": 0.2
+            }
+          }
+        },
+        {
+          "type": "beat",
+          "params": {
+            "follow": "bass",
+            "amount": 0.35,
+            "decay": 0.2,
+            "flash": 0.25
           }
         }
       ]

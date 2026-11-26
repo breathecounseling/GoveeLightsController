@@ -4,7 +4,8 @@ generator, like an effects rack.
 
     process(frame, ctx, P, state) -> frame
 frame is a list of float RGB for every pixel of the virtual strip; only the
-layer's target pixels (ctx.idx) matter. ctx has layout, idx, clock, dt.
+layer's target pixels (ctx.idx) matter. ctx has layout, idx, clock, dt, bpm, and
+audio: the music the phone hears (see goveelights.audio), or None.
 """
 from __future__ import annotations
 
@@ -27,6 +28,8 @@ class Ctx:
     dt: float
     bpm: float = 120.0
     cache: dict = field(default_factory=dict)
+    audio: dict | None = None        # music from the phone (audio.AudioState.snapshot), or None
+    beats: float | None = None       # the layer's beat count on the tempo grid
 
 
 def fx(name, label, params, description=""):

@@ -3,6 +3,7 @@ schedule, and the Phase 1 diagnostics (which share the UDP socket)."""
 from __future__ import annotations
 
 import json
+import math
 import logging
 import os
 import random
@@ -17,6 +18,7 @@ from . import evolve as evo
 from . import live, livedata, shows, tonight
 from . import shows_builtin
 from . import schedule as sched
+from .audio import OFFSET_MS
 from .config import Config, write_json
 from .diag_server import App as DiagApp
 from .engine import Engine
@@ -304,6 +306,9 @@ class Controller:
                        brightness=float(self.ecfg.get("brightness", 1.0)))
             e.master.update(self.cfg.data.get("master", {}))
             e.dither = bool(self.ecfg.get("dither", True))
+            if old:
+                e.audio = old.audio                # a listening phone keeps its beat across a rebuild
+            e.audio.offset = float(self.ecfg.get("audio_offset_ms", OFFSET_MS)) / 1000.0
             self._thumbs = {}
             if old and old.scene:
                 e.set_scene(old.scene)
@@ -353,6 +358,12 @@ class Controller:
                 self.ecfg["self_heal"] = bool(b["self_heal"])
             if "reenable_min" in b:
                 self.ecfg["reenable_min"] = max(0.0, min(120.0, float(b["reenable_min"])))
+            if "audio_offset_ms" in b:                 # Play -> Listen: Sync offset
+                v = float(b["audio_offset_ms"])
+                if not math.isfinite(v):
+                    raise ValueError("audio_offset_ms must be a number")
+                v = self.ecfg["audio_offset_ms"] = round(max(-200.0, min(400.0, v)))
+                e.audio.offset = v / 1000.0
             self.cfg.save()
 
     def set_master(self, b: dict):
@@ -366,10 +377,54 @@ class Controller:
                 m["palette"] = str(b["palette"] or "")
             if "bpm" in b:
                 m["bpm"] = max(20.0, min(300.0, float(b["bpm"])))
-            self.cfg.data["master"] = dict(m)
+            # save only what was set here: the live master can hold the music's tempo
+            # (Play -> Listen), which must not overwrite the owner's tap tempo in the config
+            saved = self.cfg.data.setdefault("master", {})
+            for k in ("speed", "hue", "palette", "bpm"):
+                if k in b:
+                    saved[k] = m[k]
             self.cfg.save()
         if "blackout" in b:
             self.engine.blackout = bool(b["blackout"])
+
+    def note_remote(self, host: str):
+        """Remember the https address the app was last opened at (the Cloudflare tunnel), so
+        a phone on the plain-http home address can be pointed there (the microphone only
+        works on a secure page)."""
+        import re
+        host = (host or "").strip().lower()
+        if not re.fullmatch(r"[a-z0-9.-]{1,253}(:\d{1,5})?", host):
+            return
+        url = "https://" + host
+        with self.cfg.lock:                      # the whole read-modify-write (an HTTP thread)
+            srv = self.cfg.data.setdefault("server", {})
+            if srv.get("remote_url") != url:
+                srv["remote_url"] = url
+                self.cfg.save()
+
+    def beat(self, b: dict, addr: str = "") -> dict:
+        """An update from a phone listening to the music (Play -> Listen): loudness, bass,
+        onsets and tempo. Its tempo becomes the master tempo (the one tap tempo sets; not
+        saved to the config, the music changes song to song: set_master saves only the
+        keys it is given) and effects see the music as ctx.audio for a couple of seconds
+        (see goveelights/audio.py). Each phone is kept apart (its address and the "client"
+        id it sends); effects follow the one that started first, and only that phone moves
+        the master tempo. {"stop": true}: that phone stopped listening, let go of it."""
+        e = self.engine
+        cid = b.get("client", "")
+        if not isinstance(cid, str) or len(cid) > 40 or not all(c.isalnum() or c in "-_" for c in cid):
+            raise ValueError("client must be a short id")
+        key = f"{addr}/{cid}"
+        if b.get("stop") is True:
+            e.audio.clear(key)
+            return {"bpm": e.master.get("bpm")}
+        r = e.audio.update(b, now=e.wall(), client=key)
+        bpm = r["bpm"]
+        if bpm is not None and r["active"] and not r["dropped"]:
+            bpm = max(20.0, min(300.0, bpm))
+            if abs(bpm - float(e.master.get("bpm", 120.0))) >= 1.0:   # tiny wobbles don't retime anything
+                e.master["bpm"] = float(round(bpm))
+        return {"bpm": e.master.get("bpm")}
 
     @property
     def user_palettes(self) -> dict:
@@ -1750,6 +1805,7 @@ class Controller:
             "live": e.live, "phone_only": self.phone_only and not e.live,
             "playing": self.playing, "playlist": pl, "diag_active": self.diag_active,
             "fps": e.fps, "gamma": e.gamma, "brightness": e.brightness, "stats": e.stats,
+            "audio_offset_ms": round(e.audio.offset * 1000),
             "master": e.master, "blackout": e.blackout, "dither": e.dither,
             "evolve": ({"next_in": max(0, round(evs["next_at"] - time.time())), "step": evs["step"]} if evs else None),
             "interrupt": ({"label": it.get("label"), "left": max(0, round(it["until"] - time.time()))} if it else None),
@@ -1758,6 +1814,8 @@ class Controller:
             "show": ((it or {}).get("show") or {}).get("name"),
             "dusk_intro": ({"left": max(0, round(di["until"] - time.time())), "then": di["program"]} if di else None),
             "visitor_queue": len(self.vqueue),
+            "remote_url": self.cfg.data.get("server", {}).get("remote_url", ""),
+            "music": round((e.audio.snapshot(e.wall()) or {}).get("presence", 0.0), 2),
             "health": {self.cfg.devices.get(m, {}).get("name", m): {
                 "ok": h["miss"] == 0, "reasserts_15min": len([t for t in h["reasserts"] if time.time() - t < 900]),
                 "paused": h["paused"]} for m, h in health.items()},

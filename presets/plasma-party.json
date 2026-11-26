@@ -11,11 +11,26 @@
         "speed": 6
       },
       "palette": "Rainbow",
+      "mod": {
+        "speed": {
+          "source": "level",
+          "depth": 0.25
+        }
+      },
       "fx": [
         {
           "type": "hue",
           "params": {
             "spin": 0.03
+          }
+        },
+        {
+          "type": "beat",
+          "params": {
+            "follow": "beat",
+            "amount": 0.45,
+            "decay": 0.3,
+            "flash": 0.15
           }
         }
       ]

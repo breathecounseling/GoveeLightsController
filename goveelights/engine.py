@@ -7,6 +7,7 @@ import math
 import threading
 import time
 
+from .audio import AudioState
 from .color import Color
 from .layout import Layout
 from .output import Output
@@ -55,7 +56,7 @@ class _Still:
     def __init__(self, cols):
         self.cols = list(cols)
 
-    def render(self, t, layout, master=None):
+    def render(self, t, layout, master=None, audio=None):
         return self.cols
 
 
@@ -71,6 +72,7 @@ class Engine:
         self._dither_buf = [[0.0, 0.0, 0.0] for _ in layout.pixels]
         self.overlays: dict[str, tuple] = {}   # name -> (scene, blend, opacity[, until, start, decay]): weather, pad hits
         self.dim = 1.0                          # late-night dimming from the schedule
+        self.audio = AudioState()               # music from a listening phone (POST /api/beat)
         self.hue_sweep: tuple[float, float] | None = None   # (start, seconds): one trip round the colour wheel
         self.transition = "crossfade"
         self.scene: Scene | None = None
@@ -132,6 +134,7 @@ class Engine:
         with self._lock:
             scene, prev = self.scene, self._prev
             fade_start, fade_s = self._fade_start, self._fade_s
+        audio = self.audio.snapshot(self.wall()) if self.audio is not None else None
         if scene is None:
             # Only timed overlays (pad hits, visitor moments) play and expire over black;
             # persistent ones (weather) need a scene under them.
@@ -139,7 +142,7 @@ class Engine:
                 return [(0.0, 0.0, 0.0)] * self.layout.n
             cols = [(0.0, 0.0, 0.0)] * self.layout.n
         else:
-            cols = scene.render(t, self.layout, self.master)
+            cols = scene.render(t, self.layout, self.master, audio)
         self._mixed = None
         if prev is not None and scene is not None:
             f = max(0.0, (t - fade_start) / fade_s)    # t is read before a set_scene on another thread
@@ -148,7 +151,7 @@ class Engine:
                     if self._prev is prev:
                         self._prev = None
             else:
-                old = prev.render(t, self.layout, self.master)
+                old = prev.render(t, self.layout, self.master, audio)
                 cols = self._transition(old, cols, f)
                 self._mixed = cols
         now = self.wall()
@@ -164,7 +167,8 @@ class Engine:
                     op *= math.exp(-(now - start) / decay)
             elif scene is None:
                 continue
-            oc = sc.render(t, self.layout)
+            # overlays (pad hits, weather) keep their own look but hear the music and the tempo
+            oc = sc.render(t, self.layout, {"bpm": self.master.get("bpm", 120.0)}, audio)
             cols = [blend(mode, a, b, op) for a, b in zip(cols, oc)]
         sweep = self.hue_sweep
         if sweep:

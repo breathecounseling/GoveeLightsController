@@ -2,6 +2,10 @@
 
     python3 tools/preview.py <preset-id | preset.json | effect-name> [--set key=value ...]
         [--seconds 6] [--frames 8] [--fps 20] [--out <temp dir>/preview] [--layer N]
+        [--audio BPM]
+
+--audio BPM feeds the scene a made-up song at that tempo (a kick on every beat, see
+goveelights.audio.synthetic), as if a phone were listening (Play -> Listen).
 
 Renders the scene at the real frame rate from t=0 (so effects with memory evolve as
 they would live) and saves --frames snapshots spread over --seconds as:
@@ -43,7 +47,9 @@ def main(argv=None):
     ap.add_argument("--frames", type=int, default=8)
     ap.add_argument("--fps", type=float, default=20.0)
     ap.add_argument("--out", default=os.path.join(tempfile.gettempdir(), "preview"))
+    ap.add_argument("--audio", type=float, default=0.0, metavar="BPM", help="simulate music at this tempo")
     a = ap.parse_args(argv)
+    from goveelights.audio import synthetic
     os.chdir(ROOT)
     L = house_layout()
     scene = load_scene(a.what, a.set)
@@ -53,7 +59,11 @@ def main(argv=None):
     import time
     for f in range(total):
         t0 = time.perf_counter()
-        cols = scene.render(f / a.fps, L)
+        t = f / a.fps
+        if a.audio:
+            cols = scene.render(t, L, {"bpm": a.audio}, synthetic(t, a.audio))
+        else:
+            cols = scene.render(t, L)
         ms.append((time.perf_counter() - t0) * 1000)
         if f % max(1, total // 60) == 0:
             strip.append(cols)
@@ -76,7 +86,7 @@ def main(argv=None):
         f'<span style="flex:1;background:{rgb(c)}"></span>' for c in cols) + "</div>" for cols in strip)
     perf = f"render: avg {sum(ms) / len(ms):.1f} ms, worst {max(ms):.1f} ms per frame ({L.n} bulbs)"
     html = (f'<meta charset="utf-8"><body style="background:#000;color:#bbb;font:12px sans-serif;margin:8px">'
-            f'<div>{a.what} {" ".join(a.set)} · {perf}</div>'
+            f'<div>{a.what} {" ".join(a.set)}{f" · music at {a.audio:g} BPM" if a.audio else ""} · {perf}</div>'
             + "".join(f'<div style="margin-top:6px">t = {t:.2f} s</div>{house(c)}' for t, c in snaps)
             + f'<div style="margin-top:8px">filmstrip (time runs down, every bulb in strip order)</div>{rows}</body>')
     page = Path(a.out + ".html").resolve()
