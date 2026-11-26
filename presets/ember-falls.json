@@ -1,0 +1,7 @@
+{
+  "name": "Ember falls",
+  "tags": ["Ambient", "Holiday"],
+  "layers": [
+    {"effect": "embers", "target": "Whole front", "params": {"rate": 12, "spill": 0.5}}
+  ]
+}

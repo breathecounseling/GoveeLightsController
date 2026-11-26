@@ -1,0 +1,10 @@
+{
+  "name": "Sparkler tree",
+  "tags": ["Holiday", "Christmas"],
+  "layers": [
+    {"effect": "solid", "target": "Peak", "params": {"color": "#006010"}},
+    {"effect": "embers", "target": "Whole front gable", "blend": "lighten",
+     "params": {"rate": 9, "spill": 0.7, "catch": 0.25, "life": 3, "glow": 0.8,
+                "colors": ["#ffffff", "#fff0a0", "#ffc020", "#ff7000", "#ff2000"]}}
+  ]
+}

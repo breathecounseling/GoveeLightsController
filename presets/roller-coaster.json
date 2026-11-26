@@ -1,0 +1,7 @@
+{
+  "name": "Roller coaster",
+  "tags": ["Party", "Holiday"],
+  "layers": [
+    {"effect": "coaster", "target": "Eaves", "params": {}}
+  ]
+}
