@@ -8,7 +8,7 @@
     {
       "effect": "solid",
       "params": {
-        "color": "#001c60"
+        "color": "#002a90"
       },
       "target": "all"
     },
@@ -18,8 +18,8 @@
         "color": "#30c8ff",
         "color2": "#000000",
         "wavelength": 16,
-        "sharpness": 5,
-        "speed": -4,
+        "sharpness": 2.5,
+        "speed": -6,
         "axis": "y"
       },
       "target": "Whole front",
@@ -29,7 +29,7 @@
           "type": "cascade",
           "params": {
             "mode": "height-down",
-            "delay": 1.2,
+            "delay": 0.8,
             "curve": 0.5,
             "depth_fade": 0.2
           }
@@ -42,8 +42,8 @@
         "color": "#30c8ff",
         "color2": "#000000",
         "wavelength": 16,
-        "sharpness": 5,
-        "speed": -4,
+        "sharpness": 2.5,
+        "speed": -6,
         "axis": "y"
       },
       "target": [
@@ -57,7 +57,7 @@
           "type": "cascade",
           "params": {
             "mode": "height-down",
-            "delay": 1.2,
+            "delay": 0.8,
             "curve": 0.5,
             "depth_fade": 0.2
           }

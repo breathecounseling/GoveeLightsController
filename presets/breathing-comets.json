@@ -7,18 +7,23 @@
     {
       "effect": "twinkle",
       "params": {
-        "density": 0.1,
-        "duration": 2.5
-      },
-      "palette": "Icy",
-      "opacity": 0.5
+        "colors": [
+          "#ffffff",
+          "#a0d0ff"
+        ],
+        "background": "#001a60",
+        "density": 0.06,
+        "duration": 2.5,
+        "seed": 4
+      }
     },
     {
       "effect": "comet",
       "params": {
         "tail": 25,
-        "count": 2,
-        "speed": 30
+        "count": 1,
+        "speed": 30,
+        "axis": "run"
       },
       "palette": "Icy",
       "blend": "lighten",

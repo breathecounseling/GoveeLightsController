@@ -2,14 +2,29 @@
   "name": "Comets",
   "layers": [
     {
+      "effect": "twinkle",
+      "params": {
+        "colors": [
+          "#6090ff",
+          "#c0d8ff"
+        ],
+        "background": "#001040",
+        "density": 0.05,
+        "duration": 2.0,
+        "seed": 9
+      }
+    },
+    {
       "effect": "comet",
       "params": {
         "color": "#ffffff",
-        "tail_color": "#0040ff",
-        "tail": 20,
-        "count": 3,
-        "speed": 30
-      }
+        "tail_color": "#2080ff",
+        "tail": 26,
+        "count": 2,
+        "speed": 30,
+        "axis": "run"
+      },
+      "blend": "lighten"
     }
   ],
   "tags": [

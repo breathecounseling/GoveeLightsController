@@ -7,14 +7,15 @@
   "layers": [
     {
       "effect": "gradient",
-      "opacity": 0.7,
+      "opacity": 0.75,
       "params": {
         "colors": [
           "#ff6ab4",
-          "#b080ff",
+          "#c080ff",
           "#50c8ff",
-          "#50ffa0",
-          "#ffe060"
+          "#60ffc0",
+          "#50c8ff",
+          "#c080ff"
         ],
         "length": 45,
         "speed": 2
@@ -33,15 +34,17 @@
           "#ffd23c"
         ],
         "speed": 0.8,
-        "every": 2.6,
+        "every": 1.4,
         "pop": 0.6,
         "pop_color": "#fff0ff",
-        "background": "#9a5cff",
-        "glow": 0.48,
+        "background": "#7a3cff",
+        "glow": 0.55,
         "outline": 0.7,
         "sway": 0.3,
         "flicker": 0,
-        "seed": 3
+        "seed": 3,
+        "count": 4,
+        "level": 1.0
       }
     },
     {
