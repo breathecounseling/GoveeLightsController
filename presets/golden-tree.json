@@ -1,0 +1,72 @@
+{
+  "name": "Golden tree",
+  "tags": [
+    "Holiday",
+    "Christmas"
+  ],
+  "layers": [
+    {
+      "effect": "twinkle",
+      "params": {
+        "colors": [
+          "#ffe0b0"
+        ],
+        "background": "#ffc070",
+        "density": 0.18,
+        "duration": 3.0,
+        "seed": 11
+      },
+      "target": [
+        "North wall",
+        "Front eave",
+        "South wall",
+        "Garage",
+        "Garage peak"
+      ],
+      "blend": "normal",
+      "opacity": 0.2
+    },
+    {
+      "effect": "tree",
+      "params": {
+        "body": "#ffa800",
+        "body2": "#ffc400",
+        "level": 0.75,
+        "shimmer": 0.35,
+        "shade": 0.15,
+        "garland": "#fff4e0",
+        "garland_style": "swag",
+        "garland_width": 2.0,
+        "garland_spacing": 12,
+        "speed": 1.0,
+        "garland_sparkle": 1.8,
+        "ornament_colors": [
+          "#ff0000",
+          "#c000ff",
+          "#0040ff",
+          "#ff0040"
+        ],
+        "density": 0.15,
+        "glints": 0.2,
+        "star": "#fff4e0",
+        "glow": "#ffd8a0",
+        "glow_level": 0.15,
+        "intro": 6
+      },
+      "target": "Whole front gable"
+    },
+    {
+      "effect": "presents",
+      "params": {
+        "colors": [
+          "#ff0000",
+          "#c000ff",
+          "#0040ff",
+          "#ff0040"
+        ],
+        "ribbon": "#fff4e0"
+      },
+      "target": "Porch"
+    }
+  ]
+}
