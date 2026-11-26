@@ -1,12 +1,200 @@
-# Govee Permanent Lights: Custom Effects Creator
+# GoveeLightsController
 
-Local-only controller for Govee permanent outdoor lights (H705E / H805A), using the
-LAN API over UDP. No cloud, no API key, no dependencies beyond Python 3.10+.
+Custom animated effects, shows and a sunset schedule for **Govee permanent outdoor lights**,
+run from your own computer over your home network. A phone-friendly web app lets you play
+and design effects (per bulb, using the shape of your house), build playlists and shows,
+schedule the year, sync to music, and share a visitor page with the neighbours.
 
-**Status:** Phase 1 (diagnostics), Phase 2 (effects engine) and Phase 3 (creator app,
-playlists, scheduler) are done.
+No cloud, no account, no API key, and no dependencies beyond Python 3.10+.
 
-## Creator app
+> **Unofficial project.** Not affiliated with, endorsed by or supported by Govee. "Govee"
+> and product names are trademarks of their owner and are used only to say which lights
+> this works with. Per-bulb effects use **undocumented LAN commands** found by the
+> community; a firmware update could change or block them. Use at your own risk (see the
+> [licence](LICENSE): no warranty). Keep your lights' Govee app: this tool hands the lights
+> back to it whenever it stops.
+
+## Does it work with my lights?
+
+| Model | Per-bulb effects | Notes |
+|---|---|---|
+| **H805A** (permanent outdoor lights 2) | yes, tested | realtime per-bulb frames at 10-25 fps; RGB only (no white diode in realtime) |
+| **H705E** | no (one unit tested) | Wi-Fi firmware 1.01.17 did not answer LAN commands at all; newer firmware may |
+| Other Govee lights with **LAN Control** | likely | anything that shows a *LAN Control* switch in the Govee app may work. Please [report your model](.github/ISSUE_TEMPLATE/model-report.md), working or not |
+
+WLED controllers (ESP32 with DIY pixels) can be added alongside Govee boxes.
+
+## Requirements
+
+* Govee lights with **LAN Control** turned on in the Govee app (device → settings → LAN
+  Control), for every box.
+* A computer that stays on in the evening (Windows, macOS, Linux, a Raspberry Pi), on the
+  **same network and subnet** as the lights. Phones and tablets on the same Wi-Fi use the app.
+* **Python 3.10 or newer.** Nothing else to install (no pip packages).
+* The firewall must let in UDP port 4002 (the lights' replies) and the web port (8080).
+
+## Quick start
+
+Download the project (green *Code* button → *Download ZIP*, or `git clone`), then:
+
+**Windows**
+1. Install Python from python.org (tick *Add python.exe to PATH*).
+2. Double-click `start.bat` (or run `python -m goveelights` in the folder).
+3. When Windows Firewall asks, allow Python on **Private networks**.
+
+**macOS**
+1. Python 3: `python3 --version` (if missing or older than 3.10, install it from python.org
+   or with Homebrew).
+2. In Terminal, in the project folder: `python3 -m goveelights`
+3. Allow incoming connections for Python when macOS asks.
+
+**Linux / Raspberry Pi**
+1. `python3 --version` (3.10+; Raspberry Pi OS Bookworm has 3.11).
+2. In the project folder: `python3 -m goveelights`
+3. With a firewall on: `sudo ufw allow 4002/udp && sudo ufw allow 8080/tcp`.
+
+Then open the address it prints (for example `http://192.168.1.50:8080/`) on your phone.
+To keep it running after a reboot, see [docs/SERVICE.md](docs/SERVICE.md) (Windows task,
+systemd unit, launchd agent). Optional: `pip install -e .` in the folder adds a
+`goveelights` command (same as `python -m goveelights`; the folder stays where presets
+and settings live).
+
+## First-run setup
+
+The first time you open the app it walks you through:
+
+1. **Find your light boxes:** *Search* finds boxes that have LAN Control on (or add one by
+   IP address). Name each one (e.g. *Roof*, *Gable*, *Porch*), enter its number of bulbs
+   (shown in the Govee app) and put them in the order they run along the house. *Blink*
+   makes a box flash so you can tell them apart. Each box becomes a straight line in the
+   app; map the real shape later (below).
+2. **Where is the house:** *Use this phone's location* (needs an `https://` or `localhost`
+   page; the position is rounded to about 1 km), pick a nearby city, or type latitude and
+   longitude. Used only for sunset times and the sky colours, on your computer. Tick the box
+   to switch on at sunset and off at 11 pm.
+3. **Follow a team (optional):** for game-day celebrations and the holiday calendar's
+   game-day look.
+
+Run it again any time from **More → App**. Everything lives in one file,
+`govee_config.json`, next to `start.bat` (not in git).
+
+## Mapping your house
+
+Effects know where every bulb is, so ripples, sweeps, pictures, fire and snow follow the
+roofline. After setup each box is a straight line. To get the real shape:
+
+* **Camera mapping** (More → *Map the bulbs with your camera*): the lights blink a code,
+  you film them for about 30 seconds from the street, and the phone works out where every
+  bulb is. Nothing is uploaded. Undo restores the previous shape.
+* **Zones** are named parts of the house (for example *Porch* = bulbs 0-40 of *Roof*).
+  Layers can target a run or a zone. A layout file can set zones, hidden bulbs and shapes
+  in one go: see [`layouts/examples/gable-house.json`](layouts/examples/gable-house.json)
+  and import it with `python -m goveelights layout import <file>`. A layout made for other
+  boxes is mapped onto yours by run name, then by order; it never adds boxes that weren't
+  found on your network.
+* Preview any preset on a layout file without lights:
+  `python3 tools/preview.py christmas-tree --layout layouts/examples/gable-house.json`.
+
+## Presets on your house
+
+The built-in presets were designed on a house with runs and zones called *Peak* (a zigzag
+up the front gable), *Eaves*, *Accent*, *Porch*, *Lower roofline*, *Whole front gable* and
+so on. On your house, a layer aimed at a name you don't have plays on a stand-in:
+
+1. your own alias for it, from `"target_aliases"` in `govee_config.json`;
+2. otherwise a run or zone of the same role: *peak* (names with peak, gable, apex, tree,
+   zigzag), *roofline* (roof, eave, gutter, front), *porch* (porch, garage, door, entry),
+   *accent* (accent, window, trim);
+3. otherwise the whole house (or `"*"` in your aliases).
+
+```json
+"target_aliases": {"Peak": "Gable", "porch": "Front door", "Accent": ["Garage", "Shed"], "*": "all"}
+```
+
+The Tonight checklist (Shows) lists presets that aim at parts your layout doesn't have
+and where they play instead; `GET /api/targets` has the same list. Naming your runs or
+zones after the presets' names (or adding aliases) makes them look as designed.
+
+## Shows, playlists and the schedule
+
+* **Playlists** rotate presets with crossfades. **Shows** are cue lists with transitions
+  (wipe, rise, iris, flash...); **showtimes** start them automatically.
+* **Schedule** (Shows → Schedule): on at sunset (or a time), off at a time, with rules by
+  date, holiday (`thanksgiving+1`, `easter`...) or weekday, late-night dimming and a morning
+  window. Without a location the lights come on at the fixed on time.
+* **Holiday calendar:** one tap adds a ready-made year (Valentine's, St Patrick's,
+  Easter, July 4th, Halloween, Thanksgiving, Christmas, New Year, January winter scenes,
+  and NFL Sundays in the fall for the team you follow), after your own rules.
+* **Tonight** (top of Shows): tonight's plan and a checklist with one-tap fixes.
+
+## Remote access
+
+On home Wi-Fi the app needs no login. To use it away from home, set a password
+(More → Security) and put it behind Cloudflare Tunnel + Access or Tailscale: see
+[REMOTE.md](REMOTE.md) and [SECURITY.md](SECURITY.md). Never forward a router port to it.
+
+## Troubleshooting
+
+**No boxes found.** Check *LAN Control* is on for each box in the Govee app (it can take a
+minute after switching it on), and that the computer is on the same network (not a guest
+network, and not a different subnet behind a mesh or second router). Allow UDP 4002 in the
+firewall. With several network adapters (VPN, Hyper-V, Docker), start with
+`--bind-ip <this computer's LAN address>`. You can also add a box by IP address.
+
+**A box is found but nothing lights up.** Open diagnostics (More → *Open diagnostics*),
+tap *Check* on the box: "ignores commands" means it answers discovery but not control
+(seen on an H705E with older firmware). Power-cycle the box and try *Enable realtime*
+twice. Please report the model and firmware.
+
+**The phone page never loads.** The computer is dropping the connection: on Windows the
+network is probably marked *Public*. See *Windows firewall* below. Some routers isolate
+Wi-Fi clients (AP/client isolation); turn that off for your home network.
+
+**Sunset times are hours off.** The computer's time zone must be the house's time zone;
+the Tonight checklist warns when they don't match.
+
+**Effects stutter.** Lower the frame rate (More → Output; 20 fps is a good default) and
+keep the computer on a wired or strong Wi-Fi connection.
+
+**The Govee app shows the lights as busy.** The app holds the lights while it is live.
+Stop, or quit the app (Ctrl+C), and the lights go back to the Govee app.
+
+**The microphone (Listen) is greyed out.** Browsers only allow it on `https://` or
+`http://localhost` pages, so use the tunnel address from REMOTE.md.
+
+### Windows firewall
+
+If the phone page spins or "connection aborted", in an **admin** PowerShell:
+
+```powershell
+Get-NetConnectionProfile            # check NetworkCategory for the lights network
+New-NetFirewallRule -DisplayName "Govee tool (web)" -Direction Inbound -Protocol TCP -LocalPort 8080 -Action Allow -Profile Any
+New-NetFirewallRule -DisplayName "Govee tool (discovery)" -Direction Inbound -Protocol UDP -LocalPort 4002 -Action Allow -Profile Any
+```
+
+Or mark the network Private: `Set-NetConnectionProfile -InterfaceAlias "Wi-Fi" -NetworkCategory Private`
+(use the alias shown by `Get-NetConnectionProfile`).
+
+### Options
+
+`--port 8080`, `--bind-ip <LAN IP>`, `--config path.json`, `--log file`, `-v`.
+Ctrl+C (or closing the window) hands every box back to the Govee app; the app also has a
+*Release to Govee app* button.
+
+### Updating
+
+`git pull` (or download again and keep your `govee_config.json`, `govee_auth.json` and
+`user_presets/` folder). Your own presets and favourites live in `user_presets/` (not in
+git), so updates never touch them.
+
+If a pull stops with "Your local changes ... would be overwritten" in `presets/`: copy the
+`presets` folder somewhere safe, run `git checkout -- presets` and `git clean -f presets`,
+`git pull` again, then copy your own preset files from the copy into `user_presets/`.
+
+---
+
+# Feature tour
+
 
 `start.bat` (or `python -m goveelights`) starts the app. Open the printed address on your
 phone; the app is designed phone-first.
@@ -52,22 +240,21 @@ what is below what). They are plug-ins in `goveelights/effects_ext/`:
   slowly fill with snow (and melt if you want).
 * **Scrolling text** on the zigzag (5-row pixel font, anti-aliased scrolling). The source can
   be your own text, the clock, the live game score or "N days to Christmas".
-* **Sky at dusk:** the house faces east, so the sunset is behind the roof as seen from the
-  street. This colours the house like the sky at this moment (real sun position), then settles
-  into night colours. **Depth cascade** FX makes any layer fall from the roof to the porch or
+* **Sky at dusk:** colours the house like the sky at this moment (the real sun position at
+  your location), then settles into night colours. **Depth cascade** FX makes any layer fall from the roof to the porch or
   ripple from the apex. **Mirror at the apex** FX mirrors any layer around the gable peak.
 * **Evolve** (Play → ✨ Evolve next to what's playing, or as a schedule program): plays a preset and every few minutes crossfades into a fresh
   variation of it (small, related changes), so the house never looks quite the same twice.
 * **Smoothness:** motion is anti-aliased between bulbs, dark fades are dithered so they don't
   step, and each run has a colour-match trim (Colour match in settings, with a white test)
-  so the three boxes show the same white.
+  so all your boxes show the same white.
 
 * **Santa's sleigh:** a sleigh led by reindeer (red nose in front) flies over both gables
   with a glittering trail. **Dripping icicles:** drops slide down the slopes, fall off the
   eaves and splash on the porch line. **New Year's ball drop:** the ball leaves the apex
   star and drops down the zigzag with the last seconds as big digits, then bursts. Use
-  *Ball drop at midnight* (clock mode, lands at local midnight: the PC must be on Mountain
-  time) or *Ball drop (preview loop)* to try it.
+  *Ball drop at midnight* (clock mode, lands at local midnight: the computer's clock and time
+  zone must be right) or *Ball drop (preview loop)* to try it.
 
 * **Starry night:** a deep-blue sky with twinkling stars and shooting stars streaking along
   the gables. **Gift wrap:** the front is wrapped like a present: ribbon through the apex,
@@ -95,7 +282,7 @@ what is below what). They are plug-ins in `goveelights/effects_ext/`:
 * **Holiday calendar** (Shows → Schedule → *Use the holiday calendar*): one tap adds a
   ready-made year, placed after your own rules so yours still win:
   - Valentine's week, St Patrick's, Easter week, July 4th, the Halloween fortnight,
-    Thanksgiving and Broncos Sundays in the fall.
+    Thanksgiving, and game-day Sundays in the fall for the NFL team you follow.
   - The Christmas season, then Advent with the advent calendar.
   - Christmas Eve (with the *Santa's coming* show), Christmas Day, and New Year's Eve
     (on until 12:30 am, with the countdown show at 23:55), then New Year's Day.
@@ -112,11 +299,12 @@ what is below what). They are plug-ins in `goveelights/effects_ext/`:
   fireworks*.
 * *Haunted house* (ghosts with dark eyes drift across) and *Halloween pumpkin* (a
   jack-o'-lantern face with candle flicker).
-* *Thanksgiving harvest* and *Broncos game day*.
+* *Thanksgiving harvest* and a team game-day look (*Broncos game day*; copy it for your team).
 * *Winter elegance*, *Spring garden* and *Summer evening*.
 
 Preview any effect or preset on the house without lights:
-`python tools/preview.py christmas-tree --seconds 8 --out preview` writes `preview.html`/`.png`.
+`python tools/preview.py christmas-tree --seconds 8 --out preview` writes `preview.html`/`.png`
+(`--layout <file>` picks the layout).
 
 **Camera mapping** (More → Map the bulbs with your camera): the lights blink a binary ID
 code (10 bits + parity, each bit shown with its inverse, so ambient light and auto-exposure
@@ -215,63 +403,8 @@ microphone hears the music and the house keeps time with it:
 * `python3 tools/preview.py music-pulse --audio 120` previews a preset with a made-up
   120 BPM song.
 
-**Run in the background on Windows:** for always-on, `python -m goveelights install-service`
-(admin PowerShell; starts at boot with no login, restarts if it stops; it also adds
-firewall rules for UDP 4002 and the web port on Private networks, because the boot task
-never gets a firewall prompt). The lighter option is `python -m goveelights install-startup`, which adds a hidden launcher to your Startup folder. The app then starts at login with no window and logs to
-`goveelights.log`. `python -m goveelights uninstall-startup` removes it.
 
-## Run it (Windows)
-
-1. In the Govee app, turn on **LAN Control** for each of the 4 boxes.
-2. Install Python 3.10+ from python.org (tick "Add python to PATH").
-3. Double-click `start.bat`, or run `python -m goveelights` in this folder. (The Phase 1
-   tool alone: `python -m goveelights diag`.)
-4. When Windows Firewall asks, allow Python on **Private networks**. Discovery replies
-   arrive on UDP 4002, so blocking them means no devices show up. That answer covers
-   `python.exe` only: the hidden login launcher runs `pythonw.exe`, so if it finds no
-   devices add the port rules below.
-5. Open the URL it prints (e.g. `http://192.168.1.50:8080/`) on your phone, on the same network as the PC.
-
-### Updating (`git pull`)
-
-Your own presets and your favourites/tags live in `user_presets\` (not in git), so
-`git pull` updates the built-in `presets\` without touching them. Older versions saved
-them into `presets\`; the first start of this version moves them to `user_presets\`
-(and puts the built-ins back as shipped). Zones added to `layouts\house.json` are added
-to your config at start-up too; your own zones and box names are kept.
-
-If the pull that brings this version stops with "Your local changes ... would be
-overwritten" or "untracked working tree files would be overwritten" in `presets\`: copy
-the `presets` folder somewhere safe, run `git checkout -- presets` and `git clean -f presets`,
-`git pull` again, then copy your own (and changed) preset files from the copy into
-`user_presets\`.
-
-### Phone page never loads ("connection aborted" / spins for minutes)
-
-Windows is dropping the incoming connection. This happens when the network is marked
-**Public** (the default for a newly joined network). In an **admin** PowerShell:
-
-```powershell
-Get-NetConnectionProfile            # check NetworkCategory for the lights network
-New-NetFirewallRule -DisplayName "Govee tool (web)" -Direction Inbound -Protocol TCP -LocalPort 8080 -Action Allow -Profile Any
-New-NetFirewallRule -DisplayName "Govee tool (discovery)" -Direction Inbound -Protocol UDP -LocalPort 4002 -Action Allow -Profile Any
-```
-
-Or mark the network Private: `Set-NetConnectionProfile -InterfaceAlias "Wi-Fi" -NetworkCategory Private`
-(use the alias shown by `Get-NetConnectionProfile`). If it still fails, the router may have
-client/AP isolation turned on for that network, which blocks phone-to-PC traffic.
-
-Ctrl+C (or closing the window) sends the realtime-disable packet to every device, so the
-Govee app takes back control. The page also has a **Release to Govee app** button.
-
-Options: `--port 8080`, `--bind-ip <PC's LAN IP>` (use this if discovery finds nothing on a
-PC with several network adapters, e.g. VPN or Hyper-V), `--config path.json`, `-v`.
-
-All settings, names, bulb counts, landmarks and test results live in one file:
-`govee_config.json` (created on first run, next to `start.bat`).
-
-## Phase 1 test checklist (Settings → Open diagnostics, or `python -m goveelights diag`)
+## Diagnostics (More → Open diagnostics, or `python -m goveelights diag`)
 
 | Tab | What to do | What it tells us |
 |---|---|---|
@@ -282,7 +415,7 @@ All settings, names, bulb counts, landmarks and test results live in one file:
 | 4 FPS | Chase at 5/10/15/20/30 fps; rate each *smooth / stutter / freezes*. The page shows the actual send rate and the worst gap. | Max stable fps |
 | 5 Timeout | Send one frame, then silence; tap *It reverted now* when the lights go back. Try keepalive. | Whether a keepalive is needed, and how often |
 | 6 White | Compare RGB white, warm RGB, official colorwc 2700 K, and a speculative RGBW frame. | Whether the W diode is reachable in realtime |
-| Report | Free-text notes, then **Copy** the JSON report and paste it back. | Everything above, for Phase 2 |
+| Report | Free-text notes, then **Copy** the JSON report (paste it into a model report or bug report). | Everything above, for a bug report or model report |
 
 The count test relies on behaviour seen on an H706B (frames with more colours than bulbs
 are rejected and the run goes dark). If your boxes do something else, tap *Stayed old
@@ -292,21 +425,10 @@ walker instead (step until the bulb falls off the end: last lit index = count - 
 If razer does nothing, try the **Finger Sketch (ptReal)** fallback at the bottom of the
 Razer tab and note what happens.
 
-## Hardware findings (Phase 1, Nov 2026)
-
-| | H805A "Eaves" | H805A "Peak" | H705E |
-|---|---|---|---|
-| razer per-bulb realtime | works | works | no response to any command (Wi-Fi fw 1.01.17 vs 1.02.06 on the others) |
-| bulbs (one colour per bulb at n = count) | 96 (93-95 hidden) | 108 (6-row zigzag) | - |
-| frame with n > bulbs | ignored, previous frame stays | same | - |
-| frame rate | 10-25 fps smooth, 30 stutters | same | - |
-| realtime timeout | none seen in 45 s without frames | - | - |
-| white diode | not reachable: 4-byte frames are read as RGB triplets, so realtime is RGB only | same | - |
-
-## Phase 2: effects engine
+## Under the hood: the effects engine
 
 ```
-python -m goveelights layout import layouts/house.json   # once: geometry + hidden bulbs
+python -m goveelights layout import layouts/examples/gable-house.json   # geometry, hidden bulbs, zones
 python -m goveelights layout                              # show the virtual strip
 python -m goveelights effects -v                          # list effects and their params
 python -m goveelights play candy-cane                     # a preset from presets/
@@ -320,17 +442,17 @@ Ctrl+C stops playback and hands the lights back to the Govee app.
 * **Virtual strip:** all runs end to end (config `order`, `reversed`, `hidden`), so effects
   travel continuously around the roofline. Runs without a confirmed `pixel_count` are left out.
 * **Geometry:** each run's `geometry` is `[[index, x, y], ...]` knots in bulb-spacing units,
-  showing the house unrolled as seen from outside. `layouts/house.json` holds an
-  approximate shape built from the landmarks. Phase 3's preview will make it editable.
+  showing the house unrolled as seen from outside. camera mapping fills it in; layout
+  files (`layouts/examples/`) can set it too.
 * **Effects** (`goveelights/effects.py`) are pure functions `(t, pixel, params) -> colour`
   (motion reads the engine-integrated distance `P["_travel"]`). FX (`fx.py`) are frame
   processors with state; LFOs live in `modulation.py`; palettes in `palettes.py`. Zones
-  are in the config (`zones`), imported from `layouts/house.json`. Original list:
+  are in the config (`zones`), set by camera mapping or imported from a layout file. Original list:
   solid, chase, comet, wipe, wave, twinkle, sparkle, candy_cane, fire, breathe, rainbow,
   gradient, alternate. Positional effects take `axis`: `strip`, `run`, `x` or `y`. With `y`,
   an effect works bottom to top across the zigzag (fills, rising fire).
 * **Scenes/presets** (`presets/*.json`) stack layers with blend modes `normal`, `add`,
-  `multiply`, `screen`, `lighten` and `mask`, plus `opacity` and `target` (a run name).
+  `multiply`, `screen`, `lighten` and `mask`, plus `opacity` and `target` (a run or zone name; see *Presets on your house*).
 * **Output** is behind `Output.send_frame(run_id, pixels)` (`goveelights/output.py`), so a
   WLED output can replace the Govee razer one without touching effects. Unchanged frames
   are resent once a second, so the lights recover if a UDP packet is lost.
@@ -366,7 +488,7 @@ goveelights/protocol.py     packet builders (pure, unit-tested)
 goveelights/lan.py          UDP discovery / send / devStatus
 goveelights/streamer.py     per-device realtime streamer (frames, fps, keepalive, stats)
 goveelights/config.py       single JSON config file
-goveelights/diag_server.py  Phase 1 web server + API
+goveelights/diag_server.py  diagnostics web server + API
 goveelights/layout.py       virtual strip + geometry
 goveelights/effects.py      effect library (pure functions + param schemas)
 goveelights/scene.py        layers (source → FX chain → blend), modulation, palettes, master
@@ -380,8 +502,19 @@ goveelights/controller.py   app state: presets, playlists, schedule, live/previe
 goveelights/schedule.py     sunset maths + schedule rules
 goveelights/app_server.py   creator app server (API, preview stream)
 goveelights/web/app.html    creator app page
-layouts/house.json          this house's geometry
+layouts/examples/            example layout files (geometry + zones)
 presets/                    built-in presets (yours go in user_presets/, not in git)
 goveelights/web/diag.html   phone page
-tools/fake_govee.py         device simulator
+tools/fake_govee.py         device simulator (tools/fake_wled.py: a WLED one)
+tools/preview.py            render a preset on a layout to HTML/PNG
+goveelights/legacy_defaults.py  defaults older versions relied on (kept for existing configs)
+goveelights/firstrun.py     first-run setup (straight-line layout, city list)
+docs/                       running as a service, examples
 ```
+
+## Contributing, security, licence
+
+* Model reports, bugs and presets are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
+* Security issues: see [SECURITY.md](SECURITY.md).
+* MIT licence ([LICENSE](LICENSE)); third-party parts are listed in
+  [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

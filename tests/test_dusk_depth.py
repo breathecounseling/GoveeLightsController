@@ -10,7 +10,7 @@ from goveelights.scene import Scene
 from goveelights.schedule import sun_times
 from test_rack import house
 
-LAT, LON = 40.3764, -104.6922
+LAT, LON = 39.74, -104.99                     # Denver, CO
 
 
 def valid(test, cols, n):

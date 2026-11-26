@@ -23,7 +23,7 @@ from goveelights.controller import PresetStore, migrate_presets  # noqa: E402
 from goveelights.layout import Layout  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
-HOUSE = ROOT / "layouts" / "house.json"
+HOUSE = ROOT / "layouts" / "examples" / "gable-house.json"
 SCENE = {"name": "Mine", "layers": [{"effect": "solid", "params": {"color": "#ff0000"}}]}
 MACS = list(json.loads(HOUSE.read_text())["devices"])
 
@@ -150,7 +150,7 @@ class MigrationTests(unittest.TestCase):
 class HouseLayoutMergeTests(unittest.TestCase):
     def cfg(self, zones=None, names=None):
         c = Config(_tmp(self) / "c.json")
-        c.import_layout(HOUSE)
+        c.import_layout(HOUSE, create_missing=True)
         if zones is not None:
             c.data["zones"] = zones
         for mac, nm in (names or {}).items():
@@ -203,7 +203,7 @@ class HouseLayoutMergeTests(unittest.TestCase):
             c = Config(_tmp(self) / "c.json")
             for k, mac in enumerate(MACS):              # Phase 1 discovery first
                 c.upsert_discovered({"device": mac, "sku": "H805A", "ip": f"10.0.0.{k + 1}"})
-            self.assertEqual(c.devices[MACS[0]]["name"], "H805A 2E80")
+            self.assertEqual(c.devices[MACS[0]]["name"], "H805A " + MACS[0].replace(":", "")[-4:])
             if how == "import":
                 c.import_layout(HOUSE)
             else:
@@ -254,7 +254,7 @@ class TonightUpgradeChecks(_Denver, unittest.TestCase):
 
     def test_zone_parts_naming_a_missing_box_are_reported(self):
         r = Rig(self, self.NOW.astimezone(), {"schedule": SCH})
-        r.ctl.cfg.devices[MACS[2]]["name"] = "H805A 4404"
+        r.ctl.cfg.devices[MACS[2]]["name"] = "H805A " + MACS[2].replace(":", "")[-4:]
         r.ctl.build_engine()
         c = self.checks(r)
         self.assertIn("Accent", c["zones"]["detail"])
@@ -279,7 +279,7 @@ class OldConfigLeftovers(unittest.TestCase):
             c = Config(p)
         self.assertNotIn("only_when_on", c.data["visitor"])
         self.assertEqual(c.data["visitor"]["seconds"], 30)
-        self.assertIn("only_when_on", lg.output[0])
+        self.assertIn("only_when_on", lg.output[-1])
         p.write_text(json.dumps({"visitor": {"only_when_on": True}}))
         self.assertNotIn("only_when_on", Config(p).data["visitor"])
 

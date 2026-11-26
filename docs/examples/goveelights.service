@@ -1,0 +1,23 @@
+# systemd unit for GoveeLightsController (Linux). See docs/SERVICE.md.
+# 1. Change User, WorkingDirectory and ExecStart to your user and folder.
+# 2. sudo cp docs/examples/goveelights.service /etc/systemd/system/
+# 3. sudo systemctl daemon-reload && sudo systemctl enable --now goveelights
+# Logs: journalctl -u goveelights -f   (and goveelights.log in the folder)
+[Unit]
+Description=GoveeLightsController (local effects for Govee lights)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/GoveeLightsController
+ExecStart=/usr/bin/python3 -m goveelights serve --log /home/pi/GoveeLightsController/goveelights.log
+Restart=on-failure
+RestartSec=30
+# Ctrl+C equivalent: the app hands the lights back to the Govee app on SIGTERM
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

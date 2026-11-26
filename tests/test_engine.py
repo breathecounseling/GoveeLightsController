@@ -10,7 +10,7 @@ from goveelights.scene import BLENDS, Layer, Scene, blend
 
 
 def house():
-    data = json.load(open("layouts/house.json"))["devices"]
+    data = json.load(open("layouts/examples/gable-house.json"))["devices"]
     runs = [Run(mac=m, name=d["name"], count=d["pixel_count"], reverse=d["reversed"],
                 hidden=set(d["hidden"]), geometry=d["geometry"]) for m, d in data.items()]
     return Layout(sorted(runs, key=lambda r: data[r.mac]["order"]))

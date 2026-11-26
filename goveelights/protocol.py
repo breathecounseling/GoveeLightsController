@@ -16,7 +16,8 @@ Undocumented, community reverse-engineered commands:
 
 * ``ptReal`` - raw 20-byte BLE-style packets (19 bytes + XOR). Finger Sketch
   framing ported from https://github.com/rileysheehan/homebridge-govee-pixel-zones
-  (MIT licence, src/protocol/packet.ts and finger-sketch.ts).
+  (MIT licence, Copyright (c) 2026 Riley Sheehan; its protocol packet and Finger
+  Sketch code). See THIRD_PARTY_NOTICES.md for the licence text.
 """
 from __future__ import annotations
 

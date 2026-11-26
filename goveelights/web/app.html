@@ -226,6 +226,14 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
 .rbadge{font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#93c5fd;background:#132033;border:1px solid #1e3a5f;border-radius:99px;padding:2px 7px;align-self:center;justify-self:start}
 .rule.calrule{border-color:#1e3a5f}
 .rule.off{opacity:.55}
+#setup{position:fixed;inset:0;z-index:50;background:var(--bg);overflow:auto;display:none;padding:14px 16px calc(24px + env(safe-area-inset-bottom))}
+#setup.on{display:block}
+#setup .wrap{max-width:640px;margin:0 auto}
+#setup h2{margin:4px 0 6px;font-size:20px}
+#setup h3{margin:0 0 6px;font-size:16px}
+.subox{border:1px solid var(--line);border-radius:12px;padding:8px;margin-bottom:8px;background:var(--p2)}
+.subox .meta{font-size:12px;color:var(--dim);margin-top:6px}
+.disc{color:var(--dim);font-size:11.5px;line-height:1.4;margin:16px 4px 8px;text-align:center}
 </style>
 </head>
 <body>
@@ -376,7 +384,7 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
         <select id="mnOff" style="width:auto" onchange="mnUI()"><option value="sunrise">sunrise</option><option value="time">a time</option></select><input type="time" id="mnOffT" style="width:auto;min-width:110px"></div>
       <div class="row" style="margin-top:10px"><button class="pri grow" onclick="saveSchedule()">Save schedule</button></div>
       <details style="margin-top:10px"><summary class="dim">Location (for sunset)</summary>
-        <div class="row" style="margin-top:6px"><input id="scLat" type="number" step="0.0001"><input id="scLon" type="number" step="0.0001"></div></details>
+        <div class="row" style="margin-top:6px"><input id="scLat" type="number" step="0.0001" placeholder="Latitude"><input id="scLon" type="number" step="0.0001" placeholder="Longitude (west is minus)"></div></details>
     </div>
   </div>
 </section>
@@ -387,7 +395,7 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
     <h2>Devices</h2><div id="devInfo" class="kv"></div>
     <div class="grp">Add a WLED controller</div>
     <p class="help">For DIY pixels (WS2815 strip, WS2811 bullet nodes, WS2812B fairy strings) on an ESP32 running WLED. Type its IP address (shown in the WLED app). Its bulb count is read automatically; then use camera mapping to place it on the house.</p>
-    <div class="row"><input type="text" id="wledIp" placeholder="192.168.14.50" inputmode="decimal" style="flex:1"><input type="text" id="wledName" placeholder="Name (e.g. Tree)" style="flex:1"><button onclick="addWled()">Add</button></div>
+    <div class="row"><input type="text" id="wledIp" placeholder="192.168.1.50" inputmode="decimal" style="flex:1"><input type="text" id="wledName" placeholder="Name (e.g. Tree)" style="flex:1"><button onclick="addWled()">Add</button></div>
     <p class="help">Bulb counts, landmarks, identify: diagnostics (pauses effects while open).</p>
     <a href="/diag"><button>Open diagnostics</button></a>
   </div>
@@ -423,9 +431,11 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
   </div>
   <div class="card">
     <h2>App</h2>
-    <p class="help">Run at login, hidden: <code>python -m goveelights install-startup</code> on the PC.</p>
-    <button class="bad" onclick="if(confirm('Stop the app? Lights go back to the Govee app.'))post('quit').then(()=>toast('Stopped'))">Quit app</button>
+    <p class="help">Run in the background: <code>python -m goveelights install-service</code> on a Windows PC; on macOS or Linux see docs/SERVICE.md.</p>
+    <div class="row"><button class="grow" onclick="openSetup()">Run first-time setup again</button>
+    <button class="bad" onclick="if(confirm('Stop the app? Lights go back to the Govee app.'))post('quit').then(()=>toast('Stopped'))">Quit app</button></div>
   </div>
+  <p class="disc" id="disclaimer">Unofficial project, not affiliated with or endorsed by Govee. "Govee" is a trademark of its owner, used only to name the lights this works with. It uses undocumented LAN commands that may change or stop working with a firmware update. Use at your own risk. MIT licence.</p>
 </section>
 </main>
 
@@ -435,6 +445,34 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
   <button data-t="shows"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Shows</button>
   <button data-t="more"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>More</button>
 </nav>
+<div id="setup" role="dialog" aria-modal="true" aria-labelledby="suTitle"><div class="wrap">
+  <h2 id="suTitle">Set up your lights</h2>
+  <p class="help">A few quick steps. You can change all of it later.</p>
+  <div class="card">
+    <h3>1. Find your light boxes</h3>
+    <p class="help">In the Govee app, turn on <b>LAN Control</b> for each box, and keep this PC on the same Wi-Fi. Then search. Give each box a name and its number of bulbs (the Govee app shows it), in the order they run along the house.</p>
+    <div class="row" style="margin-bottom:8px"><button class="pri grow" id="suScan" onclick="setupScan()">Search for boxes</button></div>
+    <div id="suBoxes"></div>
+    <details><summary class="dim">Not found? Add one by its IP address</summary>
+      <div class="row"><input type="text" id="suIp" placeholder="e.g. 192.168.1.50" inputmode="decimal" class="grow"><button onclick="setupAddIp()">Add</button></div></details>
+  </div>
+  <div class="card">
+    <h3>2. Where is the house?</h3>
+    <p class="help">Only used to work out sunset and the sky colours, on this PC. Two decimals (about 1 km) is plenty.</p>
+    <div class="row wrap" style="margin-bottom:8px"><button id="suGeo" class="grow" onclick="setupGeo()">Use this phone's location</button>
+      <select id="suCity" style="flex:1 1 100%" onchange="setupCity(this.value)"><option value="">…or pick a nearby city</option></select></div>
+    <div class="row"><input id="suLat" type="number" step="0.01" min="-90" max="90" placeholder="Latitude (e.g. 40.71)" inputmode="decimal"><input id="suLon" type="number" step="0.01" min="-180" max="180" placeholder="Longitude (west is minus)" inputmode="decimal"></div>
+    <p class="help" id="suGeoMsg"></p>
+    <label class="row"><input type="checkbox" id="suSched" checked> <span>Switch the lights on at sunset and off at 11 pm by themselves</span></label>
+  </div>
+  <div class="card">
+    <h3>3. Follow a team (optional)</h3>
+    <p class="help">Game-day celebrations and a game-day look in the holiday calendar. Leave empty to skip.</p>
+    <div class="row"><select id="suLeague" class="grow"></select><input type="text" id="suTeam" placeholder="e.g. KC" maxlength="6" style="width:100px"></div>
+  </div>
+  <div class="row"><button class="ghost" onclick="closeSetup(true)">Skip for now</button><span class="grow"></span><button class="pri" id="suDone" onclick="setupFinish()">Finish setup</button></div>
+  <p class="disc">Unofficial project, not affiliated with or endorsed by Govee. "Govee" is a trademark of its owner. It uses undocumented LAN commands; use at your own risk.</p>
+</div></div>
 <div class="scrim" id="scrim" onclick="closeSheet()"></div>
 <div class="sheet" id="sheet"><div class="grab"></div><h3><span id="sheetTitle"></span><button class="sm ghost" onclick="closeSheet()">Done</button></h3><div id="sheetBody"></div></div>
 <div id="toast"></div>
@@ -1403,7 +1441,7 @@ const progVal = v => !v ? null : v.startsWith('playlist:') ? {playlist:v.slice(9
 /* The program for a select value, keeping the old object (and extra keys such as an evolve's minutes) when it's unchanged. */
 const keepProg = (old, v) => old && progKey(old) === v ? old : progVal(v);
 function schedForm(){ const s = SCH; $('scEn').checked = !!s.enabled; $('scOn').value = s.on||'sunset'; $('scOffset').value = s.on_offset_min??0; $('scOnTime').value = s.on_time||'17:00'; $('scOff').value = s.off_time||'23:00';
-  $('scDefault').innerHTML = progOpts(s.default); $('scLat').value = s.lat??40.3764; $('scLon').value = s.lon??-104.6922; drawRules(); scUI();
+  $('scDefault').innerHTML = progOpts(s.default); $('scLat').value = s.lat??''; $('scLon').value = s.lon??''; drawRules(); scUI();
   const dm = s.dim||{}, mn = s.morning||{}; $('dmEn').checked = !!dm.enabled; $('dmFrom').value = dm.from||'22:00'; $('dmLvl').value = Math.round((dm.level??0.5)*100);
   $('mnEn').checked = !!mn.enabled; $('mnOn').value = mn.on_time||'06:00'; $('mnOff').value = mn.off||'sunrise'; $('mnOffT').value = mn.off_time||'07:30'; mnUI();
   $('scDusk').value = Math.max(0, +s.dusk_intro_minutes || 0) }
@@ -1426,7 +1464,7 @@ const DATE_RE = /^(\d{1,2}-\d{1,2}|(thanksgiving|easter|mothers-day|fathers-day|
 async function saveSchedule(){ for (const r of SCH.rules){ if ((r.from || r.to) && (!DATE_RE.test(r.from||'') || !DATE_RE.test(r.to||''))) return toast('Dates: MM-DD or a holiday like thanksgiving+1'); if (!r.from && !r.to && !(r.days||[]).length) return toast('Give each rule dates or days') }
   SCH.dim = {enabled: $('dmEn').checked, from: $('dmFrom').value || '22:00', level: (+$('dmLvl').value || 50)/100, fade_min: (SCH.dim||{}).fade_min || 30};
   SCH.morning = {...(SCH.morning||{}), enabled: $('mnEn').checked, on_time: $('mnOn').value || '06:00', off: $('mnOff').value, off_time: $('mnOffT').value || '07:30'};
-  Object.assign(SCH, {enabled:$('scEn').checked, on:$('scOn').value, on_offset_min:+$('scOffset').value, on_time:$('scOnTime').value, off_time:$('scOff').value, default:keepProg(SCH.default, $('scDefault').value), dusk_intro_minutes: Math.max(0, Math.min(120, Math.round(+$('scDusk').value || 0))), lat:+$('scLat').value, lon:+$('scLon').value});
+  Object.assign(SCH, {enabled:$('scEn').checked, on:$('scOn').value, on_offset_min:+$('scOffset').value, on_time:$('scOnTime').value, off_time:$('scOff').value, default:keepProg(SCH.default, $('scDefault').value), dusk_intro_minutes: Math.max(0, Math.min(120, Math.round(+$('scDusk').value || 0))), lat:$('scLat').value === '' ? null : +$('scLat').value, lon:$('scLon').value === '' ? null : +$('scLon').value});
   if (await post('schedule',{schedule:SCH})){ toast('Schedule saved'); setTimeout(refresh,300); loadTonight() } }
 const tfmt = iso => iso ? new Date(iso).toLocaleString([], {weekday:'short', hour:'numeric', minute:'2-digit'}) : '';
 function progName(p){ if (!p) return 'lights off'; if (p.playlist) return 'playlist '+p.playlist; if (p.evolve){ const f = PRESETS.find(x=>x.id===p.evolve); return (f ? f.name : p.evolve) + ' (evolving)' } const f = PRESETS.find(x=>x.id===p.preset); return f ? f.name : p.preset }
@@ -1749,11 +1787,11 @@ function drawGame(){
   $('gSbSecs').oninput = e => { g.scoreboard_seconds = +e.target.value; sbS() };
   const box = $('gTeams'); box.innerHTML = '';
   (g.teams ||= []).forEach((t, k) => { const el = h(`<div class="row" style="margin-bottom:6px"><select class="grow">${Object.entries(EXTRAS.leagues).map(([v,l]) => opt(v, l, v===t.league)).join('')}</select>
-      <input type="text" value="${esc(t.team)}" style="width:90px" placeholder="DEN" maxlength="6"><button class="sm bad">✕</button></div>`);
+      <input type="text" value="${esc(t.team)}" style="width:90px" placeholder="e.g. KC" maxlength="6"><button class="sm bad">✕</button></div>`);
     el.querySelector('select').onchange = e => t.league = e.target.value; el.querySelector('input').onchange = e => t.team = e.target.value.trim().toUpperCase();
     el.querySelector('button').onclick = () => { g.teams.splice(k, 1); drawGame() }; box.appendChild(el) });
 }
-function addTeam(){ EXTRAS.game.teams.push({league:'nba', team:'DEN'}); drawGame() }
+function addTeam(){ EXTRAS.game.teams.push({league:'nfl', team:''}); drawGame() }
 function drawWeather(){
   const w = EXTRAS.weather; $('wEn').checked = !!w.enabled; $('wEn').onchange = e => w.enabled = e.target.checked;
   const box = $('wKinds'); box.innerHTML = '';
@@ -1984,6 +2022,95 @@ async function security(){
   $('secForm').innerHTML = ''; $('secForm').appendChild(f);
 }
 
+// ------------------------------------------------------------- first-run setup
+let SU = null, suBlinked = false;
+async function openSetup(st){
+  SU = st || await get('setup'); $('setup').classList.add('on'); document.body.style.overflow = 'hidden';
+  const leagues = (EXTRAS && EXTRAS.leagues) || {nfl: 'NFL'};
+  const t0 = (SU.teams || [])[0] || {};
+  $('suLeague').innerHTML = Object.entries(leagues).map(([v, l]) => opt(v, l, v === (t0.league || 'nfl'))).join('');
+  $('suTeam').value = t0.team || '';
+  $('suCity').innerHTML = '<option value="">…or pick a nearby city</option>' + SU.cities.map((c, k) => `<option value="${k}">${esc(c.name)}</option>`).join('');
+  if (SU.location){ $('suLat').value = SU.location[0]; $('suLon').value = SU.location[1] }
+  $('suSched').checked = true;
+  drawSetup();
+}
+function closeSetup(skip){
+  $('setup').classList.remove('on'); document.body.style.overflow = '';
+  if (skip) { store.set('setupSkip', '1'); toast('Setup is under More → App whenever you want it') }
+  if (suBlinked) { suBlinked = false; post('diag/exit') }
+}
+function drawSetup(){
+  const box = $('suBoxes'); box.innerHTML = '';
+  if (!SU.devices.length) { box.innerHTML = '<p class="help">No boxes found yet. Tap <b>Search for boxes</b> (it takes a few seconds). Nothing? Check LAN Control is on, the PC is on the same Wi-Fi, and the firewall allows Python (README: Troubleshooting).</p>'; return }
+  SU.devices.forEach((d, k) => {
+    const el = h(`<div class="subox"><div class="row">
+      <input type="text" value="${esc(d.name)}" maxlength="40" class="grow" aria-label="Name of box ${k + 1}">
+      <input type="number" min="1" max="255" value="${d.pixel_count || ''}" placeholder="bulbs" style="width:86px" inputmode="numeric" aria-label="Bulbs on box ${k + 1}"></div>
+      <div class="row meta"><span class="grow">${esc(d.sku || d.kind)} · ${esc(d.ip || '')}${d.mapped ? ' · mapped' : ''}</span>
+      ${k ? '<button class="sm" data-a="up" aria-label="Move up">↑</button>' : ''}<button class="sm" data-a="blink">Blink</button></div></div>`);
+    const [nm, ct] = el.querySelectorAll('input');
+    nm.oninput = () => d.name = nm.value; ct.oninput = () => d.pixel_count = +ct.value || null;
+    el.querySelectorAll('button').forEach(b => b.onclick = async () => {
+      if (b.dataset.a === 'up') { SU.devices.splice(k - 1, 0, SU.devices.splice(k, 1)[0]); drawSetup() }
+      else if (await post('diag/identify', {mac: d.mac})) { suBlinked = true; toast(d.name + ' is blinking') }
+    });
+    box.appendChild(el);
+  });
+}
+async function setupRefresh(){
+  const st = await get('setup').catch(() => null); if (!st) return;
+  const mine = {}; SU.devices.forEach(d => mine[d.mac] = d);
+  const order = SU.devices.map(d => d.mac);
+  st.devices.sort((a, b) => (order.indexOf(a.mac) + 1 || 999) - (order.indexOf(b.mac) + 1 || 999));
+  SU.devices = st.devices.map(d => mine[d.mac] ? {...d, name: mine[d.mac].name, pixel_count: mine[d.mac].pixel_count} : d);
+  drawSetup();
+}
+async function setupScan(){
+  const b = $('suScan'); b.disabled = true; b.textContent = 'Searching…';
+  await post('diag/scan');
+  for (let k = 0; k < 4; k++) { await new Promise(r => setTimeout(r, 1200)); await setupRefresh() }
+  b.disabled = false; b.textContent = SU.devices.length ? `Found ${SU.devices.length}. Search again` : 'Search again';
+}
+async function setupAddIp(){ const ip = $('suIp').value.trim(); if (!ip) return toast('Type the IP address');
+  if (await post('diag/add_ip', {ip})) { toast('Asking ' + ip + '…'); setTimeout(setupRefresh, 1500); setTimeout(setupRefresh, 3500) } }
+const round2 = v => Math.round(v * 100) / 100;
+function setupCity(k){ const c = SU.cities[+k]; if (!c) return; $('suLat').value = c.lat; $('suLon').value = c.lon; $('suGeoMsg').textContent = c.name }
+function setupGeo(){
+  const msg = $('suGeoMsg');
+  if (!navigator.geolocation || !window.isSecureContext) { msg.textContent = 'This page is not on https (or localhost), so the browser won\'t share the location. Pick a city or type it in.'; return }
+  msg.textContent = 'Asking the phone…';
+  navigator.geolocation.getCurrentPosition(p => { $('suLat').value = round2(p.coords.latitude); $('suLon').value = round2(p.coords.longitude); msg.textContent = 'Got it (rounded to about 1 km).' },
+    e => msg.textContent = 'No location (' + (e.message || 'refused') + '). Pick a city or type it in.', {timeout: 15000, maximumAge: 600000});
+}
+async function setupFinish(){
+  const boxes = SU.devices.filter(d => d.pixel_count).map(d => ({mac: d.mac, name: (d.name || '').trim(), pixel_count: d.pixel_count}));
+  if (!SU.has_layout && !boxes.length) return toast(SU.devices.length ? 'Give at least one box its number of bulbs' : 'Search for your boxes first');
+  if (boxes.some(b => !b.name)) return toast('Give every box a name');
+  if (boxes.some(b => b.pixel_count < 1 || b.pixel_count > 255)) return toast('Bulb counts are 1 to 255');
+  const la = $('suLat').value, lo = $('suLon').value;
+  if ((la === '') !== (lo === '')) return toast('Enter both latitude and longitude');
+  if (la !== '' && (Math.abs(+la) > 90 || Math.abs(+lo) > 180)) return toast('Latitude is -90..90, longitude -180..180');
+  $('suDone').disabled = true;
+  try {
+    if (boxes.length && !await post('setup/layout', {boxes})) return;
+    const sch = {};
+    if (la !== '') Object.assign(sch, {lat: round2(+la), lon: round2(+lo)});
+    if ($('suSched').checked && (la !== '' || SU.location)) Object.assign(sch, {enabled: true, on: 'sunset'});
+    if (Object.keys(sch).length && !await post('schedule', {schedule: sch})) return;
+    const team = $('suTeam').value.trim().toUpperCase();
+    if (team && EXTRAS && EXTRAS.game) {
+      const t = {league: $('suLeague').value, team};
+      if (!(EXTRAS.game.teams ||= []).some(x => x.league === t.league && x.team === t.team)) EXTRAS.game.teams.push(t);
+      if (!await post('game', {value: EXTRAS.game})) return;
+    }
+    store.set('setupSkip', '');
+    closeSetup(false);
+    SCH = await get('schedule'); schedForm(); await reloadLayout(); await loadExtras(); refresh();
+    toast('All set. Try a preset on Play!');
+  } finally { $('suDone').disabled = false }
+}
+
 // ------------------------------------------------------------- boot
 (async function boot(){
   const e = await get('effects'); e.effects.forEach(x => EFX[x.name] = x); e.fx.forEach(x => FXD[x.name] = x); BLENDS = e.blends; SHAPES = e.shapes; BLEND_INFO = e.blend_info || {}; GROUP_ORDER = e.group_order || [];
@@ -1992,6 +2119,8 @@ async function security(){
   drawPad(); await loadPresets(); plSelect(); schedForm(); await loadExtras(); await refresh(); setInterval(refresh, 2000); security();
   const noMic = listenSupport(); if (noMic){ listenExplain(noMic); $('listenBtn').setAttribute('aria-disabled', 'true'); $('listenBtn').style.opacity = .55 }
   const t = store.get('tab', 'play'); if (t !== 'play') tabTo(t);
+  const su = await get('setup').catch(() => null);           // first run: no boxes or no location yet
+  if (su && su.needed && store.get('setupSkip', '') !== '1') openSetup(su);
 })();
 </script>
 </body>

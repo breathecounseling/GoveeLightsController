@@ -70,10 +70,29 @@ _RULES = [
      "about": "red, white and blue"},
     {"name": "Halloween fortnight", "from": "10-18", "to": "10-31", "program": {"playlist": "Holiday: Halloween"},
      "about": "pumpkins, ghouls and the spooky tree"},
-    {"name": "Broncos Sundays", "from": "labor-day+6", "to": "thanksgiving-1", "days": [6],
-     "program": {"evolve": ["broncos-game-day", "game-day", "text-go-broncos"], "minutes": 6},
-     "about": "orange and blue on NFL Sundays in the fall"},
+    {"team": True, "from": "labor-day+6", "to": "thanksgiving-1", "days": [6]},     # see _team_rule
 ]
+
+# The game-day rule follows the NFL team you follow (Shows -> Game day). Teams with their
+# own look ship presets for it; any other team gets the generic game-day look.
+TEAM_LOOKS = {
+    "DEN": {"name": "Broncos Sundays", "evolve": ["broncos-game-day", "game-day", "text-go-broncos"],
+            "about": "orange and blue on NFL Sundays in the fall"},
+}
+
+
+def _team_rule(spec: dict, teams) -> tuple[dict | None, str]:
+    """The NFL-Sundays rule for the first NFL team followed, or (None, why not)."""
+    team = next((str(t.get("team") or "").strip().upper() for t in teams or []
+                 if isinstance(t, dict) and str(t.get("league") or "").lower() == "nfl"
+                 and str(t.get("team") or "").strip()), "")
+    if not team:
+        return None, "follow an NFL team (Shows → Game day) to light up its Sundays"
+    look = TEAM_LOOKS.get(team) or {"name": f"{team} Sundays", "evolve": ["game-day"],
+                                    "about": "game-day colours on NFL Sundays in the fall"}
+    r = {k: v for k, v in spec.items() if k != "team"}
+    return {"name": look["name"], **r, "program": {"evolve": list(look["evolve"]), "minutes": 6},
+            "about": look["about"]}, ""
 
 # Built-in shows the calendar schedules (a show that isn't there is skipped with a note).
 _SHOWTIMES = [
@@ -108,14 +127,20 @@ def _playlist(name: str, ids: set[str]) -> dict | None:
     return {"items": out, "fade": fade, "shuffle": False, TAG: True}
 
 
-def build(preset_ids, show_names) -> dict:
+def build(preset_ids, show_names, teams=()) -> dict:
     """The calendar for the installed presets and shows:
     {"rules": [...], "playlists": {...}, "showtimes": [...], "skipped": [{"name", "note"}]}.
-    Rules and showtimes carry "about" (a one-line description) only in "notes"."""
+    Rules and showtimes carry "about" (a one-line description) only in "notes".
+    teams: the game settings' teams; the first NFL one gets its Sundays."""
     ids, shows = set(preset_ids), set(show_names)
     playlists: dict[str, dict] = {}
     rules, notes, skipped = [], {}, []
     for spec in _RULES:
+        if spec.get("team"):
+            spec, why = _team_rule(spec, teams)
+            if spec is None:
+                skipped.append({"name": "Game-day Sundays", "note": why})
+                continue
         p = spec["program"]
         prog = None
         if "playlist" in p:

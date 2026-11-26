@@ -10,7 +10,7 @@ off): when the evening starts around sunset, the controller first plays the live
 (effect "dusk") for that many minutes, then crossfades into the evening's program.
 {
   "enabled": true,
-  "lat": 40.3764, "lon": -104.6922,          # Evans, CO
+  "lat": 40.71, "lon": -74.01,                # the house, e.g. New York (null until set: on falls back to on_time)
   "on": "sunset" | "time", "on_offset_min": 0, "on_time": "17:00",
   "off_time": "23:00",                         # may be after midnight, e.g. "01:00"
   "default": {"preset": "warm-white"} | {"playlist": "..."} | null,
@@ -55,15 +55,34 @@ def _local(dt_naive: datetime) -> datetime:
     return dt_naive.astimezone()      # attach the PC's local zone
 
 
+def location(sch: dict | None) -> tuple[float, float] | None:
+    """(lat, lon) of the house from the schedule settings, or None when it isn't set yet
+    (a new install before first-run setup) or isn't a usable number."""
+    try:
+        lat, lon = (sch or {}).get("lat"), (sch or {}).get("lon")
+        if lat is None or lon is None or isinstance(lat, bool) or isinstance(lon, bool):
+            return None
+        lat, lon = float(lat), float(lon)
+    except (TypeError, ValueError, AttributeError):
+        return None
+    if not (math.isfinite(lat) and math.isfinite(lon) and -90 <= lat <= 90 and -180 <= lon <= 180):
+        return None
+    return lat, lon
+
+
 def window(d: date, sch: dict) -> tuple[datetime, datetime]:
     """(on, off) local aware datetimes for the evening that starts on date d.
-    A matching rule may override on_time / off_time (e.g. stay on later at weekends)."""
+    A matching rule may override on_time / off_time (e.g. stay on later at weekends).
+    'sunset' with no location set yet uses the fixed on_time."""
     r = next((r for r in sch.get("rules", []) if rule_matches(r, d) and (r.get("on_time") or r.get("off_time"))), None)
     if r:
         sch = {**sch, **({"on": "time", "on_time": r["on_time"]} if r.get("on_time") else {}),
                **({"off_time": r["off_time"]} if r.get("off_time") else {})}
-    if sch.get("on", "sunset") == "sunset":
-        _, sunset = sun_times(d, float(sch.get("lat", 40.3764)), float(sch.get("lon", -104.6922)))
+    where = location(sch)
+    if sch.get("on", "sunset") == "sunset" and where is None:
+        on = _local(datetime.combine(d, _hm(sch.get("on_time", "17:00"))))
+    elif sch.get("on", "sunset") == "sunset":
+        _, sunset = sun_times(d, *where)
         on = (sunset or datetime.combine(d, time(17, 0)).astimezone()).astimezone()
         on += timedelta(minutes=float(sch.get("on_offset_min", 0)))
     else:
@@ -183,7 +202,8 @@ def morning_window(d: date, sch: dict) -> tuple[datetime, datetime] | None:
         return None
     on = _local(datetime.combine(d, _hm(m.get("on_time", "06:00"))))
     if m.get("off", "sunrise") == "sunrise":
-        rise, _ = sun_times(d, float(sch.get("lat", 40.3764)), float(sch.get("lon", -104.6922)))
+        where = location(sch)
+        rise = sun_times(d, *where)[0] if where else _local(datetime.combine(d, time(7, 0)))
         off = (rise or on + timedelta(hours=1)).astimezone() + timedelta(minutes=float(m.get("off_offset_min", 0)))
     else:
         off = _local(datetime.combine(d, _hm(m.get("off_time", "07:30"))))

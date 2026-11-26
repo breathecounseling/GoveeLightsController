@@ -18,7 +18,7 @@ from goveelights.controller import Controller  # noqa: E402
 from goveelights.layout import Layout, Run  # noqa: E402
 from goveelights.scene import Scene  # noqa: E402
 
-HOUSE = json.loads(Path("layouts/house.json").read_text(encoding="utf-8"))
+HOUSE = json.loads(Path("layouts/examples/gable-house.json").read_text(encoding="utf-8"))
 
 
 def camera(L, rot_deg=0.0, scale=12.0, pick=None):

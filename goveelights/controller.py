@@ -287,6 +287,7 @@ class Controller:
 
     def build_engine(self):
         """(Re)build the virtual strip from config. Keeps the scene and live state."""
+        livedata.set_home(sched.location(self.cfg.data.get("schedule")))   # the dusk sky follows the house
         with self.lock:
             old = self.engine
             was_live = bool(old and old.live)
@@ -1312,9 +1313,10 @@ class Controller:
                     last_weather = now
                     sch = self.cfg.data.get("schedule", {})
                     try:
-                        self.weather = {**live.parse_weather(live.fetch_json(
-                            live.weather_url(float(sch.get("lat", 40.3764)), float(sch.get("lon", -104.6922))))),
-                            "at": now}
+                        where = sched.location(sch)
+                        if where is None:
+                            raise ValueError("set your location first (Shows → Schedule)")
+                        self.weather = {**live.parse_weather(live.fetch_json(live.weather_url(*where))), "at": now}
                     except Exception as e:  # noqa: BLE001
                         self.weather = {**self.weather, "error": str(e)}
                 self._apply_weather()
@@ -1597,6 +1599,7 @@ class Controller:
 
     def _schedule_tick(self):
         sch = self.cfg.data.get("schedule", {})
+        livedata.set_home(sched.location(sch))     # a location set in the app reaches the dusk sky
         now = datetime.now().astimezone()
         ev = sched.evaluate(now, sch)
         self.sched_status = ev
@@ -1649,7 +1652,10 @@ class Controller:
             if mins <= 0 or not ev.get("active") or ev.get("rule") == "morning":
                 return 0.0
             on = datetime.fromisoformat(ev["on"])
-            _, sunset = sched.sun_times(on.date(), float(sch.get("lat", 40.3764)), float(sch.get("lon", -104.6922)))
+            where = sched.location(sch)
+            if where is None:
+                return 0.0                        # no location: no sunset to start from
+            _, sunset = sched.sun_times(on.date(), *where)
         except (TypeError, ValueError, KeyError):
             return 0.0
         if sunset is None or abs((on - sunset).total_seconds()) > 90 * 60:
@@ -1658,13 +1664,11 @@ class Controller:
         return left if 30 < left <= mins * 60 + 60 else 0.0
 
     def _start_dusk_intro(self, prog: dict, left: float, sch: dict, on: str | None = None) -> bool:
-        try:
-            lat = max(-89.0, min(89.0, float(sch.get("lat", 40.3764))))
-            lon = max(-180.0, min(180.0, float(sch.get("lon", -104.6922))))
-        except (TypeError, ValueError):
-            lat, lon = 40.3764, -104.6922
-        d = {"name": "Dusk intro", "layers": [{"effect": "dusk", "target": "all", "params": {
-            "lat": lat, "lon": lon, "clouds": 0.4, "sun_glow": 0.7, "stars": 0.12}}]}
+        params = {"clouds": 0.4, "sun_glow": 0.7, "stars": 0.12}
+        where = sched.location(sch)
+        if where is not None:                 # else the dusk effect uses its own best guess
+            params = {"lat": max(-89.0, min(89.0, where[0])), "lon": max(-180.0, min(180.0, where[1])), **params}
+        d = {"name": "Dusk intro", "layers": [{"effect": "dusk", "target": "all", "params": params}]}
         try:
             with self.lock:
                 self.play_scene(d, {"kind": "dusk-intro", "name": "Dusk to night"}, fade=3.0, manual=False)
@@ -1719,7 +1723,8 @@ class Controller:
 
     def _calendar(self) -> tuple[list[str], dict]:
         ids = [p["id"] for p in self.presets.list()]
-        return ids, calendar_builtin.build(ids, [s["name"] for s in self.shows_list()])
+        teams = (self.cfg.data.get("game") or {}).get("teams") or []
+        return ids, calendar_builtin.build(ids, [s["name"] for s in self.shows_list()], teams)
 
     def calendar_preview(self) -> dict:
         """What "Use the holiday calendar" would add, in date order from today."""

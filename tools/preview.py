@@ -2,7 +2,7 @@
 
     python3 tools/preview.py <preset-id | preset.json | effect-name> [--set key=value ...]
         [--seconds 6] [--frames 8] [--fps 20] [--out <temp dir>/preview] [--layer N]
-        [--audio BPM]
+        [--audio BPM] [--layout layouts/examples/gable-house.json]
 
 --audio BPM feeds the scene a made-up song at that tempo (a kick on every beat, see
 goveelights.audio.synthetic), as if a phone were listening (Play -> Listen).
@@ -11,7 +11,8 @@ Renders the scene at the real frame rate from t=0 (so effects with memory evolve
 they would live) and saves --frames snapshots spread over --seconds as:
   <out>.html  house view per snapshot + a filmstrip (one row per frame, every bulb)
   <out>.png   screenshot of that page (needs node + playwright; skipped if missing)
-Uses layouts/house.json (the real house: Eaves, Peak, Accent, zones).
+--layout picks the layout file (default: layouts/house.json if present, else the example
+layouts/examples/gable-house.json). A govee_config.json works too (its devices and zones).
 """
 from __future__ import annotations
 
@@ -29,14 +30,23 @@ from goveelights.cli import load_scene  # noqa: E402
 from goveelights.layout import Layout, Run  # noqa: E402
 
 
-def house_layout() -> Layout:
-    data = json.loads((ROOT / "layouts" / "house.json").read_text(encoding="utf-8"))
+HOUSE = ROOT / "layouts" / "house.json"
+EXAMPLE = ROOT / "layouts" / "examples" / "gable-house.json"
+
+
+def default_layout_file() -> Path:
+    return HOUSE if HOUSE.exists() else EXAMPLE
+
+
+def house_layout(path=None) -> Layout:
+    """The layout in a layout file (or a govee_config.json)."""
+    data = json.loads(Path(path or default_layout_file()).read_text(encoding="utf-8"))
     devs = data["devices"]
-    runs = [Run(mac=m, name=d["name"], count=d["pixel_count"], reverse=d.get("reversed", False),
+    runs = [Run(mac=m, name=d.get("name") or m, count=d["pixel_count"], reverse=d.get("reversed", False),
                 hidden=set(d.get("hidden", [])), geometry=d.get("geometry", []))
-            for m, d in devs.items() if d.get("pixel_count")]
+            for m, d in devs.items() if d.get("pixel_count") and d.get("enabled", True) is not False]
     runs.sort(key=lambda r: devs[r.mac].get("order", 0))
-    return Layout(runs, data.get("zones"))
+    return Layout(runs, data.get("zones"), data.get("target_aliases"))
 
 
 def main(argv=None):
@@ -48,10 +58,15 @@ def main(argv=None):
     ap.add_argument("--fps", type=float, default=20.0)
     ap.add_argument("--out", default=os.path.join(tempfile.gettempdir(), "preview"))
     ap.add_argument("--audio", type=float, default=0.0, metavar="BPM", help="simulate music at this tempo")
+    ap.add_argument("--layout", help="layout file or govee_config.json (default: %(default)s)",
+                    default=str(default_layout_file().relative_to(ROOT)))
     a = ap.parse_args(argv)
     from goveelights.audio import synthetic
+    lay = Path(a.layout).expanduser()
+    if not lay.is_absolute():                      # relative to where you are, else to the project
+        lay = lay.resolve() if lay.exists() else ROOT / lay
     os.chdir(ROOT)
-    L = house_layout()
+    L = house_layout(lay)
     scene = load_scene(a.what, a.set)
     total = max(1, int(a.seconds * a.fps))
     keep = {int(round(k * (total - 1) / max(1, a.frames - 1))) for k in range(a.frames)}

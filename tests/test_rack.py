@@ -7,8 +7,14 @@ from goveelights.layout import Layout, Run
 from goveelights.scene import Scene
 
 
+# The example layout (three runs, the zones the built-in presets aim at) and a test location.
+# The clock tests run with TZ=America/Denver, so the location is a round point in Colorado.
+LAYOUT_FILE = "layouts/examples/gable-house.json"
+HOME = (40.0, -104.5)
+
+
 def house():
-    data = json.load(open("layouts/house.json"))
+    data = json.load(open("layouts/examples/gable-house.json"))
     devs = data["devices"]
     runs = [Run(mac=m, name=d["name"], count=d["pixel_count"], reverse=d["reversed"],
                 hidden=set(d["hidden"]), geometry=d["geometry"]) for m, d in devs.items()]

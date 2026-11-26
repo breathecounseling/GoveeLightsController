@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "goveelightscontroller"
+version = "0.8.0"
+description = "Local, per-bulb effects, shows and a sunset schedule for Govee permanent outdoor lights (unofficial)"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "GoveeLightsController contributors"}]
+requires-python = ">=3.10"
+dependencies = []
+keywords = ["govee", "christmas lights", "permanent outdoor lights", "led", "lan"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Home Automation",
+]
+
+[project.scripts]
+goveelights = "goveelights.cli:main"
+
+[tool.setuptools]
+packages = ["goveelights", "goveelights.effects_ext"]
+
+[tool.setuptools.package-data]
+goveelights = ["web/*.html", "web/vendor/*.js"]

@@ -271,7 +271,7 @@ class Scene:
         for li, L in enumerate(self.layers):
             if not L.enabled:
                 continue
-            idx = layout.indices(L.target)
+            idx = layout.layer_indices(L.target) if hasattr(layout, "layer_indices") else layout.indices(L.target)
             if not idx:
                 continue
             ldt = dt * ms

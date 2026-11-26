@@ -25,6 +25,8 @@ from .modulation import SHAPES, SOURCES
 from .palettes import BUILTIN, all_palettes, categories
 from .scene import BLEND_INFO, BLENDS
 from . import calendar_builtin
+from . import firstrun
+from . import tonight
 from . import schedule as sched
 from . import shows_builtin
 from . import winconsole
@@ -107,7 +109,10 @@ def validate_schedule(sch) -> None:
     from datetime import datetime, timedelta
     if not isinstance(sch, dict):
         raise ValueError("schedule must be an object")
-    start = datetime.now().astimezone().replace(hour=0, minute=30, second=0, microsecond=0)
+    if (sch.get("lat") is not None or sch.get("lon") is not None) and sched.location(sch) is None:
+        raise ValueError("schedule not saved: latitude and longitude must both be numbers "
+                         "(latitude -90..90, longitude -180..180)")
+    start =datetime.now().astimezone().replace(hour=0, minute=30, second=0, microsecond=0)
     try:
         for day in range(367):
             for hour in (0, 12, 20):
@@ -279,6 +284,10 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                     return self._json(ctl.tonight(password_set=auth.password_set))
                 if path == "/api/calendar":        # preview of the one-tap holiday calendar
                     return self._json(ctl.calendar_preview())
+                if path == "/api/setup":           # first-run setup: what is still missing
+                    return self._json(firstrun.state(ctl.cfg))
+                if path == "/api/targets":         # presets aimed at runs/zones this layout lacks
+                    return self._json(tonight.missing_targets(ctl))
                 if path == "/api/extras":
                     from .live import LEAGUES
                     from .pictures import PICTURES
@@ -491,6 +500,21 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                 with cfg.lock:
                     cfg.data["palettes"] = pals
                     cfg.save()
+                return {"ok": True}
+            if a == "setup/layout":                # first run: names, counts, a straight line per box
+                done = firstrun.straight_layout(cfg, b.get("boxes"))
+                ctl.build_engine()
+                return {"ok": True, "boxes": done}
+            if a == "target_aliases":              # {"Peak": "Gable", "porch": ["Door"], "*": "all"}
+                al = b.get("aliases")
+                if not isinstance(al, dict) or not all(
+                        isinstance(k, str) and (isinstance(v, str) or (isinstance(v, list) and all(isinstance(x, str) for x in v)))
+                        for k, v in al.items()):
+                    raise ValueError("aliases must be {target: name or [names]}")
+                with cfg.lock:
+                    cfg.data["target_aliases"] = al
+                    cfg.save()
+                ctl.build_engine()
                 return {"ok": True}
             if a == "layout/house":                # Tonight: re-add the house layout's zones and names
                 changed = cfg.merge_house_layout()

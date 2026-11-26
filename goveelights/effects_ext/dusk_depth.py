@@ -17,6 +17,7 @@ import time as _time
 from datetime import date, datetime, timezone
 
 from .. import geometry as geo
+from .. import livedata
 from ..color import BLACK, Color, clamp, hash01, hex_to_rgb, lerp, palette
 from ..effects import Param, effect, travel
 from ..fx import fx
@@ -103,12 +104,14 @@ def _demo_elevation(t: float, demo: float) -> float:
 def dusk_sky(t: float, P: dict) -> dict:
     """Per-frame sky state (computed once per frame, shared by every bulb)."""
     night = P["colors"]
-    key = (t, P["demo"], P["lat"], P["lon"], P["shift"], tuple(night), P["night_level"],
+    lat, lon = P["lat"], P["lon"]
+    if lat == 0 and lon == 0:                        # the default: wherever the house is
+        lat, lon = livedata.home()
+    key = (t, P["demo"], lat, lon, P["shift"], tuple(night), P["night_level"],
            P["sun_glow"])
     m = getattr(_memo, "dusk", None)
     if m is not None and m[0] == key:
         return m[1]
-    lat, lon = P["lat"], P["lon"]
     if P["demo"] > 0:
         el = _demo_elevation(t, P["demo"])
         ak = (lat, lon, datetime.now().date())
@@ -202,8 +205,10 @@ AURORA = [H("#00ff60"), H("#10ff90"), H("#00e0c0"), H("#9020ff")]
     Param("height", "choice", "blend", "Gradient over", options=["blend", "whole house", "each run"],
           help="whole house: porch = horizon, apex = zenith; each run: every run gets the full sky; "
                "blend: half of each, so the gables sweep from horizon to zenith and the porch stays warmest"),
-    Param("lat", "number", 40.3764, "Latitude", -89, 89, 0.0001),
-    Param("lon", "number", -104.6922, "Longitude (east +)", -180, 180, 0.0001),
+    Param("lat", "number", 0, "Latitude", -89, 89, 0.0001,
+          help="0 with longitude 0 = the house's location from the schedule settings"),
+    Param("lon", "number", 0, "Longitude (east +)", -180, 180, 0.0001,
+          help="0 with latitude 0 = the house's location from the schedule settings"),
 ], "The house glows like the sky behind it right now: gold and orange low on the porch, rose and "
    "violet across the eaves and deep blue at the apex as the sun sets, deepening through twilight "
    "into a calm night palette with a few twinkling stars. Soft cloud-like patches drift across.",

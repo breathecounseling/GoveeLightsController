@@ -12,7 +12,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, "tests")
-from test_rack import house  # noqa: E402
+from test_rack import HOME, LAYOUT_FILE, house  # noqa: E402
 
 from goveelights import controller as C  # noqa: E402
 from goveelights import schedule as sched  # noqa: E402
@@ -102,9 +102,11 @@ class Rig:
         path = Path(tmp) / "cfg.json"
         cfg = Config(path)
         if not cfg.devices:
-            cfg.import_layout("layouts/house.json")
+            cfg.import_layout(LAYOUT_FILE, create_missing=True)
             for k, d in enumerate(cfg.devices.values()):
                 d["ip"] = f"10.0.0.{k + 10}"
+            cfg.data["schedule"].update(lat=HOME[0], lon=HOME[1])   # a new config has no location
+            cfg.data["game"]["teams"] = [{"league": "nfl", "team": "DEN"}]
         for k, v in (cfg_extra or {}).items():
             if isinstance(v, dict) and isinstance(cfg.data.get(k), dict):
                 cfg.data[k].update(v)
@@ -132,7 +134,7 @@ def evening_on(d: date, sch: dict) -> datetime:
     return sched.window(d, sch)[0]
 
 
-SCH = {"enabled": True, "on": "sunset", "on_offset_min": 0, "off_time": "23:00",
+SCH = {"enabled": True, "on": "sunset", "on_offset_min": 0, "off_time": "23:00", "lat": HOME[0], "lon": HOME[1],
        "default": {"preset": "warm-white"}, "rules": []}
 
 

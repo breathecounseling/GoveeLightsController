@@ -73,6 +73,8 @@ def on_reason(d: date, sch: dict) -> str:
     r = _times_rule(d, sch)
     if r and r.get("on_time"):
         return f"rule: {r.get('name') or 'unnamed'}"
+    if sch.get("on", "sunset") == "sunset" and sched.location(sch) is None:
+        return "fixed time: set your location for sunset"
     if sch.get("on", "sunset") == "sunset":
         try:
             off = round(float(sch.get("on_offset_min", 0)))
@@ -318,7 +320,8 @@ def _build(ctl, now: datetime, password_set) -> dict:
     dusk_min = 0.0
     try:
         dusk_min = max(0.0, min(120.0, float(sch.get("dusk_intro_minutes") or 0)))
-        _, sunset = sched.sun_times(d, float(sch.get("lat", 40.3764)), float(sch.get("lon", -104.6922)))
+        where = sched.location(sch)
+        sunset = sched.sun_times(d, *where)[1] if where else None
     except (TypeError, ValueError):
         sunset = None
     dusk = bool(prog and dusk_min > 0 and sunset is not None and abs((on - sunset).total_seconds()) <= 90 * 60)
@@ -522,11 +525,17 @@ def _build(ctl, now: datetime, password_set) -> dict:
     if missed:
         checks.append(_check("showtimes", WARN, "A showtime won't play tonight", "; ".join(missed[:3]),
                              "Move the showtime into the lit hours", "showtimes"))
+    where = sched.location(sch)
+    if where is None:
+        checks.append(_check("location", WARN, "Location not set",
+                             "Without it the lights can't follow sunset: they come on at the fixed on time.",
+                             "Set your location (Shows → Schedule, or the first-run setup)", "sched"))
     try:
-        checks.append(_check("clock", *tz_check(float(sch.get("lat", 40.3764)), float(sch.get("lon", -104.6922)), on),
-                             fix="Set the PC's time zone in Windows Settings → Time & language", jump=""))
-        if checks[-1]["level"] == OK:
-            checks[-1]["fix"] = ""
+        if where is not None:
+            checks.append(_check("clock", *tz_check(*where, on),
+                                 fix="Set the PC's time zone (Windows: Settings → Time & language)", jump=""))
+            if checks[-1]["level"] == OK:
+                checks[-1]["fix"] = ""
     except (TypeError, ValueError):
         pass
     if now.year < 2024:
@@ -636,7 +645,7 @@ def _device_checks(ctl, now: datetime) -> list[dict]:
     if odd:
         out.append(_check("geometry", WARN, "The map looks stretched or squashed", "; ".join(odd) +
                           ": an older camera map can be off; shapes won't line up",
-                          "Map that run again, or re-import layouts/house.json", "map"))
+                          "Map that run again, or re-import your layout file", "map"))
     return out
 
 
@@ -669,7 +678,8 @@ def _program_presets(prog, playlists: dict) -> set:
 
 
 def _dark_targets(ctl, layout, preset_list) -> dict[str, list[str]]:
-    """{preset id: [layer targets that light no bulbs]} for this layout (cached)."""
+    """{preset id: [layer target names this layout has no run or zone for]} (cached).
+    Such a layer plays on a stand-in (Layout.layer_indices), not where it was meant to."""
     key = (id(layout), tuple((p["id"], p.get("mtime")) for p in preset_list))
     hit = getattr(ctl, "_dark_cache", None)
     if hit and hit[0] == key:
@@ -685,8 +695,9 @@ def _dark_targets(ctl, layout, preset_list) -> dict[str, list[str]]:
             if not isinstance(L, dict) or L.get("enabled") is False:
                 continue
             tg = L.get("target", "all")
-            if not layout.indices(tg):
-                bad += [t for t in (tg if isinstance(tg, list) else [tg]) if t not in bad]
+            miss = layout.missing(tg) if hasattr(layout, "missing") else (
+                [] if layout.indices(tg) else [str(t) for t in (tg if isinstance(tg, list) else [tg])])
+            bad += [t for t in miss if t not in bad]
         if bad:
             out[p["id"]] = [str(t) for t in bad]
     try:
@@ -694,6 +705,27 @@ def _dark_targets(ctl, layout, preset_list) -> dict[str, list[str]]:
     except AttributeError:
         pass
     return out
+
+
+def missing_targets(ctl) -> dict:
+    """For the app and API: presets whose layers aim at runs or zones this layout doesn't
+    have, and where each such target plays instead (GET /api/targets)."""
+    layout = getattr(getattr(ctl, "engine", None), "layout", None)
+    if not layout or not layout.n:
+        return {"presets": [], "targets": {}, "aliases": {}, "names": []}
+    plist = ctl.presets.list()
+    names = {p["id"]: p.get("name", p["id"]) for p in plist}
+    dark = _dark_targets(ctl, layout, plist)
+    miss = sorted({t for ts in dark.values() for t in ts})
+    return {"presets": [{"id": pid, "name": names.get(pid, pid), "targets": ts} for pid, ts in sorted(dark.items())],
+            "targets": {t: layout.plays_on(t) for t in miss},
+            "aliases": dict(getattr(layout, "aliases", {}) or {}),
+            "names": layout.target_names()}
+
+
+def _house_layout_file() -> bool:
+    from .config import HOUSE_LAYOUT
+    return HOUSE_LAYOUT.exists()
 
 
 def _target_checks(ctl, prog, names: Names, cfg: dict, preset_list) -> list[dict]:
@@ -714,19 +746,25 @@ def _target_checks(ctl, prog, names: Names, cfg: dict, preset_list) -> list[dict
     if lost:
         out.append(_check("zones", WARN, f"{len(lost)} zone{'s' if len(lost) > 1 else ''} can't find their lights",
                           "; ".join(lost[:4]) + ": no light box has that name",
-                          "Tap to re-apply the house layout's names and zones", "house"))
+                          *(("Tap to re-apply the house layout's names and zones", "house") if _house_layout_file() else
+                            ("Rename the box back, or edit the zone (or re-import your layout file)", ""))))
     dark = _dark_targets(ctl, layout, preset_list)
     if dark:
         miss = sorted({t for ts in dark.values() for t in ts})
         tn = sorted(_program_presets(prog, cfg.get("playlists") or {}) & set(dark))
-        lvl, head = (FAIL, f"Tonight's program lights nothing on part of the house: "
+        # with the house layout file at hand this is a regression with a one-tap fix; on any
+        # other house the layers play on stand-ins, which is worth knowing but not an error
+        lvl, head = (FAIL if _house_layout_file() else WARN, f"Tonight's program aims at parts your layout doesn't have: "
                            f"{', '.join(names.preset(x) for x in tn[:3])}") if tn else (
-            WARN, f"{len(dark)} preset{'s' if len(dark) > 1 else ''} light nothing on part of the house")
+            WARN, f"{len(dark)} preset{'s' if len(dark) > 1 else ''} aim at parts your layout doesn't have")
+        instead = "; ".join(f"{t} plays on {layout.plays_on(t)}" for t in miss[:4])
+        fix, jump = (("Tap to re-add the house layout's zones", "house") if _house_layout_file() else
+                     ("Add zones with those names, or set target_aliases in the config (README: Presets)", ""))
         out.append(_check("targets", lvl, head,
                           f"They aim at {', '.join(miss[:6])}, which your layout doesn't have"
                           + ("" if tn else f" ({', '.join(names.preset(x) for x in sorted(dark)[:4])}"
-                             + ("…" if len(dark) > 4 else "") + ")"),
-                          "Tap to re-add the house layout's zones", "house"))
+                             + ("…" if len(dark) > 4 else "") + ")") + f". For now: {instead}",
+                          fix, jump))
     broken = list(getattr(ctl.presets, "broken", []) or [])
     if broken:
         out.append(_check("presets", WARN, f"{len(broken)} preset file{'s' if len(broken) > 1 else ''} can't be read",

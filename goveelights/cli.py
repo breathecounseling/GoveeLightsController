@@ -133,10 +133,26 @@ def cmd_layout(a):
 STARTUP_NAME = "GoveeLights.vbs"
 
 
+def not_windows(cmd: str) -> str:
+    """What to do instead of a Windows-only command on macOS or Linux."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    py = sys.executable or "python3"
+    if sys.platform == "darwin":
+        how = (f"On macOS, run it with launchd: copy docs/examples/goveelights.plist to\n"
+               f"~/Library/LaunchAgents/, set the paths in it (Python: {py}, folder: {root}),\n"
+               f"then: launchctl load ~/Library/LaunchAgents/goveelights.plist")
+    else:
+        how = (f"On Linux, run it with systemd: copy docs/examples/goveelights.service to\n"
+               f"/etc/systemd/system/, set User and the paths in it (Python: {py}, folder: {root}),\n"
+               f"then: sudo systemctl daemon-reload && sudo systemctl enable --now goveelights")
+    return f"'{cmd}' is for Windows (Task Scheduler / Startup folder).\n{how}\nDetails: docs/SERVICE.md"
+
+
 def _startup_file():
     appdata = os.environ.get("APPDATA")
     if os.name != "nt" or not appdata:
-        raise SystemExit("install-startup is for Windows. Elsewhere, start 'python -m goveelights' from your login scripts.")
+        raise SystemExit(not_windows("install-startup"))
     from pathlib import Path
     return Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / STARTUP_NAME
 
@@ -188,7 +204,7 @@ def cmd_service(uninstall=False):
     import subprocess
     from pathlib import Path
     if os.name != "nt":
-        raise SystemExit("install-service is for Windows. On Linux use a systemd unit running 'python -m goveelights'.")
+        raise SystemExit(not_windows("install-service" if not uninstall else "uninstall-service"))
     if uninstall:
         r = subprocess.run(["schtasks", "/Delete", "/TN", TASK, "/F"], capture_output=True, text=True)
         print(r.stdout or r.stderr)

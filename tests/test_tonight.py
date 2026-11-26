@@ -28,6 +28,7 @@ HOLIDAY = ("valentines", "st-patricks", "easter", "july-4th", "thanksgiving", "h
            "winter-elegance", "spring-", "summer-")
 IDS = [i for i in ALL_IDS if not i.startswith(HOLIDAY)]     # the core looks, without the holiday track
 SHOWS = list(shows_builtin.BUILTIN_SHOWS)
+TEAMS = [{"league": "nfl", "team": "DEN"}]                  # the team with its own game-day look
 # what the holiday track adds (and a couple of halloween-* looks)
 EXTRA = ["valentines", "st-patricks", "easter", "july-4th", "thanksgiving", "halloween-pumpkins", "halloween-ghosts",
          "broncos-game-day"]
@@ -60,7 +61,7 @@ def _prog_presets(prog, playlists) -> list[str]:
 # ------------------------------------------------------------------ calendar
 class CalendarTests(_Denver, unittest.TestCase):
     def merged(self, ids, user_rules=(), disable=None, default=None):
-        c = cal.build(ids, SHOWS)
+        c = cal.build(ids, SHOWS, TEAMS)
         sch = {**SCH, "rules": copy.deepcopy(list(user_rules)), "default": default}
         return c, cal.merge(c, sch, copy.deepcopy(DEFAULTS["playlists"]), [], ids, disable)
 
@@ -109,7 +110,7 @@ class CalendarTests(_Denver, unittest.TestCase):
         self.assertEqual((off.date(), off.hour, off.minute), (date(2028, 1, 1), 0, 30))
 
     def test_the_shipped_presets_cover_every_holiday(self):
-        c = cal.build(ALL_IDS, SHOWS)
+        c = cal.build(ALL_IDS, SHOWS, TEAMS)
         self.assertEqual(c["skipped"], [])
         progs = {r["name"]: r["program"] for r in c["rules"]}
         self.assertEqual(progs["Valentine's week"], {"playlist": "Holiday: Valentine's"})
@@ -121,12 +122,12 @@ class CalendarTests(_Denver, unittest.TestCase):
         self.assertIn("halloween-pumpkin", hall)
         self.assertIn("halloween-haunted", hall)
         # one Valentine's look alone still gets the week, as an evolving scene
-        one = cal.build(IDS + ["valentines-glow"], SHOWS)
+        one = cal.build(IDS + ["valentines-glow"], SHOWS, TEAMS)
         self.assertIn({"evolve": "valentines-glow", "minutes": 4},
                       [r["program"] for r in one["rules"] if r["name"] == "Valentine's week"])
 
     def test_missing_presets_are_skipped_with_a_note(self):
-        c = cal.build(IDS, SHOWS)
+        c = cal.build(IDS, SHOWS, TEAMS)
         names = {r["name"] for r in c["rules"]}
         skipped = {s["name"]: s["note"] for s in c["skipped"]}
         for n in ("Valentine's week", "St Patrick's", "Easter week", "July 4th week", "Thanksgiving"):
@@ -150,7 +151,7 @@ class CalendarTests(_Denver, unittest.TestCase):
                 {"name": "Weekend late", "days": [4, 5], "off_time": "00:30"}]
         plist = {"Mine": {"items": [{"preset": "comets", "minutes": 3}]}}
         sts = [{"show": "Christmas show", "from": "18:00", "to": "21:00", "every": 60}]
-        c = cal.build(IDS, SHOWS)
+        c = cal.build(IDS, SHOWS, TEAMS)
         sch, pls, st2 = cal.merge(c, {**SCH, "rules": user}, plist, sts, IDS)
         self.assertEqual(sch["rules"][:2], user)
         self.assertEqual(sched.program_for(date(2027, 5, 5), sch)[1], "Birthday")
@@ -168,7 +169,7 @@ class CalendarTests(_Denver, unittest.TestCase):
         self.assertEqual(stripped[2], sts)
 
     def test_shadows_and_disable(self):
-        c = cal.build(IDS, SHOWS)
+        c = cal.build(IDS, SHOWS, TEAMS)
         sch = {**SCH, "rules": copy.deepcopy(DEFAULTS["schedule"]["rules"])}
         sh = cal.shadows(sch, c, date(2026, 11, 1))
         self.assertEqual([x["name"] for x in sh], ["Christmas", "Halloween"])
@@ -182,7 +183,7 @@ class CalendarTests(_Denver, unittest.TestCase):
         self.assertEqual(back, ["Christmas"])
 
     def test_default_becomes_warm_white_only_when_it_cannot_play(self):
-        c = cal.build(IDS, SHOWS)
+        c = cal.build(IDS, SHOWS, TEAMS)
         for default, want in ((None, {"preset": "warm-white"}), ({"preset": "nope"}, {"preset": "warm-white"}),
                               ({"playlist": "Gone"}, {"preset": "warm-white"}),
                               ({"preset": "comets"}, {"preset": "comets"})):
@@ -242,7 +243,7 @@ class TonightTests(_Denver, unittest.TestCase):
         lv = {c["id"]: c["level"] for c in p["checks"]}
         for k in ("boxes", "counts", "layout", "schedule", "program", "showtimes", "builtin", "visitor"):
             self.assertEqual(lv[k], "ok", (k, p["checks"]))
-        self.assertEqual(lv["clock"], "ok")                    # Denver PC, Evans CO
+        self.assertEqual(lv["clock"], "ok")                    # Denver PC, Denver location
         self.assertEqual(p["checks"][-1]["level"], "ok")
         json.dumps(p)
 
@@ -346,7 +347,7 @@ class TonightTests(_Denver, unittest.TestCase):
         self.assertTrue(p["headline"])
 
     def test_time_zone_check(self):
-        lat, lon = 40.3764, -104.6922
+        lat, lon = 39.74, -104.99                            # Denver
         winter, summer = datetime(2026, 12, 1, 18, 0), datetime(2026, 7, 1, 20, 0)
         tz = lambda h: timezone(timedelta(hours=h))           # noqa: E731
         self.assertEqual(tonight.tz_check(lat, lon, winter.replace(tzinfo=tz(-7)))[0], "ok")
@@ -484,14 +485,14 @@ class ReviewFixTests(_Denver, unittest.TestCase):
         self.assertEqual(self.by(p, "counts")[0]["detail"], "Eaves 93 · Peak 108 · Accent 60 bulbs")
 
     def test_nye_off_time_never_cuts_a_later_usual_off(self):
-        c = cal.build(IDS, SHOWS)
+        c = cal.build(IDS, SHOWS, TEAMS)
         for off, want in (("23:00", (0, 30)), ("00:15", (0, 30)), ("01:00", (1, 0)), ("02:00", (2, 0))):
             sch, _, _ = cal.merge(c, {**SCH, "off_time": off}, {}, [], IDS)
             o = sched.window(date(2027, 12, 31), sch)[1]
             self.assertEqual((o.hour, o.minute), want, off)
 
     def test_santa_moves_after_a_late_lights_on_and_tonight_warns_if_missed(self):
-        c = cal.build(IDS, SHOWS)
+        c = cal.build(IDS, SHOWS, TEAMS)
         _, _, sts = cal.merge(c, {**SCH, "on": "time", "on_time": "17:30"}, {}, [], IDS)
         santa = next(s for s in sts if s["show"] == "Santa's coming")
         self.assertEqual((santa["from"], santa["to"]), ("17:31", "17:31"))
@@ -514,7 +515,7 @@ class ReviewFixTests(_Denver, unittest.TestCase):
         self.assertTrue(p["showtimes"][0]["loops"])
 
     def test_shadow_counts_assume_factory_rules_switched_off(self):
-        c = cal.build(IDS, SHOWS)
+        c = cal.build(IDS, SHOWS, TEAMS)
         rules = copy.deepcopy(DEFAULTS["schedule"]["rules"]) + [
             {"name": "Fridays", "days": [4], "program": {"preset": "comets"}}]
         sh = {x["name"]: x for x in cal.shadows({**SCH, "rules": rules}, c, date(2026, 11, 1))}
@@ -530,7 +531,7 @@ class ReviewFixTests(_Denver, unittest.TestCase):
         self.assertGreater(sh["Christmas"]["nights"], 30)
 
     def test_users_playlist_of_the_same_name_survives(self):
-        c = cal.build(IDS, SHOWS)
+        c = cal.build(IDS, SHOWS, TEAMS)
         mine = {"Holiday: Christmas": {"items": [{"preset": "comets", "minutes": 3}]}}
         sch, pls, sts = cal.merge(c, dict(SCH), copy.deepcopy(mine), [], IDS)
         self.assertEqual(pls["Holiday: Christmas"], mine["Holiday: Christmas"])

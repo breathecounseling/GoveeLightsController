@@ -5,6 +5,7 @@
                     with "polled" (when it was last fetched successfully, on the delayed
                     clock) and, for finished games, "ended" (when we first saw it final)
     LIVE["updated"] unix time of the last publish
+    LIVE["home"]    (lat, lon) of the house from the schedule settings, or None (see home())
 
 Game updates can be held back by a delay (the controller's game.delay, default 30 s)
 so the house never shows a score before the TV broadcast does: update_game() queues
@@ -17,7 +18,7 @@ from __future__ import annotations
 import threading
 import time
 
-LIVE: dict = {"games": {}, "updated": 0.0}
+LIVE: dict = {"games": {}, "updated": 0.0, "home": None}
 
 STALE_IN = 360.0          # an in-progress game not refreshed for this long is not shown as live
 STALE_POST = 2400.0       # ... a finished game (polled every 5-30 minutes)
@@ -117,3 +118,22 @@ def current_game(now: float | None = None) -> dict | None:
             if now - ended <= FINAL_FOR and (ko is None or now - ko <= KICKOFF_MAX):
                 final = g
     return final
+
+
+# ------------------------------------------------------------ the house's location
+def set_home(where) -> None:
+    """The controller publishes the schedule's (lat, lon) here (None: not set yet), so
+    effects that follow the real sky (dusk) use the house's location by default."""
+    try:
+        LIVE["home"] = (float(where[0]), float(where[1])) if where else None
+    except (TypeError, ValueError, IndexError):
+        LIVE["home"] = None
+
+
+def home() -> tuple[float, float]:
+    """The house's (lat, lon); with no location set, a rough guess from the PC's time zone
+    (a mid-northern latitude on the zone's central meridian), good enough for a sky."""
+    h = LIVE.get("home")
+    if h:
+        return h
+    return 40.0, max(-180.0, min(180.0, -time.timezone / 3600.0 * 15.0))

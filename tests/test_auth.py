@@ -24,14 +24,14 @@ class AuthTests(unittest.TestCase):
 
     def test_trust_rules(self):
         a = self.a
-        self.assertTrue(a.trusted(FakeReq("192.168.14.20")))
+        self.assertTrue(a.trusted(FakeReq("192.168.1.20")))
         self.assertTrue(a.trusted(FakeReq("127.0.0.1")))
         self.assertFalse(a.trusted(FakeReq("203.0.113.5")))
         # anything that came through a proxy/tunnel is never trusted, even from loopback
         self.assertFalse(a.trusted(FakeReq("127.0.0.1", {"Cf-Connecting-IP": "203.0.113.5"})))
         self.assertFalse(a.trusted(FakeReq("192.168.1.2", {"X-Forwarded-For": "1.2.3.4"})))
         a.data["lan_without_login"] = False
-        self.assertFalse(a.trusted(FakeReq("192.168.14.20")))
+        self.assertFalse(a.trusted(FakeReq("192.168.1.20")))
 
     def test_password_and_sessions(self):
         a = self.a

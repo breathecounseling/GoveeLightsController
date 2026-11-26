@@ -11,3 +11,8 @@ govee_auth.json.*.tmp
 goveelights.log
 .claude/worktrees/
 user_presets/
+
+# private details for tools/export_public.py (never commit)
+tools/private_denylist.txt
+*.egg-info/
+build/

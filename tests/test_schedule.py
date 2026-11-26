@@ -3,22 +3,22 @@ from datetime import date, datetime, timedelta, timezone
 
 from goveelights.schedule import evaluate, program_for, sun_times, window
 
-EVANS = (40.3764, -104.6922)
+DENVER = (39.74, -104.99)
 MST, MDT = timezone(timedelta(hours=-7)), timezone(timedelta(hours=-6))
 
 
 class SunTests(unittest.TestCase):
     def check(self, d, tz, hh, mm):
-        _, s = sun_times(d, *EVANS)
+        _, s = sun_times(d, *DENVER)
         local = s.astimezone(tz)
         got = local.hour * 60 + local.minute
         self.assertLess(abs(got - (hh * 60 + mm)), 4, f"{d}: sunset {local:%H:%M}, expected ~{hh}:{mm:02d}")
 
-    def test_evans_sunsets(self):
-        # reference values for Evans/Greeley, CO (timeanddate.com, within ~2 min)
-        self.check(date(2026, 12, 21), MST, 16, 38)
-        self.check(date(2026, 6, 21), MDT, 20, 32)
-        self.check(date(2026, 3, 20), MDT, 19, 13)
+    def test_denver_sunsets(self):
+        # reference values for Denver, CO (timeanddate.com, within ~2 min)
+        self.check(date(2026, 12, 21), MST, 16, 39)
+        self.check(date(2026, 6, 21), MDT, 20, 31)
+        self.check(date(2026, 3, 20), MDT, 19, 12)
 
 
 class ScheduleTests(unittest.TestCase):
@@ -54,7 +54,7 @@ class ScheduleTests(unittest.TestCase):
         self.assertTrue(e["next_change"].startswith("2026-07-05T17:00"))
 
     def test_sunset_mode(self):
-        sch = {"on": "sunset", "on_offset_min": -15, "off_time": "23:00", "lat": EVANS[0], "lon": EVANS[1]}
+        sch = {"on": "sunset", "on_offset_min": -15, "off_time": "23:00", "lat": DENVER[0], "lon": DENVER[1]}
         on, off = window(date(2026, 12, 21), sch)
         self.assertLess(on, off)
 

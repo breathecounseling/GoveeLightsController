@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  launchd agent for GoveeLightsController (macOS). See docs/SERVICE.md.
+  1. Replace /Users/you/GoveeLightsController (three places) with your folder, and
+     /usr/bin/python3 with the output of `which python3` if it differs.
+  2. cp docs/examples/goveelights.plist ~/Library/LaunchAgents/
+  3. launchctl load ~/Library/LaunchAgents/goveelights.plist
+  Stop: launchctl unload ~/Library/LaunchAgents/goveelights.plist
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>io.github.goveelightscontroller</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>-m</string>
+    <string>goveelights</string>
+    <string>serve</string>
+    <string>--log</string>
+    <string>/Users/you/GoveeLightsController/goveelights.log</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/you/GoveeLightsController</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>ThrottleInterval</key><integer>30</integer>
+  <key>StandardErrorPath</key><string>/Users/you/GoveeLightsController/goveelights.err.log</string>
+</dict>
+</plist>

@@ -92,7 +92,7 @@ class SparkleCostTests(unittest.TestCase):
 class UnmappedRunTests(unittest.TestCase):
     def test_hidden_bulbs_do_not_move_an_unmapped_strip(self):
         base = house()
-        with open("layouts/house.json") as f:
+        with open("layouts/examples/gable-house.json") as f:
             data = json.load(f)
         devs = data["devices"]
         runs = [Run(mac=m, name=d["name"], count=d["pixel_count"], reverse=d["reversed"],
