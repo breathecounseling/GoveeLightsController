@@ -34,8 +34,10 @@ _PLAYLISTS = {
     "Holiday: New Year": (6, 3, [["champagne-fizz"], ["golden-shimmer"], ["text-happy-new-year"],
                                  ["glitter-ball"], ["winter-sparkle"]]),
     "Holiday: Winter": (10, 6, [["icicles"], ["snowy-evening"], ["snow-piling-up"], ["icy-tree"],
-                                ["winter-sparkle"], ["starry-night"]]),
+                                ["winter-sparkle"], ["winter-elegance"], ["starry-night"]]),
     "Holiday: Halloween": (8, 4, [["halloween*"], ["spooky-tree"], ["halloween"]]),
+    "Holiday: Valentine's": (8, 4, [["valentines-hearts"], ["valentines-glow"]]),
+    "Holiday: July 4th": (6, 3, [["july-4th-flag"], ["july-4th-fireworks"]]),
 }
 
 # The rules, in priority order (first match wins). program: {"preset"|"evolve": [candidates]}
@@ -51,20 +53,20 @@ _RULES = [
     {"name": "New Year's Day", "from": "01-01", "to": "01-01", "program": {"playlist": "Holiday: New Year"},
      "about": "champagne, gold and HAPPY NEW YEAR"},
     {"name": "Thanksgiving", "from": "thanksgiving-2", "to": "thanksgiving",
-     "program": {"evolve": ["thanksgiving"]}, "about": "autumn colours for the holiday"},
+     "program": {"evolve": ["thanksgiving-harvest", "thanksgiving"]}, "about": "autumn colours for the holiday"},
     {"name": "Advent", "from": "12-01", "to": "12-23", "program": {"playlist": "Holiday: Advent"},
      "about": "the Christmas rotation with the advent calendar"},
     {"name": "Christmas season", "from": "thanksgiving", "to": "12-30", "program": {"playlist": "Holiday: Christmas"},
      "about": "tree, gift wrap, sleigh ride, snowy evening"},
     {"name": "Winter", "from": "01-02", "to": "01-31", "program": {"playlist": "Holiday: Winter"},
      "about": "icicles, snow and winter sparkle"},
-    {"name": "Valentine's week", "from": "02-08", "to": "02-14", "program": {"evolve": ["valentines"]},
+    {"name": "Valentine's week", "from": "02-08", "to": "02-14", "program": {"playlist": "Holiday: Valentine's", "or": ["valentines-hearts", "valentines-glow", "valentines"]},
      "about": "hearts and pinks"},
     {"name": "St Patrick's", "from": "03-14", "to": "03-17", "program": {"evolve": ["st-patricks"]},
      "about": "shamrock greens"},
-    {"name": "Easter week", "from": "easter-6", "to": "easter", "program": {"evolve": ["easter"]},
+    {"name": "Easter week", "from": "easter-6", "to": "easter", "program": {"evolve": ["easter-pastels", "easter"]},
      "about": "spring pastels"},
-    {"name": "July 4th week", "from": "06-28", "to": "07-04", "program": {"evolve": ["july-4th"]},
+    {"name": "July 4th week", "from": "06-28", "to": "07-04", "program": {"playlist": "Holiday: July 4th", "or": ["july-4th-flag", "july-4th-fireworks", "july-4th"]},
      "about": "red, white and blue"},
     {"name": "Halloween fortnight", "from": "10-18", "to": "10-31", "program": {"playlist": "Holiday: Halloween"},
      "about": "pumpkins, ghouls and the spooky tree"},
@@ -124,7 +126,11 @@ def build(preset_ids, show_names) -> dict:
                     playlists[name] = pl
             if name in playlists:
                 prog = {"playlist": name}
-            need = sorted({c for cands in _PLAYLISTS[name][2] for c in cands})
+            elif p.get("or"):                         # too few looks for a rotation: evolve the one there is
+                hit = _pick(p["or"], ids)
+                if hit:
+                    prog = {"evolve": hit[0], "minutes": p.get("minutes", 4)}
+            need = p.get("or") or sorted({c for cands in _PLAYLISTS[name][2] for c in cands})
         else:
             kind = "evolve" if "evolve" in p else "preset"
             hit = _pick(p[kind], ids)

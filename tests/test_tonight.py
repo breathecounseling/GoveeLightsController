@@ -23,7 +23,10 @@ from goveelights.auth import Auth  # noqa: E402
 from goveelights.config import DEFAULTS  # noqa: E402
 from goveelights.controller import PresetStore  # noqa: E402
 
-IDS = [p["id"] for p in PresetStore(Path("presets")).list()]
+ALL_IDS = [p["id"] for p in PresetStore(Path("presets")).list()]
+HOLIDAY = ("valentines", "st-patricks", "easter", "july-4th", "thanksgiving", "halloween-", "broncos-game-day",
+           "winter-elegance", "spring-", "summer-")
+IDS = [i for i in ALL_IDS if not i.startswith(HOLIDAY)]     # the core looks, without the holiday track
 SHOWS = list(shows_builtin.BUILTIN_SHOWS)
 # what the holiday track adds (and a couple of halloween-* looks)
 EXTRA = ["valentines", "st-patricks", "easter", "july-4th", "thanksgiving", "halloween-pumpkins", "halloween-ghosts",
@@ -104,6 +107,23 @@ class CalendarTests(_Denver, unittest.TestCase):
         # New Year's Eve stays on past midnight; the countdown show is scheduled for it
         on, off = sched.window(date(2027, 12, 31), sch)
         self.assertEqual((off.date(), off.hour, off.minute), (date(2028, 1, 1), 0, 30))
+
+    def test_the_shipped_presets_cover_every_holiday(self):
+        c = cal.build(ALL_IDS, SHOWS)
+        self.assertEqual(c["skipped"], [])
+        progs = {r["name"]: r["program"] for r in c["rules"]}
+        self.assertEqual(progs["Valentine's week"], {"playlist": "Holiday: Valentine's"})
+        self.assertEqual(progs["July 4th week"], {"playlist": "Holiday: July 4th"})
+        self.assertEqual(progs["Thanksgiving"]["evolve"], "thanksgiving-harvest")
+        self.assertEqual(progs["Easter week"]["evolve"], "easter-pastels")
+        self.assertEqual(progs["Broncos Sundays"]["evolve"], "broncos-game-day")
+        hall = [i["preset"] for i in c["playlists"]["Holiday: Halloween"]["items"]]
+        self.assertIn("halloween-pumpkin", hall)
+        self.assertIn("halloween-haunted", hall)
+        # one Valentine's look alone still gets the week, as an evolving scene
+        one = cal.build(IDS + ["valentines-glow"], SHOWS)
+        self.assertIn({"evolve": "valentines-glow", "minutes": 4},
+                      [r["program"] for r in one["rules"] if r["name"] == "Valentine's week"])
 
     def test_missing_presets_are_skipped_with_a_note(self):
         c = cal.build(IDS, SHOWS)
@@ -394,7 +414,7 @@ class ApiTests(_Denver, unittest.TestCase):
         pv = get("calendar")
         self.assertFalse(pv["installed"])
         self.assertEqual([s["name"] for s in pv["shadows"]], ["Christmas", "Halloween"])
-        self.assertEqual(pv["rules"][0]["name"], "Christmas season")          # date order: on now
+        self.assertEqual(pv["rules"][0]["name"], "Thanksgiving")              # date order: on now (26 Nov 2026)
         self.assertTrue(pv["rules"][0]["now"])
         self.assertEqual({s["show"] for s in pv["showtimes"]}, {"Santa's coming", "New Year's Eve countdown"})
         res = post("calendar/apply", {"disable": [0], "enable": True})
@@ -411,8 +431,8 @@ class ApiTests(_Denver, unittest.TestCase):
         self.assertEqual(saved["showtimes"][0], {"show": "Christmas show", "from": "18:00", "to": "18:00"})
         self.assertEqual(len(saved["showtimes"]), 3)
         t = get("tonight")
-        self.assertEqual(t["program_why"], "holiday calendar: Christmas season")
-        self.assertIn("Christmas rotation", t["headline"])
+        self.assertEqual(t["program_why"], "holiday calendar: Thanksgiving")
+        self.assertIn("thanksgiving", t["headline"].lower())
         self.assertTrue(get("calendar")["installed"])
         res2 = post("calendar/apply", {})                                     # a second tap
         saved2 = json.loads(Path(r.tmp, "cfg.json").read_text())
