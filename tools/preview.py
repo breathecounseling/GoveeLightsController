@@ -40,7 +40,7 @@ def default_layout_file() -> Path:
 
 def house_layout(path=None) -> Layout:
     """The layout in a layout file (or a govee_config.json)."""
-    data = json.loads(Path(path or default_layout_file()).read_text(encoding="utf-8"))
+    data = json.loads(Path(path or default_layout_file()).read_text(encoding="utf-8-sig"))
     devs = data["devices"]
     runs = [Run(mac=m, name=d.get("name") or m, count=d["pixel_count"], reverse=d.get("reversed", False),
                 hidden=set(d.get("hidden", [])), geometry=d.get("geometry", []))
@@ -85,15 +85,19 @@ def main(argv=None):
         if f in keep:
             snaps.append((f / a.fps, cols))
     W, H, pad = 980, 200, 12
-    sx = (W - 2 * pad) / max(1e-6, L.maxx - L.minx)
+    # every bulb, an unmapped run's line below the house too (the layout's own bounds leave it out)
+    xs, ys = [p.x for p in L.pixels], [p.y for p in L.pixels]
+    minx, maxx = min(xs or [L.minx]), max(xs or [L.maxx])
+    miny, maxy = min(ys or [L.miny]), max(ys or [L.maxy])
+    sx = (W - 2 * pad) / max(1e-6, maxx - minx)
     yex = 1.6
-    H = int((L.maxy - L.miny) * sx * yex + 2 * pad + 10)
+    H = int((maxy - miny) * sx * yex + 2 * pad + 10)
 
     def rgb(c):
         return f"rgb({int(min(1, c[0]) * 255)},{int(min(1, c[1]) * 255)},{int(min(1, c[2]) * 255)})"
 
     def house(cols):
-        dots = "".join(f'<circle cx="{pad + (p.x - L.minx) * sx:.1f}" cy="{H - pad - (p.y - L.miny) * sx * yex:.1f}" '
+        dots = "".join(f'<circle cx="{pad + (p.x - minx) * sx:.1f}" cy="{H - pad - (p.y - miny) * sx * yex:.1f}" '
                        f'r="3.6" fill="{rgb(c) if max(c) > 0.01 else "#1a1f27"}"/>' for p, c in zip(L.pixels, cols))
         return f'<svg width="{W}" height="{H}" style="background:#05070a;display:block">{dots}</svg>'
 

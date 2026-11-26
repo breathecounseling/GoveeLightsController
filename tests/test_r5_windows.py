@@ -314,7 +314,7 @@ class PreviewToolTests(unittest.TestCase):
         self.assertNotIn("file://", src)
         self.assertIn("as_uri()", src)
         self.assertIn('write_text(html, encoding="utf-8")', src)
-        self.assertIn('read_text(encoding="utf-8")', src)
+        self.assertIn('read_text(encoding="utf-8-sig")', src)          # (a Notepad-saved layout too)
 
 
 if __name__ == "__main__":

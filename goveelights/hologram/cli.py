@@ -28,7 +28,7 @@ def user_palettes(config) -> dict:
         from ..config import DEFAULT_PATH
         config = DEFAULT_PATH
     try:
-        with open(config, encoding="utf-8") as f:
+        with open(config, encoding="utf-8-sig") as f:
             pals = json.load(f).get("palettes")
     except (OSError, ValueError, AttributeError):
         return {}

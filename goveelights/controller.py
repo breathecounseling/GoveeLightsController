@@ -210,7 +210,7 @@ def migrate_presets(store: PresetStore, root: Path | None = None) -> list[str]:
         if f.suffix != ".json" or f.parent.resolve() != store.dir.resolve():
             continue
         try:
-            cur = json.loads(f.read_text(encoding="utf-8")) if f.exists() else None
+            cur = json.loads(f.read_text(encoding="utf-8-sig")) if f.exists() else None
             orig = json.loads(git("show", f"HEAD:{name}"))
         except (OSError, ValueError, subprocess.SubprocessError) as e:
             log.warning("preset migration: %s skipped (%s)", f.name, e)
@@ -1372,7 +1372,7 @@ class Controller:
                 self._pending.append((now + delay, "win", game["colors"]))
         if game["state"] == "in":
             return 15
-        if game["state"] == "pre" and kick is not None and -3 * 3600 < now - kick and kick - now <= 600:
+        if game["state"] == "pre" and kick is not None and -600 <= now - kick < 3 * 3600:
             return 60                                 # kickoff is close (or late): don't miss the start
         return 300
 

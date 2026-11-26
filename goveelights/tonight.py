@@ -253,6 +253,9 @@ def _log_file() -> Path | None:
     return p if p.exists() else None
 
 
+GAME_LENGTH = timedelta(hours=3, minutes=30)   # kickoff to the final, about
+
+
 def build(ctl, now: datetime | None = None, password_set: bool | None = None) -> dict:
     now = now or datetime.now().astimezone()
     if now.tzinfo is None:
@@ -429,11 +432,17 @@ def _build(ctl, now: datetime, password_set) -> dict:
                 games_out.append({"team": v.get("team", team), "state": v.get("state"), "text": txt,
                                   "kickoff": kick.isoformat(timespec="minutes")})
                 if v.get("state") == "pre" and kick >= now:
-                    lit = bool(g.get("when_lights_off")) or bool(prog and on <= kick < off)
-                    at(kick, f"Kickoff: {v.get('team', team)} vs {v.get('opponent', '?')}", "game",
-                       "celebrations when they score" if lit else
-                       "the lights are off then: no score celebrations (a win waits up to an hour for "
-                       "lights-on; Game day → Celebrate even when the lights are off)")
+                    if g.get("when_lights_off") or (prog and on <= kick < off):
+                        detail = "celebrations when they score"
+                    elif prog and kick < on < kick + GAME_LENGTH and on < off:
+                        detail = (f"celebrations from lights-on ({fmt_time(on)}); a win before then waits "
+                                  "up to an hour for lights-on")
+                    elif not enabled:
+                        detail = "celebrations if the lights are on then (the schedule is off)"
+                    else:
+                        detail = ("the lights are off then: no score celebrations (a win waits up to an hour for "
+                                  "lights-on; Game day → Celebrate even when the lights are off)")
+                    at(kick, f"Kickoff: {v.get('team', team)} vs {v.get('opponent', '?')}", "game", detail)
             elif v.get("error") and not v.get("id"):
                 games_out.append({"team": team, "state": "error", "text": "couldn't reach the scores"})
             elif (kick and v.get("state") == "pre" and now < kick
