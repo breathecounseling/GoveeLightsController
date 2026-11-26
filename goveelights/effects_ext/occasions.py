@@ -27,7 +27,7 @@ from ..color import BLACK, hash01, noise2
 from ..effects import Param, frame_effect, travel
 from ..sparkle import glint
 
-MAX_DT = 0.1           # a stalled frame never makes anything jump further than this
+MAX_DT = 0.6           # only a real stall is capped (Scene caps raw dt at 0.5; master speed scales it)
 MAX_SPRITES = 6
 MAX_BURSTS = 8
 POP_S = 0.3            # how long a popping sprite takes to flash and vanish
@@ -188,7 +188,7 @@ FLOATER_PARAMS = [
     Param("motion", "choice", "rise", "Motion", options=["rise", "drift"],
           help="rise: float up the gable one after another and pop at the apex; "
                "drift: wander sideways across the gable, bobbing"),
-    Param("colors", "colors", ["#ff0030", "#ff1a8c", "#ff0060", "#ff4f7a"], "Colours",
+    Param("colors", "colors", ["#ff0020", "#ff0040", "#ff2a2a", "#ff0030"], "Colours",
           help="each sprite takes the next colour; saturated colours read best"),
     Param("detail", "color", "#000000", "Detail colour",
           help="ghost eyes (dark reads as a hole); eggs use the next colour for their band"),
@@ -203,9 +203,10 @@ FLOATER_PARAMS = [
     Param("pop", "number", 1.0, "Pop", 0, 1, 0.05,
           help="rise: how big the burst of sparks is when a sprite reaches the apex; 0 = it just fades"),
     Param("pop_color", "color", "#ffc8dc", "Spark colour", help="the sparks thrown out by a pop"),
-    Param("background", "color", "#ff0a40", "Glow colour", help="soft glow on the rest of the target"),
-    Param("glow", "number", 0.18, "Glow", 0, 0.6, 0.01, help="behind the sprites; 0 = dark (for overlays)"),
-    Param("outline", "number", 0.45, "Outline glow", 0, 1, 0.01,
+    Param("background", "color", "#ff1a8c", "Glow colour",
+          help="soft glow behind the sprites; a different hue from them makes the shapes read"),
+    Param("glow", "number", 0.35, "Glow", 0, 0.6, 0.01, help="behind the sprites; 0 = dark (for overlays)"),
+    Param("outline", "number", 0.7, "Outline glow", 0, 1, 0.01,
           help="the rest of the target (e.g. the gable outline) glows brighter, framing the sprites"),
     Param("seed", "int", 14, "Seed", 0, 9999, 1),
 ]
@@ -354,6 +355,11 @@ def floaters(t, ctx, P, st):
                 u = (p.x - x) / cp + (w - 1) / 2
                 if u < -1 or u > w:
                     continue
+                if not rise:
+                    # drifting: rest on whole bulbs and glide quickly between them, so
+                    # single-bulb details (ghost eyes) are not smeared away
+                    fl = math.floor(u)
+                    u = fl + _smooth((u - fl - 0.375) / 0.25)
                 a1, a2 = sample(bmp, u, vrow)
                 if a1 <= 0 and a2 <= 0:
                     continue
@@ -425,7 +431,7 @@ def _sprite_xy(F: dict, s: dict, w: int, h: int, clock: float, P: dict) -> tuple
 FLAG_PARAMS = [
     Param("colors", "colors", ["#ff0010", "#c8c8d2"], "Stripes",
           help="the row colours, bottom row first, repeating"),
-    Param("canton", "color", "#0a2cff", "Star field"),
+    Param("canton", "color", "#1030ff", "Star field"),
     Param("stars", "color", "#ffffff", "Stars"),
     Param("canton_rows", "int", 3, "Star field rows", 0, 6, 1, help="how many top rows the star field covers"),
     Param("canton_edge", "number", 0.5, "Star field width", 0.1, 1, 0.01,
@@ -487,9 +493,9 @@ def flag(t, ctx, P, st):
             amp = depth * min(1.0, 0.35 + xr / 6.0)
             v = lvl * (1 - amp * (1 - crest))
             if r >= crow and p.x <= edge:
-                if (k + r) % 2 == 0:
+                if (k + 2 * r) % 3 == 0:              # a star on every third bulb
                     g = glint(i, clock, rate, 0.04, 0.35, seed, 1)[0] if rate > 0 else 0.0
-                    s = 0.72 + 0.28 * g
+                    s = 0.85 + 0.15 * g
                     c = (star[0] * s * v, star[1] * s * v, star[2] * s * v)
                 else:
                     c = (can[0] * v, can[1] * v, can[2] * v)

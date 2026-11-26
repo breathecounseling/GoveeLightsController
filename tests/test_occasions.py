@@ -81,6 +81,7 @@ class EveryPresetTests(unittest.TestCase):
                 names.add(d["name"])
                 sc = Scene.from_dict(d)
                 lit = {r.name: 0.0 for r in L.runs}
+                drive = {r.name: 0.0 for r in L.runs}
                 frames = 0
                 for k in range(20 * 20):
                     cols = sc.render(k / 20, L)
@@ -88,15 +89,42 @@ class EveryPresetTests(unittest.TestCase):
                         frames += 1
                         for p, c in zip(L.pixels, cols):
                             lit[p.run] += lum(c)
+                            drive[p.run] += max(c)
                 avg = {r.name: lit[r.name] / (frames * len(r.pixels)) for r in L.runs}
                 # nothing "off": every run is visibly lit on average ...
-                if pid != "july-4th-fireworks":               # fireworks are dark between shells
-                    for run_name, v in avg.items():
-                        self.assertGreater(v, 0.06, f"{pid}: {run_name} too dark ({v:.3f})")
-                # ... and no run blows the others away
-                hi, lo = max(avg.values()), min(avg.values())
-                if pid != "july-4th-fireworks":
-                    self.assertLess(hi / lo, 6.0, f"{pid}: runs unbalanced {avg}")
+                for run_name, v in avg.items():
+                    self.assertGreater(v, 0.06, f"{pid}: {run_name} too dark ({v:.3f})")
+                # ... and no run blows the others away (nor sits as a dark hole beside them).
+                # Balance is how hard each run's LEDs are driven (brightest channel), so a
+                # saturated purple run is not counted as "dim" beside an orange one. A
+                # near-dark zigzag (floaters glow 0.18) measured 1.7-2.2 and must fail.
+                lvl = {r.name: drive[r.name] / (frames * len(r.pixels)) for r in L.runs}
+                hi, lo = max(lvl.values()), min(lvl.values())
+                self.assertLessEqual(hi / lo, 1.6, f"{pid}: runs unbalanced {lvl}")
+
+
+class MasterPaletteTests(unittest.TestCase):
+    def test_master_palette_keeps_stencils_and_ghost_eyes(self):
+        """A master palette restyles looks, not stencils: the pumpkin's mask layer and the
+        ghosts' eye colour stay as they are."""
+        from goveelights.scene import apply_palette
+        L = house()
+        F = O.field(L, L.indices("Peak"))
+        body = F["rows"][0][0]                                # bottom-left bulb: solid pumpkin
+        for master in (None, {"palette": "Halloween"}):
+            sc = Scene.from_dict(load("halloween-pumpkin"))
+            seen = []
+            for k in range(60):
+                cols = sc.render(k / 20, L, master)
+                if k >= 20:
+                    seen.append(cols[body])
+            spread = max(max(c[j] for c in seen) - min(c[j] for c in seen) for j in range(3))
+            self.assertLess(spread, 0.05, f"{master}: pumpkin body flickers {spread:.2f}")
+        fx = EFFECTS["floaters"]
+        P = fx.resolve({"shape": "ghost"})
+        apply_palette(fx, P, [(1.0, 0.0, 1.0), (0.0, 1.0, 0.0)])
+        self.assertEqual(tuple(P["detail"]), (0.0, 0.0, 0.0))
+        self.assertEqual(P["colors"], [(1.0, 0.0, 1.0), (0.0, 1.0, 0.0)])
 
 
 class FieldTests(unittest.TestCase):

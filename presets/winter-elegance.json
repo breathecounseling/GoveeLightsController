@@ -10,11 +10,12 @@
       "effect": "shimmer",
       "params": {
         "colors": [
-          "#e8f0ff",
+          "#b8d0ff",
+          "#d0e0ff",
           "#b8d0ff",
           "#ffffff"
         ],
-        "level": 0.3,
+        "level": 0.5,
         "width": 10,
         "spacing": 90,
         "flicker": 0.3,
@@ -30,7 +31,7 @@
           "#ffffff",
           "#c8dcff"
         ],
-        "background": "#4a5a7a",
+        "background": "#6a80b0",
         "density": 0.22,
         "duration": 1.4,
         "seed": 19

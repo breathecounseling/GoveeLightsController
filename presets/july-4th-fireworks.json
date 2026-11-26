@@ -6,6 +6,35 @@
   ],
   "layers": [
     {
+      "effect": "twinkle",
+      "target": "Eaves",
+      "params": {
+        "colors": [
+          "#ffffff",
+          "#b0c4ff"
+        ],
+        "background": "#0a1a90",
+        "density": 0.1,
+        "duration": 2.5,
+        "seed": 4
+      }
+    },
+    {
+      "effect": "twinkle",
+      "target": "Peak",
+      "blend": "add",
+      "params": {
+        "colors": [
+          "#ffffff",
+          "#b0c4ff"
+        ],
+        "background": "#081470",
+        "density": 0.06,
+        "duration": 2.5,
+        "seed": 7
+      }
+    },
+    {
       "effect": "candy_cane",
       "target": "Lower roofline",
       "opacity": 0.4,
@@ -21,18 +50,21 @@
       }
     },
     {
-      "effect": "twinkle",
-      "target": "Eaves",
-      "blend": "add",
+      "effect": "candy_cane",
+      "target": [
+        "Front gable outline",
+        "Both peaks"
+      ],
+      "opacity": 0.8,
       "params": {
         "colors": [
-          "#ffffff",
-          "#b0c4ff"
+          "#ff0010",
+          "#c8c8d2",
+          "#0a2cff"
         ],
-        "background": "#000000",
-        "density": 0.1,
-        "duration": 2.5,
-        "seed": 4
+        "width": 4,
+        "blend": 0.25,
+        "speed": 0.5
       }
     },
     {
@@ -47,7 +79,7 @@
           "#ff2030",
           "#4060ff"
         ],
-        "rate": 28,
+        "rate": 40,
         "burst_size": 42,
         "crackle": 0.5,
         "embers": 0.3,
