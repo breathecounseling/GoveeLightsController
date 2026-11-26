@@ -253,7 +253,7 @@ h2 .sp{flex:1}
     </div>
     <div class="card">
       <h2>Showtimes</h2>
-      <p class="help">Run a show automatically, e.g. every hour on the hour from 5 to 10 pm. Showtimes play while the lights are on (schedule or Live); untick "Only when the lights are on" to switch them on for it, e.g. the New Year's Eve show at 23:55 on 12-31.</p>
+      <p class="help">Run a show automatically, e.g. every hour on the hour from 5 to 10 pm, or only on one date (12-31). Normally a showtime only plays while the lights are on (schedule or Live); untick that and it switches them on for the show, then off again.</p>
       <div id="stList"></div><button class="sm" onclick="addShowtime()">+ Showtime</button>
       <button class="pri" style="width:100%;margin-top:8px" onclick="saveExtras('showtimes')">Save showtimes</button>
     </div>
@@ -285,7 +285,11 @@ h2 .sp{flex:1}
       <div class="grp">Presets visitors can pick</div><div class="tgt" id="vPresets"></div>
       <div class="prm"><div class="top"><span class="lbl">Each pick plays for</span><output id="vSecV"></output></div><input type="range" id="vSec" min="20" max="300" step="10"></div>
       <div class="prm"><div class="top"><span class="lbl">One pick per person every</span><output id="vCdV"></output></div><input type="range" id="vCd" min="30" max="600" step="30"></div>
-      <label class="row" style="margin:6px 0"><input type="checkbox" id="vSp"> <span>"Make it sparkle" button</span></label>
+      <div class="grp">What visitors can send (short moments over whatever is playing)</div>
+      <label class="row" style="margin:6px 0"><input type="checkbox" id="vSp"> <span>✨ "Make it sparkle" button</span></label>
+      <label class="row" style="margin:6px 0"><input type="checkbox" id="vSnow"> <span>❄️ Shake for snow: a short snow flurry</span></label>
+      <label class="row" style="margin:6px 0"><input type="checkbox" id="vCol"> <span>🎨 Send a colour: a ripple of one of 8 festive colours from the gable</span></label>
+      <p class="help" style="margin-top:2px">Each lasts a few seconds, is rate limited (per person and for everyone together) and only plays while the lights are on.</p>
       <div id="vLink" class="help"></div><div id="qr"></div>
       <div class="row wrap"><button class="pri" onclick="saveVisitor()">Save</button><button onclick="printSign()">Print sign</button><button class="sm" onclick="saveVisitor(true)">New link</button></div>
     </div>
@@ -1455,13 +1459,13 @@ function drawShowtimes(){
     el.querySelector('[data-del]').onclick = () => { EXTRAS.showtimes.splice(k,1); drawShowtimes() };
     box.appendChild(el) });
 }
-function addShowtime(){ const first = Object.keys(userShows())[0] || allShowNames()[0]; if (!first) return toast('Make a show first'); EXTRAS.showtimes.push({show:first, from:'17:00', to:'22:00', every:60, enabled:true}); drawShowtimes() }
+function addShowtime(){ const first = Object.keys(userShows())[0] || allShowNames()[0]; if (!first) return toast('Make a show first'); EXTRAS.showtimes.push({show:first, from:'17:00', to:'22:00', every:60, only_when_on:true, enabled:true}); drawShowtimes() }
 
 // ------------------------------------------------------------- visitor page
 function visitorUrl(){ const v = EXTRAS.visitor || {}; return v.token ? `${location.origin}/visit/${v.token}` : '' }
 function drawVisitor(){
   const v = EXTRAS.visitor ||= {}; $('vEn').checked = !!v.enabled; $('vTitle').value = v.title||''; $('vMsg').value = v.message||'';
-  $('vSec').value = v.seconds||60; $('vSecV').textContent = (v.seconds||60)+' s'; $('vCd').value = v.cooldown||90; $('vCdV').textContent = (v.cooldown||90)+' s'; $('vSp').checked = v.sparkle !== false;
+  $('vSec').value = v.seconds||60; $('vSecV').textContent = (v.seconds||60)+' s'; $('vCd').value = v.cooldown||90; $('vCdV').textContent = (v.cooldown||90)+' s'; $('vSp').checked = v.sparkle !== false; $('vSnow').checked = v.snow !== false; $('vCol').checked = v.colours !== false;
   $('vSec').oninput = e => { v.seconds = +e.target.value; $('vSecV').textContent = v.seconds+' s' }; $('vCd').oninput = e => { v.cooldown = +e.target.value; $('vCdV').textContent = v.cooldown+' s' };
   const box = $('vPresets'); box.innerHTML = ''; v.presets ||= [];
   PRESETS.forEach(p => { const b = h(`<button class="chip ${v.presets.includes(p.id)?'on':''}">${esc(p.name)}</button>`);
@@ -1471,7 +1475,7 @@ function drawVisitor(){
   $('qr').innerHTML = ''; if (url && v.enabled && window.qrcode){ const q = qrcode(0, 'M'); q.addData(url); q.make(); $('qr').innerHTML = q.createImgTag(6, 0) }
 }
 async function saveVisitor(newLink){
-  const v = EXTRAS.visitor; Object.assign(v, {enabled: $('vEn').checked, title: $('vTitle').value.trim(), message: $('vMsg').value.trim(), sparkle: $('vSp').checked});
+  const v = EXTRAS.visitor; Object.assign(v, {enabled: $('vEn').checked, title: $('vTitle').value.trim(), message: $('vMsg').value.trim(), sparkle: $('vSp').checked, snow: $('vSnow').checked, colours: $('vCol').checked});
   if (newLink && !confirm('Make a new link? Printed signs with the old QR code will stop working.')) return;
   if (await post('visitor', {value: {...v, new_link: !!newLink}})) { EXTRAS.visitor = (await get('extras')).visitor; drawVisitor(); toast('Saved') }
 }

@@ -161,7 +161,9 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
             if action == "page":
                 return self._send(200, (WEB / "visit.html").read_bytes(), "text/html; charset=utf-8")
             if action == "state":
-                return self._json(ctl.visitor_state())
+                return self._json(ctl.visitor_state(auth.client_ip(self)))
+            if action == "frame":                     # the little live view of the house
+                return self._json({"hex": ctl.visitor_frame()})
             if action == "layout":
                 info = ctl.layout_info()
                 return self._json({"pixels": info["pixels"], "bounds": info["bounds"]})
@@ -342,6 +344,13 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                         return self._json({"ok": True, **ctl.visitor_pick(str(b.get("id", "")), client)})
                     if vis[1] == "sparkle":
                         ctl.visitor_sparkle(client)
+                        return self._json({"ok": True})
+                    if vis[1] == "snow":
+                        ctl.visitor_snow(client)
+                        return self._json({"ok": True})
+                    if vis[1] == "colour":
+                        h = b.get("hex")
+                        ctl.visitor_colour(h if isinstance(h, str) else "", client)
                         return self._json({"ok": True})
                 except (ValueError, TypeError) as e:
                     return self._json({"ok": False, "error": str(e)}, 429 if "again" in str(e) or "seconds" in str(e) else 400)

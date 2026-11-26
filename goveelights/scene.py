@@ -62,6 +62,12 @@ def blend(mode: str, b: Color, c: Color, o: float) -> Color:
     if mode == "mask":
         m = 1 - o + luminance(c) * o
         return (b[0] * m, b[1] * m, b[2] * m)
+    if mode == "over":          # overlays only (not offered for layers): brightness is opacity
+        a = max(c[0], c[1], c[2], 0.0) * o
+        if a <= 0:
+            return b
+        a = min(1.0, a)
+        return (b[0] * (1 - a) + c[0] * o, b[1] * (1 - a) + c[1] * o, b[2] * (1 - a) + c[2] * o)
     return (b[0] + (c[0] - b[0]) * o, b[1] + (c[1] - b[1]) * o, b[2] + (c[2] - b[2]) * o)
 
 
