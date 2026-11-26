@@ -71,7 +71,8 @@ class Layout:
         pos_all = {r.mac: r.positions() for r in runs}
         # runs without a mapped shape (e.g. a new WLED strip) go on their own line below
         # the house in the preview until camera mapping places them
-        shaped = [xy for r in runs if r.geometry for xy in pos_all[r.mac]]
+        shaped = [pos_all[r.mac][k] for r in runs if r.geometry
+                  for k in range(r.count) if k not in r.hidden]     # visible bulbs only
         if shaped:
             bx = min(x for x, _ in shaped)
             by = min(y for _, y in shaped)

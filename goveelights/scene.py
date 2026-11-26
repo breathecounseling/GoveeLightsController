@@ -26,6 +26,7 @@ matches the pure function at t, so previews and tests stay deterministic.
 from __future__ import annotations
 
 import colorsys
+import copy as _copy
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -192,17 +193,21 @@ class Scene:
             d["favorite"] = True
         return d
 
-    def adopt_state(self, old: "Scene | None"):
-        """Keep motion continuous when a scene is replaced by an edited copy."""
+    def adopt_state(self, old: "Scene | None", copy: bool = False):
+        """Keep motion continuous when a scene is replaced by an edited copy.
+        copy=True: take a deep copy of each layer's effect memory instead of sharing it
+        (needed when the old scene keeps rendering during a crossfade, or one dict
+        would be stepped twice per frame with two parameter sets)."""
         if not old:
             return
+        dup = _copy.deepcopy if copy else (lambda v: v)
         self._last_t = old._last_t
         for a, b in zip(self.layers, old.layers):
             if a.effect == b.effect and b.clock is not None:
-                a.clock, a.travel, a.state = b.clock, b.travel, b.state
+                a.clock, a.travel, a.state = b.clock, b.travel, dup(b.state)
                 for ua, ub in zip(a.units, b.units):
                     if ua.type == ub.type:
-                        ua.state = ub.state
+                        ua.state = dup(ub.state)
 
     def _palette(self, name: str) -> list[Color] | None:
         if not name:

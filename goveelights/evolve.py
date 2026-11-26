@@ -13,7 +13,10 @@ from .effects import EFFECTS
 from .fx import FX
 from .palettes import CATEGORIES
 
-SKIP = {"seed", "target", "value"}          # never vary these
+# never vary these: identity, location and clock settings, and timers/modes where the
+# value is a schedule rather than a look (a dusk demo loop, a tree relight, a finale...)
+SKIP = {"seed", "target", "value", "lat", "lon", "shift", "demo", "at", "seconds",
+        "celebrate", "intro", "relight", "finale", "clear", "burst_every"}
 
 
 def _family(pal: str) -> list[str]:
@@ -36,6 +39,8 @@ def _vary(params: dict, schema, rng: random.Random, amount: float):
                 base = float(base)
             except (TypeError, ValueError):
                 continue
+            if base == 0 and p.min == 0:
+                continue                              # 0 is 'off' / 'never': keep it off
             # vary relative to the original for wide-range settings (a 40-bulb gradient
             # shouldn't jump to 2 or 400), but never by less than a sliver of the range
             span = min((p.max - p.min) * amount, max(abs(base), (p.max - p.min) * 0.01) * amount * 1.5)

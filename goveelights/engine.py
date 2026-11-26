@@ -89,7 +89,8 @@ class Engine:
         self.transition = transition if transition in self.TRANSITIONS else "crossfade"
         with self._lock:
             if continuous and scene is not None:
-                scene.adopt_state(self.scene)
+                # copy the effect memory if the old scene keeps rendering in a fade
+                scene.adopt_state(self.scene, copy=fade_s > 0 and self.scene is not None)
             if self.scene is not None and scene is not None and fade_s > 0:
                 self._prev, self._fade_start, self._fade_s = self.scene, self.now(), fade_s
             else:

@@ -17,6 +17,7 @@ Positional effects take `axis`:
 from __future__ import annotations
 
 import math
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -256,6 +257,9 @@ def twinkle(t, p, P):
     return lerp(P["background"], c, env)
 
 
+_sparkle_memo = threading.local()   # per-thread: engine and thumbnails don't share
+
+
 @effect("sparkle", "Sparkle", [
     Param("color", "color", "#ffffff"),
     Param("background", "color", "#000000"),
@@ -265,15 +269,23 @@ def twinkle(t, p, P):
 ], "Quick random flashes; good as an 'add' layer over another effect.")
 def sparkle(t, p, P):
     # time is cut into slots; each slot flashes a few random pixels
+    # the slots are shared by every bulb, so work out once per frame which bulb each
+    # recent slot lit (O(look + n) per frame rather than O(look * n))
     slot = 1.0 / P["rate"]
-    out = 0.0
     look = max(1, int(P["decay"] * 4 / slot) + 1)
-    k0 = math.floor(t / slot)
-    for k in range(k0, k0 - look, -1):
-        if int(hash01(k, P["seed"]) * p.n) == p.i:
-            age = t - k * slot
-            out = max(out, math.exp(-age / P["decay"]))
-    return lerp(P["background"], P["color"], out)
+    key = (t, P["rate"], P["decay"], P["seed"], p.n)
+    m = getattr(_sparkle_memo, "m", None)
+    if m is None or m[0] != key:
+        lit: dict = {}
+        k0 = math.floor(t / slot)
+        for k in range(k0, k0 - look, -1):
+            i = int(hash01(k, P["seed"]) * p.n)
+            v = math.exp(-(t - k * slot) / P["decay"])
+            if v > lit.get(i, 0.0):
+                lit[i] = v
+        m = (key, lit)
+        _sparkle_memo.m = m
+    return lerp(P["background"], P["color"], m[1].get(p.i, 0.0))
 
 
 @effect("candy_cane", "Candy-cane stripes", [
