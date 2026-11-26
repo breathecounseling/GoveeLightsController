@@ -8,6 +8,8 @@ govee_config.json.*.tmp
 govee_auth.json
 govee_auth.tmp
 govee_auth.json.*.tmp
+govee_cloud.json
+govee_cloud.json.*.tmp
 goveelights.log
 .claude/worktrees/
 user_presets/

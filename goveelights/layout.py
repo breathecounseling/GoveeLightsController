@@ -32,6 +32,9 @@ class Run:
     hidden: set[int] = field(default_factory=set)
     geometry: list[list[float]] = field(default_factory=list)
     trim: tuple | None = None            # per-run colour gains (r, g, b), e.g. to warm up a bluish run
+    role: str | None = None              # a run added later says what it is (peak, roofline, porch, accent)
+    guess: bool = False                  # geometry is a placeholder until camera mapping measures it
+    follows: str | None = None           # opt-in: a run or zone it copies when a scene leaves it dark
     pixels: list[Pixel] = field(default_factory=list)   # visible, virtual order
 
     def positions(self) -> list[tuple[float, float]]:
@@ -260,11 +263,14 @@ class Layout:
             hit = self._alias(role, depth + 1)
             if hit:
                 return hit
+        hit = []
         for nm in [r.name for r in self.runs] + list(self.zones):
             low = nm.lower()
             if any(w in low for w in ROLE_WORDS[role]):
-                return [nm]
-        return []
+                hit = [nm]
+                break
+        # a run added for this role (Add a run: "at the porch") plays there too
+        return hit + [r.name for r in self.runs if r.role == role and r.pixels and r.name not in hit]
 
     def substitute(self, name) -> list[str]:
         """What plays for a target name this layout doesn't have (see ROLES above); []
@@ -324,7 +330,10 @@ class Layout:
             runs.append(Run(mac=mac, name=d.get("name") or mac, count=int(count),
                             reverse=bool(d.get("reversed")), hidden=set(d.get("hidden") or []),
                             geometry=d.get("geometry") or [],
-                            trim=tuple(float(v) for v in d["trim"]) if d.get("trim") else None))
+                            trim=tuple(float(v) for v in d["trim"]) if d.get("trim") else None,
+                            role=d.get("role") if d.get("role") in ROLES else None,
+                            guess=bool(d.get("geometry_guess")),
+                            follows=str(d["follows"]) if d.get("follows") else None))
         return cls(runs, cfg.data.get("zones", []), cfg.data.get("target_aliases"), dark + _house_names(cfg))
 
     def summary(self) -> str:

@@ -25,6 +25,7 @@ matches the pure function at t, so previews and tests stay deterministic.
 """
 from __future__ import annotations
 
+import bisect
 import colorsys
 import copy as _copy
 import json
@@ -172,6 +173,24 @@ class Layer:
 LAYER_KEYS = ("effect", "params", "blend", "opacity", "target", "enabled", "mod", "fx", "palette")
 
 
+def _touches(idx: list[int], lo: int, hi: int) -> bool:
+    """Does a sorted index list hold anything in lo..hi?"""
+    k = bisect.bisect_left(idx, lo)
+    return k < len(idx) and idx[k] <= hi
+
+
+def _mirror(out: list, layout, r):
+    """A run the scene doesn't light, set to follow another run or zone (opt-in, Add a
+    run: "when a preset leaves it dark, copy"), shows that run's colours stretched along
+    its own bulbs. The other runs are not changed."""
+    src = [i for i in layout.indices(r.follows) if not (r.pixels[0].i <= i <= r.pixels[-1].i)]
+    if not src:
+        return
+    m, k = len(r.pixels), len(src)
+    for j, p in enumerate(r.pixels):
+        out[p.i] = out[src[round(j * (k - 1) / (m - 1)) if m > 1 else k // 2]]
+
+
 @dataclass
 class Scene:
     layers: list[Layer]
@@ -268,12 +287,17 @@ class Scene:
                         U.state = {}
             self._layout = layout
         ctx_cache = self._cache.setdefault("ctx", {})
+        followers = [r for r in getattr(layout, "runs", ()) if getattr(r, "follows", None) and r.pixels]
+        reached = set()
         for li, L in enumerate(self.layers):
             if not L.enabled:
                 continue
             idx = layout.layer_indices(L.target) if hasattr(layout, "layer_indices") else layout.indices(L.target)
             if not idx:
                 continue
+            for r in followers:
+                if r.mac not in reached and _touches(idx, r.pixels[0].i, r.pixels[-1].i):
+                    reached.add(r.mac)
             ldt = dt * ms
             if L.clock is None:               # first frame: start "as if running since t=0"
                 L.clock = t * ms
@@ -332,6 +356,9 @@ class Scene:
             else:
                 for i in idx:
                     out[i] = blend(mode, out[i], frame[i], o)
+        for r in followers:
+            if r.mac not in reached:
+                _mirror(out, layout, r)
         br = self.brightness
         hue = float(m.get("hue", 0.0)) % 1.0
         res = []
