@@ -320,6 +320,9 @@ h2 .sp{flex:1}
   </div>
   <div class="card">
     <h2>Devices</h2><div id="devInfo" class="kv"></div>
+    <div class="grp">Add a WLED controller</div>
+    <p class="help">For DIY pixels (WS2815 strip, WS2811 bullet nodes, WS2812B fairy strings) on an ESP32 running WLED. Type its IP address (shown in the WLED app). Its bulb count is read automatically; then use camera mapping to place it on the house.</p>
+    <div class="row"><input type="text" id="wledIp" placeholder="192.168.14.50" inputmode="decimal" style="flex:1"><input type="text" id="wledName" placeholder="Name (e.g. Tree)" style="flex:1"><button onclick="addWled()">Add</button></div>
     <p class="help">Bulb counts, landmarks, identify: diagnostics (pauses effects while open).</p>
     <a href="/diag"><button>Open diagnostics</button></a>
   </div>
@@ -485,7 +488,8 @@ async function refresh(){
   if ($('banners')._h !== b.join('')) $('banners').innerHTML = $('banners')._h = b.join('');
   document.querySelectorAll('.pc').forEach(el => el.classList.toggle('on', !!p && p.kind==='preset' && el.dataset.id===p.id));
   document.querySelectorAll('#palChips .pals .pal').forEach(el => el.classList.toggle('on', el.dataset.p === (s.master.palette||'')));
-  $('devInfo').innerHTML = s.runs.map(r => `<b>${esc(r.name)}</b><span>${r.visible}/${r.count} bulbs · ${esc(r.ip||'no IP')}</span>`).join('');
+  const di = s.runs.map(r => `<b>${esc(r.name)}</b><span>${r.visible}/${r.count} ${r.kind === 'wled' ? 'pixels · WLED' : 'bulbs'} · ${esc(r.ip||'no IP')}${r.kind === 'wled' ? ` <button class="sm bad" onclick="removeWled('${esc(r.mac)}','${esc(r.name)}')">Remove</button>` : ''}</span>`).join('');
+  if ($('devInfo')._h !== di) $('devInfo').innerHTML = $('devInfo')._h = di;
   schedStatus(); liveStatus(); drawTrims();
   if (document.activeElement !== $('dthEn')) $('dthEn').checked = s.dither !== false;
 }
@@ -1321,6 +1325,12 @@ function printSign(){
     <p style="font-size:20px">${esc(EXTRAS.visitor.message || '')}</p></body>`);
   w.document.close(); setTimeout(() => w.print(), 400);
 }
+
+// ------------------------------------------------------------- WLED
+async function addWled(){ const ip = $('wledIp').value.trim(); if (!ip) return toast('Type the IP address');
+  const r = await post('wled/add', {address: ip, name: $('wledName').value.trim()});
+  if (r){ toast(`Added ${r.name}: ${r.count} pixels`); $('wledIp').value = ''; $('wledName').value = ''; reloadLayout(); refresh() } }
+async function removeWled(id, name){ if (!confirm('Remove ' + name + '?')) return; if (await post('device/remove', {id})) { toast('Removed'); reloadLayout(); refresh() } }
 
 // ------------------------------------------------------------- colour match
 let whiteOn = false;

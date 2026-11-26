@@ -324,6 +324,13 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                 ctl.play_scene(b["scene"], {"kind": "scene", "name": b["scene"].get("name", "untitled"),
                                             "id": b.get("id")}, fade=0, continuous=True)
                 return {"ok": True}
+            if a == "wled/add":
+                return {"ok": True, **ctl.add_wled(str(b["address"]), str(b.get("name", "")))}
+            if a == "device/remove":
+                if ctl.cfg.devices.get(b["id"], {}).get("kind") != "wled":
+                    raise ValueError("only WLED controllers can be removed here")
+                ctl.remove_device(b["id"])
+                return {"ok": True}
             if a == "trim":
                 mac, tr = b["mac"], b.get("trim")
                 tr = [max(0.2, min(1.0, float(v))) for v in tr] if tr else None

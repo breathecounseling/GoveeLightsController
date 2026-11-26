@@ -81,6 +81,11 @@ colour command), realtime is re-enabled and the frame resent, at most once every
 minutes per box. It pauses itself if a box keeps changing on its own. Optional periodic
 re-enable is in More → Output.
 
+**WLED (DIY pixels):** Settings → Devices → *Add a WLED controller* with its IP address.
+The pixel count is read from WLED, frames are streamed over DDP (UDP 4048) at the engine's
+frame rate, and the new run joins the virtual strip next to the Govee runs. Place it with
+camera mapping. `tools/fake_wled.py` simulates one for testing.
+
 **Remote access and login:** see [REMOTE.md](REMOTE.md) (Cloudflare Tunnel + Access on
 your own subdomain; the app adds its own password, lockout and CSRF protection). Set the
 password under More → Security, or with `python -m goveelights set-password`.

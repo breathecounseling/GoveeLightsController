@@ -19,7 +19,7 @@ from .config import Config
 from .diag_server import App as DiagApp
 from .engine import Engine
 from .layout import Layout
-from .output import GoveeRazerOutput
+from .output import GoveeRazerOutput, MultiOutput, WledDdpOutput
 from .scene import Scene
 
 log = logging.getLogger(__name__)
@@ -120,9 +120,15 @@ class Controller:
             old = self.engine
             was_live = bool(old and old.live)
             layout = Layout.from_config(self.cfg)
-            devs = {r.mac: self.cfg.devices[r.mac] for r in layout.runs}
-            out = GoveeRazerOutput(self.lan, devs, refresh_s=float(self.ecfg.get("refresh_s", 1.0)),
-                                   streamers=self.diag.streamers)
+            refresh = float(self.ecfg.get("refresh_s", 1.0))
+            govee = {r.mac: self.cfg.devices[r.mac] for r in layout.runs
+                     if self.cfg.devices[r.mac].get("kind", "govee") == "govee"}
+            wled = {r.mac: self.cfg.devices[r.mac] for r in layout.runs
+                    if self.cfg.devices[r.mac].get("kind") == "wled"}
+            out = GoveeRazerOutput(self.lan, govee, refresh_s=refresh, streamers=self.diag.streamers)
+            if wled:
+                w = WledDdpOutput(wled, refresh_s=refresh)
+                out = MultiOutput(out, {k: w for k in wled})
             if old:
                 old.stop(release=False)
             e = Engine(layout, out, fps=float(self.ecfg.get("fps", 20)), gamma=float(self.ecfg.get("gamma", 1.0)),
@@ -144,7 +150,7 @@ class Controller:
             if not manual:
                 return            # the schedule never interrupts diagnostics
             self.exit_diag()
-        if on and not any(d.get("ip") for d in self.engine.output.devices.values()):
+        if on and not any(d.get("ip") for d in self.cfg.devices.values() if d.get("pixel_count")):
             raise ValueError("no devices with a known IP; scan first")
         if manual and self.interrupt is not None:
             with self.lock:
@@ -797,6 +803,39 @@ class Controller:
         self.build_engine()
         return n
 
+    # ------------------------------------------------------------ WLED
+    def add_wled(self, address: str, name: str = "") -> dict:
+        """Add a WLED controller by IP (optionally ip:port for its web UI). Its bulb count
+        and name come from WLED's own JSON API."""
+        host, _, port = address.strip().partition(":")
+        import ipaddress
+        ipaddress.ip_address(host)                       # must be an IP address
+        url = f"http://{host}:{int(port or 80)}/json/info"
+        try:
+            info = live.fetch_json(url, timeout=4)
+        except Exception as e:  # noqa: BLE001
+            raise ValueError(f"couldn't reach WLED at {address}: {e}") from None
+        count = int((info.get("leds") or {}).get("count") or 0)
+        if count <= 0:
+            raise ValueError("that doesn't look like a WLED controller (no LED count)")
+        dev_id = "wled:" + (info.get("mac") or host)
+        with self.cfg.lock:
+            d = self.cfg.devices.setdefault(dev_id, {})
+            d.update({"kind": "wled", "ip": host, "pixel_count": count, "sku": "WLED",
+                      "name": name or d.get("name") or info.get("name") or "WLED",
+                      "order": d.get("order", len(self.cfg.devices)), "firmware": {"wled": info.get("ver", "")}})
+            for k, v in (("hidden", []), ("geometry", []), ("landmarks", []), ("diag", {})):
+                d.setdefault(k, v)
+            self.cfg.save()
+        self.build_engine()
+        return {"id": dev_id, "name": d["name"], "count": count}
+
+    def remove_device(self, dev_id: str):
+        with self.cfg.lock:
+            self.cfg.devices.pop(dev_id, None)
+            self.cfg.save()
+        self.build_engine()
+
     # ------------------------------------------------------ diagnostics
     def enter_diag(self):
         if not self.diag_active:
@@ -896,6 +935,7 @@ class Controller:
             "schedule": {"enabled": bool(sch.get("enabled")), **self.sched_status,
                          "override_until": self.override_until.isoformat(timespec="minutes") if self.override_until else None},
             "runs": [{"name": r.name, "mac": r.mac, "count": r.count, "visible": len(r.pixels), "trim": r.trim,
+                      "kind": self.cfg.devices.get(r.mac, {}).get("kind", "govee"),
                       "ip": self.cfg.devices[r.mac].get("ip")} for r in e.layout.runs],
             "devices_without_count": [d.get("name") for d in self.cfg.devices.values() if not d.get("pixel_count")],
         }

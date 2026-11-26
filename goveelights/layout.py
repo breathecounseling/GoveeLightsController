@@ -69,6 +69,17 @@ class Layout:
         self._targets: dict = {}
         self.pixels: list[Pixel] = []
         pos_all = {r.mac: r.positions() for r in runs}
+        # runs without a mapped shape (e.g. a new WLED strip) go on their own line below
+        # the house in the preview until camera mapping places them
+        shaped = [xy for r in runs if r.geometry for xy in pos_all[r.mac]]
+        if shaped:
+            bx = min(x for x, _ in shaped)
+            by = min(y for _, y in shaped)
+            k = 0
+            for r in runs:
+                if not r.geometry:
+                    k += 1
+                    pos_all[r.mac] = [(bx + i * 0.5, by - 3.0 * k) for i in range(r.count)]
         for r in runs:
             order = range(r.count - 1, -1, -1) if r.reverse else range(r.count)
             vis = [k for k in order if k not in r.hidden]
