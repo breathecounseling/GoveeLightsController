@@ -55,7 +55,8 @@ def trails(frame, ctx, P, st):
 def _neighbours(ctx):
     """Virtual-strip neighbours within the same run."""
     key = ("nb", id(ctx.layout))
-    nb = ctx.cache.get(key)
+    hit = ctx.cache.get(key)
+    nb = hit[1] if hit is not None and hit[0] is ctx.layout else None    # ids are reused after a layout is freed
     if nb is None:
         px = ctx.layout.pixels
         nb = []
@@ -63,7 +64,7 @@ def _neighbours(ctx):
             left = i - 1 if i > 0 and px[i - 1].mac == p.mac else None
             right = i + 1 if i + 1 < len(px) and px[i + 1].mac == p.mac else None
             nb.append((left, right))
-        ctx.cache[key] = nb
+        ctx.cache[key] = (ctx.layout, nb)
     return nb
 
 
@@ -102,9 +103,9 @@ def glow(frame, ctx, P, st):
 
 def _mirror_map(ctx, axis):
     key = ("mirror", axis, id(ctx.layout))
-    m = ctx.cache.get(key)
-    if m is not None:
-        return m
+    hit = ctx.cache.get(key)
+    if hit is not None and hit[0] is ctx.layout:      # ids are reused after a layout is freed
+        return hit[1]
     px = ctx.layout.pixels
     m = list(range(len(px)))
     if axis == "x":
@@ -121,7 +122,7 @@ def _mirror_map(ctx, axis):
         n = len(px)
         for i in range(n // 2, n):
             m[i] = n - 1 - i
-    ctx.cache[key] = m
+    ctx.cache[key] = (ctx.layout, m)
     return m
 
 
@@ -158,7 +159,10 @@ def kaleido(frame, ctx, P, st):
     "Adds a delayed copy of the layer.")
 def echo(frame, ctx, P, st):
     hist = st.setdefault("hist", [])
-    hist.append((ctx.clock, frame))
+    if hist and hist[-1][0] == ctx.clock:     # clock stopped (master speed 0): don't pile up frames
+        hist[-1] = (ctx.clock, frame)
+    else:
+        hist.append((ctx.clock, frame))
     while len(hist) > 2 and hist[1][0] <= ctx.clock - P["delay"]:
         hist.pop(0)
     old = hist[0][1]

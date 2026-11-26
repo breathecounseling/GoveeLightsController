@@ -55,8 +55,10 @@ def blend(mode: str, b: Color, c: Color, o: float) -> Color:
         return (b[0] + c[0] * o, b[1] + c[1] * o, b[2] + c[2] * o)
     if mode == "multiply":
         return (b[0] * (1 - o + c[0] * o), b[1] * (1 - o + c[1] * o), b[2] * (1 - o + c[2] * o))
-    if mode == "screen":
-        return (1 - (1 - b[0]) * (1 - c[0] * o), 1 - (1 - b[1]) * (1 - c[1] * o), 1 - (1 - b[2]) * (1 - c[2] * o))
+    if mode == "screen":        # the formula needs inputs in 0..1 (layer frames can exceed 1)
+        b0, b1, b2 = (min(1.0, max(0.0, v)) for v in b)
+        c0, c1, c2 = (min(1.0, max(0.0, v * o)) for v in c)
+        return (1 - (1 - b0) * (1 - c0), 1 - (1 - b1) * (1 - c1), 1 - (1 - b2) * (1 - c2))
     if mode == "lighten":
         return (max(b[0], c[0] * o), max(b[1], c[1] * o), max(b[2], c[2] * o))
     if mode == "mask":
@@ -225,7 +227,13 @@ class Scene:
         key = ("pal", name)
         if key not in self._cache:
             hexes = all_palettes(self.palettes).get(name)
-            self._cache[key] = [hex_to_rgb(h) for h in hexes] if hexes else None
+            cols = []
+            for h in hexes or ():
+                try:
+                    cols.append(hex_to_rgb(h))
+                except (ValueError, TypeError, AttributeError, IndexError):
+                    pass                                # a bad user entry must not stop every frame
+            self._cache[key] = cols or None
         return self._cache[key]
 
     def render(self, t: float, layout: Layout, master: dict | None = None) -> list[Color]:
