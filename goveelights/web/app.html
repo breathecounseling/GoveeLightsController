@@ -253,7 +253,7 @@ h2 .sp{flex:1}
     </div>
     <div class="card">
       <h2>Showtimes</h2>
-      <p class="help">Run a show automatically, e.g. every hour on the hour from 5 to 10 pm. Showtimes only play while the lights are on (schedule or Live).</p>
+      <p class="help">Run a show automatically, e.g. every hour on the hour from 5 to 10 pm. Showtimes play while the lights are on (schedule or Live); untick "Only when the lights are on" to switch them on for it, e.g. the New Year's Eve show at 23:55 on 12-31.</p>
       <div id="stList"></div><button class="sm" onclick="addShowtime()">+ Showtime</button>
       <button class="pri" style="width:100%;margin-top:8px" onclick="saveExtras('showtimes')">Save showtimes</button>
     </div>
@@ -737,7 +737,7 @@ const blankLayer = (effect='gradient', extra={}) => ({effect, params:{}, blend:'
 async function editCurrent(quiet){
   const r = await get('scene');
   if (r.scene) { draft = r.scene; draftId = r.playing && r.playing.id || null }
-  else { draft = {name:'New scene', brightness:1, layers:[blankLayer()]}; draftId = null; push() }
+  else { draft = {name:'New scene', brightness:1, layers:[blankLayer()]}; draftId = null }   // sent on the first edit, not on opening the tab
   norm(); sel = 0; resetHistory(); renderEditor(); if (!quiet) tabTo('create');
 }
 async function editPreset(id){ draft = await get('preset?id='+encodeURIComponent(id)); draftId = id; norm(); sel=0; resetHistory(); renderEditor(); push(); tabTo('create') }
@@ -1032,10 +1032,15 @@ function plEditor(){
 }
 
 // ------------------------------------------------------------- schedule
-function progOpts(sel){ const k = sel ? (sel.playlist ? 'playlist:'+sel.playlist : sel.evolve ? 'evolve:'+sel.evolve : sel.preset ? 'preset:'+sel.preset : '') : '';
-  return opt('','(lights off)',k==='') + '<optgroup label="Playlists">' + Object.keys(PL).map(n => opt('playlist:'+n,n,k==='playlist:'+n)).join('') + '</optgroup><optgroup label="Presets">' + PRESETS.map(p => opt('preset:'+p.id,p.name,k==='preset:'+p.id)).join('') + '</optgroup>' +
+const progKey = sel => sel ? (sel.playlist ? 'playlist:'+sel.playlist : sel.evolve ? 'evolve:'+sel.evolve : sel.preset ? 'preset:'+sel.preset : '') : '';
+function progOpts(sel){ const k = progKey(sel);
+  const known = k === '' || (k.startsWith('playlist:') ? Object.keys(PL).includes(k.slice(9)) : PRESETS.some(p => p.id === k.slice(k.indexOf(':')+1)));
+  return (known ? '' : `<option value="${esc(k)}" selected>(missing: ${esc(k.slice(k.indexOf(':')+1))})</option>`) +
+    opt('','(lights off)',k==='') + '<optgroup label="Playlists">' + Object.keys(PL).map(n => opt('playlist:'+n,n,k==='playlist:'+n)).join('') + '</optgroup><optgroup label="Presets">' + PRESETS.map(p => opt('preset:'+p.id,p.name,k==='preset:'+p.id)).join('') + '</optgroup>' +
     '<optgroup label="Evolving (never the same twice)">' + PRESETS.map(p => opt('evolve:'+p.id, p.name + ' · evolving', k==='evolve:'+p.id)).join('') + '</optgroup>' }
 const progVal = v => !v ? null : v.startsWith('playlist:') ? {playlist:v.slice(9)} : v.startsWith('evolve:') ? {evolve:v.slice(7)} : {preset:v.slice(7)};
+/* The program for a select value, keeping the old object (and extra keys such as an evolve's minutes) when it's unchanged. */
+const keepProg = (old, v) => old && progKey(old) === v ? old : progVal(v);
 function schedForm(){ const s = SCH; $('scEn').checked = !!s.enabled; $('scOn').value = s.on||'sunset'; $('scOffset').value = s.on_offset_min??0; $('scOnTime').value = s.on_time||'17:00'; $('scOff').value = s.off_time||'23:00';
   $('scDefault').innerHTML = progOpts(s.default); $('scLat').value = s.lat??40.3764; $('scLon').value = s.lon??-104.6922; drawRules(); scUI();
   const dm = s.dim||{}, mn = s.morning||{}; $('dmEn').checked = !!dm.enabled; $('dmFrom').value = dm.from||'22:00'; $('dmLvl').value = Math.round((dm.level??0.5)*100);
@@ -1059,7 +1064,7 @@ const DATE_RE = /^(\d{1,2}-\d{1,2}|(thanksgiving|easter|mothers-day|fathers-day|
 async function saveSchedule(){ for (const r of SCH.rules){ if ((r.from || r.to) && (!DATE_RE.test(r.from||'') || !DATE_RE.test(r.to||''))) return toast('Dates: MM-DD or a holiday like thanksgiving+1'); if (!r.from && !r.to && !(r.days||[]).length) return toast('Give each rule dates or days') }
   SCH.dim = {enabled: $('dmEn').checked, from: $('dmFrom').value || '22:00', level: (+$('dmLvl').value || 50)/100, fade_min: (SCH.dim||{}).fade_min || 30};
   SCH.morning = {...(SCH.morning||{}), enabled: $('mnEn').checked, on_time: $('mnOn').value || '06:00', off: $('mnOff').value, off_time: $('mnOffT').value || '07:30'};
-  Object.assign(SCH, {enabled:$('scEn').checked, on:$('scOn').value, on_offset_min:+$('scOffset').value, on_time:$('scOnTime').value, off_time:$('scOff').value, default:progVal($('scDefault').value), dusk_intro_minutes: Math.max(0, Math.min(120, Math.round(+$('scDusk').value || 0))), lat:+$('scLat').value, lon:+$('scLon').value});
+  Object.assign(SCH, {enabled:$('scEn').checked, on:$('scOn').value, on_offset_min:+$('scOffset').value, on_time:$('scOnTime').value, off_time:$('scOff').value, default:keepProg(SCH.default, $('scDefault').value), dusk_intro_minutes: Math.max(0, Math.min(120, Math.round(+$('scDusk').value || 0))), lat:+$('scLat').value, lon:+$('scLon').value});
   if (await post('schedule',{schedule:SCH})){ toast('Schedule saved'); setTimeout(refresh,300) } }
 const tfmt = iso => iso ? new Date(iso).toLocaleString([], {weekday:'short', hour:'numeric', minute:'2-digit'}) : '';
 function progName(p){ if (!p) return 'lights off'; if (p.playlist) return 'playlist '+p.playlist; if (p.evolve){ const f = PRESETS.find(x=>x.id===p.evolve); return (f ? f.name : p.evolve) + ' (evolving)' } const f = PRESETS.find(x=>x.id===p.preset); return f ? f.name : p.preset }
@@ -1310,6 +1315,7 @@ function drawWeather(){
 /* Save one section of the live settings. Shows: only the user's own (built-ins live on the server). */
 async function saveExtras(which, msg = 'Saved'){
   const value = which === 'shows' ? userShows() : EXTRAS[which];
+  if (which === 'shows') for (const [n, sh] of Object.entries(value)){ const k = cuesBad(sh); if (k >= 0){ toast(`"${n}" cue ${k+1}: pick a preset or a time`); return false } }
   const r = await post(which, {value}); if (r && msg) toast(msg); return r }
 function liveStatus(){
   const g = Object.entries(ST.games || {}).map(([k, v]) => v.error ? `${esc(k)}: couldn't reach scores (${esc(v.error)})` :
@@ -1350,7 +1356,9 @@ function userShows(){ const out = {}; Object.entries(EXTRAS.shows || {}).forEach
 const isBuiltinShow = n => !!n && n in builtinShows();
 const showDef = n => userShows()[n] || builtinShows()[n] || null;
 const allShowNames = () => [...Object.keys(builtinShows()), ...Object.keys(userShows()).filter(n => !(n in builtinShows()))];
-const cueSecs = c => Math.max(1, +c.seconds || 20);
+/* Same rule as Controller._cue_secs: missing or not a number -> 20 s, else at least 1 s. */
+const cueSecs = c => { const v = c.seconds; if (v === undefined || v === null || v === '' || !Number.isFinite(+v)) return 20; return Math.max(1, +v) };
+const cuesBad = sh => (sh.cues || []).findIndex(c => !(c && (c.preset || c.countdown_to)));
 const fmtDur = t => { t = Math.round(t); const m = Math.floor(t/60), s = t%60; return m ? (s ? `${m}m ${s}s` : `${m} min`) : `${s}s` };
 const presetName = id => (PRESETS.find(p => p.id === id) || {}).name || id;
 function shSelect(){ const names = allShowNames(); if (!shCur || !names.includes(shCur)) shCur = Object.keys(userShows())[0] || names[0] || null;
@@ -1397,12 +1405,18 @@ function shEditor(){
   const cb = box.querySelector('#cues');
   sh.cues.forEach((c, k) => { const el = h(`<div class="cue">${c.countdown_to
         ? `<div class="full row"><b class="grow">Countdown to</b><input type="time" data-f="countdown_to" value="${esc(c.countdown_to)}" style="width:auto"></div>`
-        : `<select class="full" data-f="preset">${optsWithMissing(PRESETS.map(p => [p.id, p.name]), c.preset)}</select>`}
+        : `<select class="full" data-f="preset">${c.preset ? '' : '<option value="" selected disabled>(pick a preset)</option>'}${optsWithMissing(PRESETS.map(p => [p.id, p.name]), c.preset)}</select>`}
       <div class="full row"><div class="grow"><label class="dim" style="font-size:11px">${k+1}. Transition in</label><select data-f="transition">${(EXTRAS.transitions||[]).map(t => opt(t, TRANS_LABEL[t]||t, t===(c.transition||'crossfade'))).join('')}</select></div>
         <div style="width:70px"><label class="dim" style="font-size:11px">over (s)</label><input type="number" data-f="fade" min="0" max="10" step="0.5" value="${c.fade??1.5}"></div>
         <div style="width:70px"><label class="dim" style="font-size:11px">then hold (s)</label><input type="number" data-f="seconds" min="2" max="600" step="1" value="${c.seconds??20}"></div></div>
       <div class="row full"><span class="grow"></span><button class="sm" data-a="up" ${k?'':'disabled'} aria-label="Move up">↑</button><button class="sm" data-a="down" ${k<sh.cues.length-1?'':'disabled'} aria-label="Move down">↓</button><button class="sm bad" data-a="del" aria-label="Remove cue">✕</button></div></div>`);
-    el.querySelectorAll('[data-f]').forEach(i => i.onchange = () => { const f = i.dataset.f; c[f] = i.type==='number' ? +i.value : i.value; if (f==='seconds') shEditor() });
+    el.querySelectorAll('[data-f]').forEach(i => i.onchange = () => { const f = i.dataset.f;
+      if (f === 'countdown_to' && !i.value){ i.value = c.countdown_to; return toast('Pick a time') }   // a blank time would drop the cue
+      if (i.type === 'number'){
+        if (i.value === '' || !Number.isFinite(+i.value)) delete c[f];                                  // blank: back to the default
+        else c[f] = Math.min(+i.max || Infinity, Math.max(+i.min || 0, +i.value));
+        return shEditor() }
+      c[f] = i.value });
     el.querySelectorAll('[data-a]').forEach(b => b.onclick = () => { const a = b.dataset.a, cs = sh.cues;
       if (a==='up') [cs[k-1],cs[k]] = [cs[k],cs[k-1]]; if (a==='down') [cs[k+1],cs[k]] = [cs[k],cs[k+1]]; if (a==='del') cs.splice(k,1); shEditor() });
     cb.appendChild(el) });
@@ -1415,6 +1429,13 @@ function shEditor(){
     const gone = shCur, d = EXTRAS.shows[gone]; delete EXTRAS.shows[gone]; shCur = null;
     if (await saveExtras('shows', 'Deleted')) shSelect(); else { EXTRAS.shows[gone] = d; shCur = gone } };
 }
+/* A showtime's optional "date" ("MM-DD") or "dates" (list), as the controller reads them. */
+const stDates = st => { const d = st.date || st.dates; return !d ? [] : typeof d === 'string' ? [d] : Array.isArray(d) ? d.map(String) : [] };
+/* "12-31, 1-1" -> ['12-31','01-01'] (zero-padded: the controller compares with strftime %m-%d); '' -> []; bad -> null. */
+function parseStDates(s){ const out = [];
+  for (const t of String(s).split(/[\s,]+/).filter(Boolean)){ const m = /^(\d{1,2})-(\d{1,2})$/.exec(t); if (!m || +m[1] < 1 || +m[1] > 12 || +m[2] < 1 || +m[2] > 31) return null;
+    const v = m[1].padStart(2,'0') + '-' + m[2].padStart(2,'0'); if (!out.includes(v)) out.push(v) }
+  return out }
 function drawShowtimes(){
   const box = $('stList'); box.innerHTML = ''; const D = ['Mo','Tu','We','Th','Fr','Sa','Su'];
   const b = Object.keys(builtinShows()), names = allShowNames().map(n => [n, b.includes(n) ? n + ' (built-in)' : n]);
@@ -1422,9 +1443,14 @@ function drawShowtimes(){
       <div class="full"><label>Show</label><select data-f="show">${optsWithMissing(names, st.show)}</select></div>
       <div><label>From</label><input type="time" data-f="from" value="${esc(st.from||'17:00')}"></div><div><label>To</label><input type="time" data-f="to" value="${esc(st.to||'22:00')}"></div>
       <div class="full"><label>Every</label><select data-f="every">${[[15,'15 minutes'],[30,'30 minutes'],[60,'hour'],[120,'2 hours']].map(([v,l]) => opt(v,l,+st.every===v)).join('')}</select></div>
-      <div class="full days">${D.map((d,i) => `<button class="${(st.days||[]).includes(i)?'on':''}" data-day="${i}">${d}</button>`).join('')}<span class="dim" style="font-size:11px;align-self:center;margin-left:4px">(none = every day)</span></div>
+      <div class="full"><label>Date (MM-DD, optional; e.g. 12-31)</label><input type="text" data-f="date" inputmode="numeric" placeholder="every day" value="${esc(stDates(st).join(', '))}"></div>
+      ${stDates(st).length ? `<div class="full dim" style="font-size:11px">Only on ${esc(stDates(st).join(', '))}</div>` : `<div class="full days">${D.map((d,i) => `<button class="${(st.days||[]).includes(i)?'on':''}" data-day="${i}">${d}</button>`).join('')}<span class="dim" style="font-size:11px;align-self:center;margin-left:4px">(none = every day)</span></div>`}
+      <label class="row full"><input type="checkbox" data-f="only_when_on" ${st.only_when_on!==false?'checked':''}> Only when the lights are on <span class="dim" style="font-size:11px">(untick to switch them on for it)</span></label>
       <label class="row"><input type="checkbox" data-f="enabled" ${st.enabled!==false?'checked':''}> On</label><button class="sm bad" data-del>Remove</button></div>`);
-    el.querySelectorAll('[data-f]').forEach(i => i.onchange = () => { const f = i.dataset.f; st[f] = i.type==='checkbox' ? i.checked : f==='every' ? +i.value : i.value });
+    el.querySelectorAll('[data-f]').forEach(i => i.onchange = () => { const f = i.dataset.f;
+      if (f === 'date'){ const ds = parseStDates(i.value); if (!ds){ i.value = stDates(st).join(', '); return toast('Date: MM-DD, e.g. 12-31') }
+        delete st.date; delete st.dates; if (ds.length === 1) st.date = ds[0]; else if (ds.length) st.dates = ds; return drawShowtimes() }
+      st[f] = i.type==='checkbox' ? i.checked : f==='every' ? +i.value : i.value });
     el.querySelectorAll('[data-day]').forEach(b => b.onclick = () => { const d = +b.dataset.day; st.days = st.days||[]; st.days = st.days.includes(d) ? st.days.filter(x=>x!==d) : [...st.days, d].sort(); drawShowtimes() });
     el.querySelector('[data-del]').onclick = () => { EXTRAS.showtimes.splice(k,1); drawShowtimes() };
     box.appendChild(el) });
