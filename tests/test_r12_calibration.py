@@ -465,6 +465,165 @@ class MatchTheRunsInTheBrowser(unittest.TestCase):
         self.assertTrue(ctl.engine.live)
 
 
+# ================================================================ review fixes
+class NudgesUndoCleanly(unittest.TestCase):
+    def cals(self):
+        return {m: dict(calibrate.IDENTITY, gain=[1.0, 1.0, 1.0]) for m in ("a", "b", "c")}
+
+    def test_cooler_then_warmer_comes_back_and_warmer_again_is_warmer(self):
+        c = self.cals()
+        c.update(calibrate.nudge(c, "a", "cooler"))
+        c.update(calibrate.nudge(c, "a", "warmer"))
+        self.assertEqual(c["a"]["gain"], [1.0, 1.0, 1.0])
+        c.update(calibrate.nudge(c, "a", "warmer"))
+        r, g, b = c["a"]["gain"]
+        self.assertEqual(r, 1.0)
+        self.assertLess(b, 1.0)                                # really warmer this time
+
+    def test_many_taps_each_way_come_back(self):
+        for first, second in (("warmer", "cooler"), ("cooler", "warmer")):
+            c = self.cals()
+            for _ in range(5):
+                c.update(calibrate.nudge(c, "a", first))
+            for _ in range(5):
+                c.update(calibrate.nudge(c, "a", second))
+            self.assertEqual(c["a"]["gain"], [1.0, 1.0, 1.0], (first, second))
+
+    def test_brighter_at_full_says_so_and_stops_at_a_floor(self):
+        c = self.cals()
+        names = {"a": "Peak"}
+        self.assertIn("Peak is already at full", calibrate.nudge_note(c, "a", "brighter", names))
+        self.assertEqual(calibrate.nudge_note(c, "a", "dimmer", names), "")
+        for _ in range(30):
+            c.update(calibrate.nudge(c, "a", "brighter"))
+        self.assertEqual([c[m]["brightness"] for m in "abc"], [1.0, calibrate.CASCADE_FLOOR, calibrate.CASCADE_FLOOR])
+        self.assertEqual(calibrate.nudge(c, "a", "brighter"), {})
+        self.assertIn("as low as this button takes them", calibrate.nudge_note(c, "a", "brighter", names))
+        c["b"]["brightness"] = 0.4                             # set lower by hand: the cascade never raises it
+        self.assertNotIn("b", calibrate.nudge(c, "a", "brighter"))
+
+
+class MatchReviewFixes(unittest.TestCase):
+    def rig(self):
+        r = Rig(self, datetime(2026, 11, 26, 14, 0).astimezone(), {"schedule": {"enabled": False}})
+        return r, r.ctl
+
+    def slow_boxes(self, ctl, secs=0.6):
+        out = ctl.engine.output
+        orig = out.start
+        started = threading.Event()
+
+        def slow(*a, **k):
+            started.set()
+            time.sleep(secs)
+            return orig(*a, **k)
+        out.start = slow
+        return started
+
+    def test_status_works_and_lock_is_free_while_the_lights_come_on(self):
+        r, ctl = self.rig()
+        started = self.slow_boxes(ctl)
+        t = threading.Thread(target=ctl.match, args=("start", "warm"))
+        t.start()
+        self.assertTrue(started.wait(2))
+        self.assertEqual(ctl.status()["match"], {"color": "warm"})
+        got = ctl.lock.acquire(timeout=0.2)                    # the tick is not held up
+        if got:
+            ctl.lock.release()
+        t.join(3)
+        self.assertTrue(got)
+        self.assertTrue(ctl.engine.live)
+        self.assertIn("match", ctl.engine.overlays)
+
+    def test_stop_while_the_lights_come_on_leaves_them_off(self):
+        r, ctl = self.rig()
+        started = self.slow_boxes(ctl)
+        t = threading.Thread(target=ctl.match, args=("start", "warm"))
+        t.start()
+        self.assertTrue(started.wait(2))
+        ctl.match("stop")
+        t.join(3)
+        self.assertIsNone(ctl.match_state)
+        self.assertFalse(ctl.engine.live)
+
+    def test_a_forced_show_during_a_test_that_lit_the_house_ends_dark(self):
+        r, ctl = self.rig()
+        self.assertTrue(ctl.match("start", "warm")["took_lights"])
+        self.assertTrue(ctl.play_show("Thanksgiving tonight", manual=True))
+        self.assertFalse(ctl.interrupt["live"])
+        ctl.end_interrupt()
+        self.assertFalse(ctl.engine.live)
+
+    def test_a_show_over_a_test_on_lit_lights_keeps_them_on(self):
+        r, ctl = self.rig()
+        ctl.set_live(True)
+        ctl.match("start", "warm")
+        self.assertTrue(ctl.play_show("Thanksgiving tonight", manual=True))
+        self.assertTrue(ctl.interrupt["live"])
+
+    def test_brighter_at_full_note_over_http(self):
+        from goveelights.app_server import Server, make_handler
+        from goveelights.auth import Auth
+        r, ctl = self.rig()
+        srv = Server(("127.0.0.1", 0), make_handler(ctl, lambda: None, Auth(Path(r.tmp) / "auth.json")))
+        threading.Thread(target=srv.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        run = ctl.engine.layout.runs[1]
+        req = urllib.request.Request(f"http://127.0.0.1:{srv.server_address[1]}/api/calibrate",
+                                     data=json.dumps({"mac": run.mac, "nudge": "brighter"}).encode(),
+                                     headers={"X-Requested-With": "lights", "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            res = json.loads(resp.read())
+        self.assertIn(f"{run.name} is already at full", res["note"])
+        self.assertEqual(res["cal"][run.mac]["brightness"], 1.0)
+
+
+@unittest.skipUnless(NODE_PATH, "node + Playwright not installed")
+class MatchTheRunsOnAnIphone(unittest.TestCase):
+    """Sliders survive a pause mid-drag with iPhone-style focus, a colour tap shows at once
+    while the lights are still coming on, the bar preview matches the engine, and labels
+    stay readable on blue."""
+
+    def test_drag_feedback_preview(self):
+        import os
+        import subprocess
+        from goveelights.app_server import Server, make_handler
+        from goveelights.auth import Auth
+        r = Rig(self, datetime(2026, 11, 26, 14, 0).astimezone(), {"schedule": {"enabled": False}})
+        ctl = r.ctl
+        out = ctl.engine.output
+        orig = out.start
+        out.start = lambda *a, **k: (time.sleep(1.5), orig(*a, **k))[1]
+        peak = ctl.engine.layout.runs[1]
+        ctl.calibrate({"mac": peak.mac, "gamma": 1.6})
+        srv = Server(("127.0.0.1", 0), make_handler(ctl, lambda: None, Auth(Path(r.tmp) / "auth.json")))
+        threading.Thread(target=srv.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        res = subprocess.run(["node", str(ROOT / "tests" / "ui_match_drag.js"), f"http://127.0.0.1:{srv.server_address[1]}/"],
+                             capture_output=True, text=True, timeout=120, env={**os.environ, "NODE_PATH": NODE_PATH})
+        self.assertEqual(res.returncode, 0, res.stderr)
+        o = json.loads(res.stdout.strip().splitlines()[-1])
+        self.assertEqual(o["errors"], [], o)
+        self.assertTrue(o["litAtOnce"], o)
+        self.assertIn("Switching the lights on", o["noteAtOnce"])
+        self.assertEqual(o["header"], "Colour test")
+        self.assertTrue(o["sameNode"], o)
+        self.assertEqual(o["sliderValue"], "0.56")
+        self.assertEqual(ctl.calibrations()[ctl.engine.layout.runs[0].mac]["brightness"], 0.56)
+        # the preview of Peak's warm white is what the engine sends (gamma deepens it)
+        ctl.calibrate({"mac": ctl.engine.layout.runs[0].mac, "brightness": 1.0})
+        ctl.match("color", "warm")
+        e = ctl.engine
+        e.tick()
+        sent = e.output.frames[peak.mac][peak.pixels[0].local]
+        self.assertEqual(tuple(o["peakPreview"]), tuple(sent))
+        self.assertLess(o["peakPreview"][1], 180)              # deeper, not lighter
+        self.assertEqual(o["blueInk"], "rgb(255, 255, 255)")
+        self.assertNotEqual(o["warmInk"], "rgb(255, 255, 255)")
+
+
 class SwatchesAreRealColours(unittest.TestCase):
     def test_hex(self):
         for key, (name, hexc) in calibrate.SWATCHES.items():

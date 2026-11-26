@@ -567,7 +567,8 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                 ctl.calibrate({"mac": b["mac"], "gain": [max(0.2, min(1.0, float(v))) for v in tr] if tr else [1, 1, 1]})
                 return {"ok": True}
             if a == "calibrate":                   # More -> Match the runs
-                return {"ok": True, "cal": ctl.calibrate(b)}
+                cal, note = ctl.calibrate_with_note(b)
+                return {"ok": True, "cal": cal, "note": note}
             if a == "match":
                 return {"ok": True, **ctl.match(str(b.get("action", "")), b.get("color"))}
             if a == "master":

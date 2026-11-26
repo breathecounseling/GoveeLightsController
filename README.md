@@ -108,7 +108,8 @@ differently, and a long run can be dimmer at its far end. More → **Match the r
 2. Look from the street. On any run that looks off, tap **A bit warmer / cooler /
    brighter / dimmer**. Each tap shows on the lights straight away. "A bit brighter" on a
    run that is already at full makes the other runs a little dimmer instead (a run can't
-   go brighter than its bulbs).
+   go brighter than its bulbs). The app tells you when that happens, and it never takes the
+   other runs below 60% this way.
 3. **Fine-tune** has sliders for brightness, red, green, blue, mid-tones, and **Far end**:
    if the far end of a run looks dimmer than the start, slide it up a little. The start
    of the run then dims gently to match the far end.

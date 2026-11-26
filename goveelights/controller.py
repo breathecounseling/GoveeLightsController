@@ -618,11 +618,13 @@ class Controller:
             if not self.engine.live and not force_live:
                 return False
             sc = Scene.from_dict(d, self.user_palettes)     # a bad scene leaves no state behind
+            # lights that are only on for the colour test count as off: they go off again afterwards
+            was_live = self.engine.live and not (ms is not None and ms["took"] and self._live_on_gen == ms["gen"])
             if ms is not None:                        # a show or celebration ends the colour test
                 ms["took"] = ms["took"] and not force_live
                 self._end_match()
             if self.interrupt is None:
-                self.interrupt = {"scene": self.scene_dict, "playing": self.playing, "live": self.engine.live}
+                self.interrupt = {"scene": self.scene_dict, "playing": self.playing, "live": was_live}
             it = self.interrupt
             if resume_show and it.get("show"):
                 it["resume"] = {"show": it["show"], "label": it.get("label"), "at": time.time()}
@@ -1021,6 +1023,12 @@ class Controller:
         {mac, nudge: warmer|cooler|brighter|dimmer|even|less-even}: one tap;
         {mac, reset: true}: this run back to normal; {reset: "all"}: every run.
         Returns every run's calibration (mac -> calibration)."""
+        return self.calibrate_with_note(b)[0]
+
+    def calibrate_with_note(self, b: dict) -> tuple[dict[str, dict], str]:
+        """calibrate(), plus a short message for the owner when a tap did something they
+        might not expect (empty otherwise)."""
+        note = ""
         with self.cfg.lock:
             cals = self.calibrations()
             if b.get("reset") == "all":
@@ -1033,6 +1041,8 @@ class Controller:
                 if b.get("reset"):
                     self._set_cal(mac, dict(calibrate.IDENTITY))
                 elif b.get("nudge"):
+                    names = {r.mac: r.name for r in self.engine.layout.runs}
+                    note = calibrate.nudge_note(cals, mac, str(b["nudge"]), names)
                     for m, c in calibrate.nudge(cals, mac, str(b["nudge"])).items():
                         self._set_cal(m, c)
                 else:
@@ -1047,7 +1057,7 @@ class Controller:
                         c["gain"] = list(g)
                     self._set_cal(mac, c)
             self.cfg.save()
-        return self.calibrations()
+        return self.calibrations(), note
 
     def match(self, action: str, color: str | None = None) -> dict:
         """POST /api/match: one test colour on every run at once, over whatever is playing.
@@ -1080,15 +1090,25 @@ class Controller:
                                           for d in self.cfg.devices.values() if d.get("pixel_count")):
                     raise ValueError("no devices with a known IP; scan first")
                 took = not e.live
-                st = self.match_state = {"took": took, "gen": self._live_on_gen, "interrupt": self.interrupt}
-                if took:
-                    e.set_live(True)                  # the engine only: the schedule and the scene stay as they are
+                st = self.match_state = {"took": took, "gen": self._live_on_gen, "interrupt": self.interrupt,
+                                         "color": key, "until": now + self.MATCH_HOLD}
+                switch_on = took
+            else:
+                switch_on = False
             st.update(color=key, until=now + self.MATCH_HOLD)
             w = e.wall()
             e.overlays["match"] = (Scene.from_dict({"layers": [{"effect": "solid",
                                                                 "params": {"color": calibrate.SWATCHES[key][1]}}]}),
                                    "normal", 1.0, w + self.MATCH_HOLD + 5, w, 0)   # the engine's clock
-            return {"on": True, "color": key, "took_lights": st["took"], "blackout": e.blackout}
+            res = {"on": True, "color": key, "took_lights": st["took"], "blackout": e.blackout}
+        if switch_on:
+            # Switching the boxes on takes a second or so each: done outside the lock (as
+            # set_live does) so status polls and the once-a-second tick don't wait on it.
+            e.set_live(True)                          # the engine only: the schedule and the scene stay as they are
+            with self.lock:
+                if self.match_state is not st and st["took"] and self._live_on_gen == st["gen"] and e.live:
+                    e.set_live(False, release=True)   # the test was stopped while the lights came on
+        return res
 
     def _end_match(self):
         """Call with self.lock held."""
@@ -2169,7 +2189,7 @@ class Controller:
             "interrupt": ({"label": it.get("label"), "left": max(0, round(it["until"] - time.time()))} if it else None),
             "mapping": bool(self.map_state), "weather": self.weather, "overlays": list(e.overlays),
             "games": self.games, "dim": round(e.dim, 2),
-            "match": ({"color": self.match_state["color"]} if self.match_state else None),
+            "match": ({"color": (self.match_state or {}).get("color")} if self.match_state else None),
             "show": ((it or {}).get("show") or {}).get("name"),
             "dusk_intro": ({"left": max(0, round(di["until"] - time.time())), "then": di["program"]} if di else None),
             "visitor_queue": len(self.vqueue),

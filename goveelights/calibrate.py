@@ -15,7 +15,7 @@ picture gets it. Missing or default values change nothing: output stays byte-ide
 
 Gains only ever lower a channel (never above 1), so the brightest colour a run can show
 is unchanged and nothing clips: "a bit brighter" on a run that is already at full makes
-the other runs a bit dimmer instead.
+the other runs a bit dimmer instead (never below CASCADE_FLOOR this way), and says so.
 
 The older per-run "trim" ([r, g, b]) is read as the gain when there is no calibration
 gain, and is folded into "calibration" the first time the run is calibrated here.
@@ -107,34 +107,52 @@ def apply_to_run(run, c: dict):
     run.bright, run.rgamma, run.fade = c["brightness"], c["gamma"], c["fade"]
 
 
+# one tap of "a bit warmer" / "a bit cooler": (red, green, blue) taken off. "Cooler" on a
+# run that was made warmer gives back exactly one "warmer" step (and the other way round),
+# so taps always undo cleanly.
+WARM_STEP = (0.0, STEP_WARM * 0.5, STEP_WARM * 1.5)    # less blue, a little less green
+COOL_STEP = (STEP_WARM * 1.5, STEP_WARM * 0.25, 0.0)   # less red, a touch less green
+CASCADE_FLOOR = 0.6     # "brighter" on a run at full brings the others down, but not below this
+
+
+def nudge_note(cals: dict[str, dict], mac: str, what: str, names: dict | None = None) -> str:
+    """What a nudge did that the owner might not expect (empty when nothing to say)."""
+    if what != "brighter" or mac not in cals or cals[mac]["brightness"] < 1.0:
+        return ""
+    name = (names or {}).get(mac) or "This run"
+    if not any(m != mac and o["brightness"] > CASCADE_FLOOR for m, o in cals.items()):
+        return (f"{name} is already as bright as it goes, and the other runs are as low as this "
+                f"button takes them. Try \"A bit dimmer\" on another run instead.")
+    return f"{name} is already at full, so the other runs came down a little to match it."
+
+
 def nudge(cals: dict[str, dict], mac: str, what: str) -> dict[str, dict]:
     """One tap of 'a bit warmer / cooler / brighter / dimmer / more even' on one run.
     cals: mac -> calibration (all runs; 'brighter' on a run already at full dims the
-    others instead). Returns the changed calibrations (mac -> calibration)."""
+    others instead, down to CASCADE_FLOOR). Returns the changed calibrations (mac -> calibration)."""
     if mac not in cals:
         raise ValueError("unknown run")
     c = {k: (list(v) if isinstance(v, list) else v) for k, v in cals[mac].items()}
-    r, g, b = c["gain"]
+    gain = list(c["gain"])
     changed = {}
-    if what == "warmer":                         # less blue (a little less green); undo "cooler" first
-        if r < 1.0:
-            r = min(1.0, r + STEP_WARM)
-        else:
-            b, g = max(GAIN[0], b - STEP_WARM * 1.5), max(GAIN[0], g - STEP_WARM * 0.5)
-    elif what == "cooler":                       # less red; undo "warmer" first
-        if b < 1.0 or g < 1.0:
-            b, g = min(1.0, b + STEP_WARM * 1.5), min(1.0, g + STEP_WARM * 0.5)
-        else:
-            r, g = max(GAIN[0], r - STEP_WARM * 1.5), max(GAIN[0], g - STEP_WARM * 0.25)
+
+    def step(d, sign):
+        return [min(1.0, max(GAIN[0], x + sign * dx)) for x, dx in zip(gain, d)]
+
+    if what == "warmer":                         # undo "cooler" first
+        gain = step(COOL_STEP, +1) if gain[0] < 1.0 else step(WARM_STEP, -1)
+    elif what == "cooler":                       # undo "warmer" first
+        gain = step(WARM_STEP, +1) if gain[2] < 1.0 else step(COOL_STEP, -1)
     elif what == "brighter":
         if c["brightness"] < 1.0:
             c["brightness"] = min(1.0, c["brightness"] + STEP_BRIGHT)
         else:                                    # already full: the other runs come down to it
             for m, o in cals.items():
-                if m != mac:
+                if m != mac and o["brightness"] > CASCADE_FLOOR:
                     o = dict(o, gain=list(o["gain"]))
-                    o["brightness"] = max(BRIGHT[0], o["brightness"] - STEP_BRIGHT)
+                    o["brightness"] = round(max(CASCADE_FLOOR, o["brightness"] - STEP_BRIGHT), 3)
                     changed[m] = o
+            return changed
     elif what == "dimmer":
         c["brightness"] = max(BRIGHT[0], c["brightness"] - STEP_BRIGHT)
     elif what == "even":                         # far end looks dimmer: more compensation
@@ -143,11 +161,10 @@ def nudge(cals: dict[str, dict], mac: str, what: str) -> dict[str, dict]:
         c["fade"] = max(0.0, c["fade"] - STEP_FADE)
     else:
         raise ValueError(f"unknown adjustment {what!r}")
-    c["gain"] = [round(r, 3), round(g, 3), round(b, 3)]
+    c["gain"] = [round(x, 3) for x in gain]
     c["brightness"] = round(c["brightness"], 3)
     c["fade"] = round(c["fade"], 3)
-    if what != "brighter" or not changed:
-        changed[mac] = c
+    changed[mac] = c
     return changed
 
 
