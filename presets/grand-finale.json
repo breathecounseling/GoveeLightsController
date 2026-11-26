@@ -6,15 +6,113 @@
   ],
   "layers": [
     {
-      "effect": "fireworks",
+      "effect": "solid",
       "params": {
-        "rate": 26,
-        "burst_size": 44,
+        "color": "#000c40"
+      },
+      "target": "all"
+    },
+    {
+      "effect": "fireworks",
+      "blend": "lighten",
+      "params": {
+        "colors": [
+          "#ff0010",
+          "#ffffff",
+          "#1838ff",
+          "#ff00c0",
+          "#00e0ff",
+          "#20ff40"
+        ],
+        "rate": 44,
+        "burst_size": 46,
         "crackle": 0.55,
         "finale": 30,
-        "finale_shells": 18,
-        "launch_zone": "Lower roofline"
+        "finale_shells": 22,
+        "launch_zone": "Porch",
+        "seed": 7,
+        "embers": 0.3
       },
+      "target": "Whole front gable"
+    },
+    {
+      "effect": "fireworks",
+      "blend": "lighten",
+      "params": {
+        "colors": [
+          "#ff0010",
+          "#ffffff",
+          "#1838ff",
+          "#ff00c0",
+          "#00e0ff",
+          "#20ff40"
+        ],
+        "rate": 30,
+        "burst_size": 40,
+        "burst_speed": 16,
+        "crackle": 0.55,
+        "finale": 30,
+        "finale_shells": 16,
+        "launch_zone": "Bottom of target",
+        "seed": 41,
+        "embers": 0.3
+      },
+      "target": [
+        "South gable",
+        "Front eave"
+      ]
+    },
+    {
+      "effect": "fireworks",
+      "blend": "lighten",
+      "params": {
+        "colors": [
+          "#ff0010",
+          "#ffffff",
+          "#1838ff",
+          "#ff00c0",
+          "#00e0ff",
+          "#20ff40"
+        ],
+        "rate": 28,
+        "burst_size": 36,
+        "burst_speed": 14,
+        "crackle": 0.55,
+        "finale": 30,
+        "finale_shells": 14,
+        "launch_zone": "Garage",
+        "seed": 77,
+        "embers": 0.3
+      },
+      "target": "Lower roofline"
+    },
+    {
+      "effect": "bursts",
+      "blend": "lighten",
+      "params": {
+        "colors": [
+          "#ff0010",
+          "#ffffff",
+          "#1838ff",
+          "#ff00c0",
+          "#00e0ff"
+        ],
+        "interval": 0.6,
+        "life": 1.3,
+        "burst_speed": 18,
+        "ring": 4,
+        "seed": 5
+      },
+      "target": "North wall"
+    },
+    {
+      "effect": "sparkle",
+      "params": {
+        "rate": 8,
+        "decay": 0.2
+      },
+      "blend": "add",
+      "opacity": 0.8,
       "target": "all"
     }
   ]

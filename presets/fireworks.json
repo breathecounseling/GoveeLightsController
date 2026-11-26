@@ -6,11 +6,21 @@
   ],
   "layers": [
     {
-      "effect": "bursts",
+      "effect": "solid",
       "params": {
-        "interval": 0.8,
-        "life": 1.6,
-        "burst_speed": 14
+        "color": "#000c40"
+      }
+    },
+    {
+      "effect": "bursts",
+      "blend": "lighten",
+      "params": {
+        "colors": ["#ff0010", "#ffffff", "#1030ff", "#ff00c0", "#00e0ff"],
+        "interval": 0.4,
+        "life": 1.5,
+        "burst_speed": 24,
+        "ring": 4,
+        "seed": 9
       },
       "fx": [
         {
@@ -22,13 +32,34 @@
       ]
     },
     {
+      "effect": "bursts",
+      "target": "Peak",
+      "blend": "lighten",
+      "params": {
+        "colors": ["#ff0010", "#ffffff", "#1030ff", "#ff00c0", "#00e0ff"],
+        "interval": 0.6,
+        "life": 1.4,
+        "burst_speed": 9,
+        "ring": 2.5,
+        "seed": 23
+      },
+      "fx": [
+        {
+          "type": "trails",
+          "params": {
+            "length": 0.3
+          }
+        }
+      ]
+    },
+    {
       "effect": "sparkle",
       "params": {
-        "rate": 4,
-        "decay": 0.15
+        "rate": 10,
+        "decay": 0.2
       },
       "blend": "add",
-      "opacity": 0.6
+      "opacity": 0.9
     }
   ]
 }

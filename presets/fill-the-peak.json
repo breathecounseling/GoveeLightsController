@@ -8,9 +8,22 @@
           "#ff2000"
         ],
         "period": 6,
-        "min": 0.3
+        "min": 0.55
       },
       "target": "Eaves"
+    },
+    {
+      "effect": "candy_cane",
+      "params": {
+        "colors": [
+          "#ff0000",
+          "#00c000"
+        ],
+        "width": 5,
+        "blend": 0.2,
+        "speed": 2
+      },
+      "target": "Accent"
     },
     {
       "effect": "wipe",
@@ -18,7 +31,7 @@
         "colors": [
           "#ff0000",
           "#00c000",
-          "#ffffff"
+          "#e0ccb8"
         ],
         "speed": 3,
         "hold": 1.5,

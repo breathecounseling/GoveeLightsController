@@ -3,6 +3,7 @@
   "layers": [
     {
       "effect": "alternate",
+      "target": ["Eaves", "Accent"],
       "params": {
         "colors": [
           "#ff5000",
@@ -10,17 +11,31 @@
         ],
         "group": 4,
         "period": 3,
-        "fade": 1
+        "fade": 0
+      }
+    },
+    {
+      "effect": "alternate",
+      "target": "Peak",
+      "params": {
+        "colors": [
+          "#ff5000",
+          "#7000ff"
+        ],
+        "group": 1,
+        "period": 3,
+        "fade": 0,
+        "axis": "y"
       }
     },
     {
       "effect": "sparkle",
       "params": {
-        "color": "#40ff40",
-        "rate": 8,
-        "decay": 0.3
+        "color": "#60ff20",
+        "rate": 4,
+        "decay": 0.45
       },
-      "blend": "add"
+      "blend": "lighten"
     }
   ],
   "tags": [

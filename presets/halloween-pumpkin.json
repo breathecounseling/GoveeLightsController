@@ -28,14 +28,14 @@
       "effect": "solid",
       "target": "Peak",
       "params": {
-        "color": "#ff9a00"
+        "color": "#ffd020"
       }
     },
     {
       "effect": "fire",
       "target": "Peak",
       "blend": "add",
-      "opacity": 0.7,
+      "opacity": 0.3,
       "params": {
         "colors": [
           "#ff6000",
@@ -69,10 +69,10 @@
       "params": {
         "image": "jack-o-lantern",
         "colors": [
-          "#ff3c00",
+          "#ff3000",
           "#000000",
           "#30c000",
-          "#b02200"
+          "#e02000"
         ]
       }
     },

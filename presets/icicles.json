@@ -4,8 +4,15 @@
   "layers": [
     {
       "effect": "icicles",
-      "target": "Whole front",
-      "params": {}
+      "target": "all",
+      "params": {
+        "colors": ["#2060ff", "#40a0ff", "#1040ff"],
+        "drop_color": "#ffffff",
+        "ice": 0.85,
+        "frost": 0.6,
+        "rate": 60,
+        "sparkle": 0.7
+      }
     }
   ]
 }
