@@ -1678,10 +1678,11 @@ function drawTonight(){
 }
 /* Where each check's fix lives: [tab, Shows segment, an element inside the card to show]. */
 const JUMPS = {sched:['shows','sched','scEn'], showtimes:['shows','shows','stList'], shows:['shows','shows','shSel'], lists:['shows','lists','plSel'],
-  visitor:['shows','live','vEn'], weather:['shows','live','wEn'], game:['shows','live','gEn'], map:['more','','mapCard'], security:['more','','secCard'], devices:['more','','devInfo']};
+  visitor:['shows','live','vEn'], weather:['shows','live','wEn'], game:['shows','live','gEn'], map:['more','','mapCard'], security:['more','','secCard'], devices:['more','','devInfo'], fourth:['more','','fourthCard']};
 function jumpTo(j){
   if (j === 'house') return post('layout/house', {}).then(r => { if (!r) return;
     toast(r.changed && r.changed.length ? 'Added from the house layout: ' + r.changed.join(', ') : 'Nothing to add: check the light box names in Devices'); loadTonight() });
+  if (j === 'calendar'){ tabTo('shows'); segTo('sched'); return calendarSheet() }     // Update the holiday calendar
   const t = JUMPS[j]; if (!t) return;
   tabTo(t[0]); if (t[1]) segTo(t[1]);
   const card = $(t[2])?.closest('.card'); if (!card) return;
