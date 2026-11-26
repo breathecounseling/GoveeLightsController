@@ -157,6 +157,80 @@ class RooflinePhysicsTests(unittest.TestCase):
                 cols = sc.render(k * 0.05, self.L)
                 self.check(cols)
 
+    # ---- review fixes
+    def test_coaster_paused_history_stays_small(self):
+        _, st = run_frames("coaster", self.L, "Eaves", frames=30)
+        _, st = run_frames("coaster", self.L, "Eaves", frames=1000, dt=0.0, state=st)
+        for c in st["cars"]:
+            self.assertLess(len(c.hist), 40)
+        # and long trails at a high frame rate stay under the hard cap
+        _, st = run_frames("coaster", self.L, "Eaves", {"trail": 3}, frames=600, dt=0.001)
+        for c in st["cars"]:
+            self.assertLessEqual(len(c.hist), rp.HIST_MAX)
+
+    def test_coincident_bulbs_make_no_track(self):
+        eff = EFFECTS["coaster"]
+        for ends in ("wrap", "bounce"):
+            P = eff.resolve({"ends": ends})
+            st = {}
+            for k in range(20):
+                f = eff.fn(k * 0.05, Ctx(self.L, [5, 5], k * 0.05, 0.05, 120.0, {}), P, st)
+            self.check(f)
+        car = rp._Car(0, 0.0, 3.0, 0)
+        pth = rp.geo.path(self.L, [5, 5])
+        rp._coaster_step(car, pth, eff.resolve({"ends": "wrap"}), 1 / 60)
+        self.assertEqual((car.s, car.v), (0.0, 0.0))
+        frame, _ = run_frames("embers", self.L, [5, 5, 6], frames=20)
+        self.check(frame)
+
+    def test_coaster_skips_zigzag_unless_alone(self):
+        _, st = run_frames("coaster", self.L, "all", frames=2)
+        runs = {self.L.pixels[t.order[0]].run for t in st["tracks"]}
+        self.assertEqual(runs, {"Eaves", "Accent"})
+        _, st = run_frames("coaster", self.L, "Peak", frames=2)
+        self.assertEqual(len(st["tracks"]), 1)
+
+    def test_live_gravity_and_seed_edits_apply(self):
+        _, st = run_frames("coaster", self.L, "Eaves", {"gravity": 30}, frames=5)
+        f30 = list(st["fast"])
+        _, st = run_frames("coaster", self.L, "Eaves", {"gravity": 120}, frames=2, state=st)
+        self.assertAlmostEqual(st["fast"][0], f30[0] * 2, places=6)
+        for name in ("coaster", "embers"):
+            a, st = run_frames(name, self.L, "Whole front", {"seed": 1}, frames=40)
+            b, st = run_frames(name, self.L, "Whole front", {"seed": 2}, frames=2, state=st)
+            self.assertEqual(st["seed"], 2)
+
+    def test_embers_prewarmed_first_frame(self):
+        frame, st = run_frames("embers", self.L, "Whole front", frames=1)
+        self.assertTrue(st["sparks"])
+        self.assertTrue(any(max(c) > 0.1 for c in frame))
+
+    def test_every_zone_lights_up(self):
+        L = self.L
+        names = [z for z in L.zones] if hasattr(L, "zones") else []
+        names += ["Eaves", "Peak", "Accent", "all"]
+        for z in names:
+            idx = L.indices(z)
+            if not idx:
+                continue
+            for name in ("embers", "coaster"):
+                st, lit, t = {}, False, 0.0
+                eff = EFFECTS[name]
+                P = eff.resolve({})
+                for k in range(100):          # 5 s at 20 fps
+                    d = 0.0 if k == 0 else 0.05
+                    t += d
+                    f = eff.fn(t, Ctx(L, idx, t, d, 120.0, {}), P, st)
+                    if any(max(f[i]) > 0.05 for i in idx):
+                        lit = True
+                        break
+                self.assertTrue(lit, (name, z))
+
+    def test_high_master_speed_not_clipped(self):
+        # 4x master speed at 20 fps -> dt 0.2 per frame: simulated time keeps up
+        _, st = run_frames("coaster", self.L, "Eaves", frames=11, dt=0.2)
+        self.assertAlmostEqual(st["time"], 2.0, places=6)
+
 
 if __name__ == "__main__":
     unittest.main()

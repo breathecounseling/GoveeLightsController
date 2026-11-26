@@ -24,7 +24,9 @@ from .. import geometry as geo
 from ..color import clamp, hash01, lerp, palette
 from ..effects import Param, frame_effect
 
-MAX_DT = 0.1          # longest step simulated per frame (s)
+MAX_DT = 0.25         # longest step simulated per frame (s): fits 5x master speed at 20 fps
+HIST_MAX = 256        # hard cap on a car's trail history
+CREEP = 1.5           # drift speed on flats when the chain lift is off (bulbs/s)
 STEP = 1 / 60         # physics sub-step (s)
 WHITE = (1.0, 1.0, 1.0)
 
@@ -47,7 +49,38 @@ def _tracks(layout, idx) -> list:
         cur.append(i)
     if cur:
         groups.append(cur)
-    return [geo.path(layout, g) for g in groups if len(g) >= 2]
+    out = []
+    for g in groups:
+        if len(g) >= 2:
+            pth = geo.path(layout, g)
+            if pth.length > 1e-6:          # coincident bulbs make no track
+                out.append(pth)
+    return out
+
+
+def _doubles_back(pth) -> bool:
+    """True for a path that zigzags back and forth across the house (a fill such as
+    the Peak tree rows) rather than following a roofline."""
+    flips, last = 0, 0
+    for a, b in zip(pth.x, pth.x[1:]):
+        dx = b - a
+        if abs(dx) < 0.3:
+            continue
+        sg = 1 if dx > 0 else -1
+        if last and sg != last:
+            flips += 1
+            if flips > 2:
+                return True
+        last = sg
+    return False
+
+
+def _roof_tracks(layout, idx) -> list:
+    """Tracks a coaster can ride: rooflines only. A zigzag fill is used only when the
+    target holds nothing else (e.g. target "Peak")."""
+    tracks = _tracks(layout, idx)
+    roof = [t for t in tracks if not _doubles_back(t)]
+    return roof or tracks
 
 
 def _tangent(pth, s: float) -> tuple[float, float]:
@@ -106,16 +139,26 @@ def _assign_tracks(tracks, count: int) -> list[int]:
 
 
 def _coaster_reset(state, layout, idx, P):
-    tracks = _tracks(layout, idx)
+    tracks = _roof_tracks(layout, idx)
     state.clear()
     state["sig"] = _signature(layout, idx)
+    state["seed"] = P["seed"]
     state["tracks"] = tracks
     state["time"] = 0.0
     state["rng"] = random.Random(P["seed"] * 7919 + 17)
     state["sparks"] = []
     state["cars"] = []
-    # height range of each track: sets what "fast" means for the sparkle
-    state["fast"] = [0.55 * math.sqrt(2 * P["gravity"] * max(1.0, max(t.y) - min(t.y))) for t in tracks]
+    # height range of each track: with gravity it sets what "fast" means for the sparkle
+    state["height"] = [max(1.0, max(t.y) - min(t.y)) for t in tracks]
+
+
+def _fast(state, P) -> list[float]:
+    """Speed above which a car throws sparks, per track (follows live gravity edits)."""
+    g = P["gravity"]
+    if state.get("fast_g") != g:
+        state["fast_g"] = g
+        state["fast"] = [0.4 * math.sqrt(2 * g * h) for h in state["height"]]
+    return state["fast"]
 
 
 def _coaster_sync_cars(state, P):
@@ -146,6 +189,10 @@ def _coaster_sync_cars(state, P):
 
 def _coaster_step(car, pth, P, h):
     g, fr, lift = P["gravity"], P["friction"], P["lift"]
+    L = pth.length
+    if L <= 0:
+        car.s, car.v = 0.0, 0.0
+        return
     s, v = car.s, car.v
     if abs(v) > 0.05:
         car.dir = 1 if v > 0 else -1
@@ -157,8 +204,11 @@ def _coaster_step(car, pth, P, h):
         v = d * (abs(v) + (lift - abs(v)) * (1 - math.exp(-5 * h)))
     else:
         v += (-g * sl - fr * v) * h
+        if lift <= 0 and abs(sl) < 0.02 and abs(v) < CREEP:
+            # no chain: on a flat the car still drifts on gently, so it reaches the
+            # next slope and rocks there instead of parking dead on the eave
+            v = d * (abs(v) + (CREEP - abs(v)) * (1 - math.exp(-2 * h)))
     s += v * h
-    L = pth.length
     if P["ends"] == "wrap":
         if s < 0 or s > L:
             s %= L
@@ -177,7 +227,7 @@ def _coaster_step(car, pth, P, h):
     Param("friction", "number", 0.12, "Friction", 0, 2, 0.01, help="how fast the cars lose speed"),
     Param("lift", "number", 6, "Chain lift speed", 0, 25, 0.5,
           help="slow cars on climbs and flats are towed at this speed, so they always make it over "
-               "the crest; 0 = no lift, the cars rock back and forth until they settle in a valley"),
+               "the crest; 0 = no chain: pure gravity, the cars just drift slowly along the flat eaves and roll back off the slopes"),
     Param("trail", "number", 0.6, "Trail (s)", 0, 3, 0.05,
           help="how long the glowing trail lasts: short when crawling, a long streak at full speed"),
     Param("ends", "choice", "bounce", "At the ends", options=["bounce", "wrap"],
@@ -195,13 +245,14 @@ def coaster(t, ctx, P, state):
     frame = _blank(n, P["background"])
     if not idx:
         return frame
-    if state.get("sig") != _signature(layout, idx):
+    if state.get("sig") != _signature(layout, idx) or state.get("seed") != P["seed"]:
         _coaster_reset(state, layout, idx, P)
     tracks = state["tracks"]
     if not tracks:
         return frame
     _coaster_sync_cars(state, P)
     cars, rng = state["cars"], state["rng"]
+    fasts = _fast(state, P)
     dt = min(MAX_DT, max(0.0, ctx.dt or 0.0))
     state["time"] += dt
     now = state["time"]
@@ -223,10 +274,13 @@ def coaster(t, ctx, P, state):
     trail = P["trail"]
     sparks = state["sparks"]
     for c in cars:
-        c.hist.append((now, c.s))
+        if dt > 0 or not c.hist:              # paused (dt 0): time stands still, add nothing
+            c.hist.append((now, c.s))
         while len(c.hist) > 2 and c.hist[1][0] < now - trail:
             c.hist.pop(0)
-        fast = state["fast"][c.tr]
+        if len(c.hist) > HIST_MAX:
+            del c.hist[:-HIST_MAX]
+        fast = fasts[c.tr]
         sp = abs(c.v)
         if P["sparkle"] > 0 and dt > 0 and sp > fast:
             want = P["sparkle"] * 30 * min(1.5, (sp - fast) / fast) * dt
@@ -252,13 +306,13 @@ def coaster(t, ctx, P, state):
     for c in cars:
         pth = tracks[c.tr]
         col = cols[c.k % len(cols)]
-        hot = clamp(abs(c.v) / max(1.0, 2.0 * state["fast"][c.tr]))
+        hot = clamp(abs(c.v) / max(1.0, 2.5 * fasts[c.tr]))
         geo.splat_path(frame, pth, c.s, lerp(col, WHITE, 0.45 * hot), 1.5, mode="max")
     for sk in sparks:
         f = 1 - sk[3] / sk[4]
         fl = 0.55 + 0.45 * hash01(int(sk[3] * 40), int(sk[1] * 10), sk[5])
-        col = lerp(cols[sk[5] % len(cols)], WHITE, 0.6)
-        b = f * f * fl
+        col = lerp(cols[sk[5] % len(cols)], WHITE, 0.75)
+        b = f * fl
         geo.splat_path(frame, tracks[sk[0]], sk[1], (col[0] * b, col[1] * b, col[2] * b), 0.9)
     return _finish(frame, idx)
 
@@ -317,12 +371,23 @@ def _embers_reset(state, layout, idx, P):
         below[i] = any(abs(px[j].x - p.x) <= 1.0 and px[j].y < p.y - 0.4
                        for b in (math.floor(p.x) - 1, math.floor(p.x), math.floor(p.x) + 1)
                        for j in bins.get(b, ()))
+    ys = [px[i].y for i in idx]
+    # a flat target (one level, no slope to slide down): sparks also start anywhere
+    # along it and slide a little before dripping off, so it never stays dark
+    scatter = [i for i in idx if i in where] if max(ys) - min(ys) < 1.0 else []
     state.clear()
-    state.update(sig=_signature(layout, idx), tracks=tracks, where=where, bins=bins, below=below,
-                 allowed=set(idx), sources=_sources(layout, idx, where, bins), sparks=[], acc=0.0,
+    state.update(sig=_signature(layout, idx), seed=P["seed"], tracks=tracks, where=where, bins=bins,
+                 below=below, allowed=set(idx), sources=_sources(layout, idx, where, bins),
+                 scatter=scatter, sparks=[], acc=0.0,
                  rng=random.Random(P["seed"] * 104729 + 3), count=0,
                  box=(min(px[i].x for i in idx) - 4, max(px[i].x for i in idx) + 4,
-                      min(px[i].y for i in idx) - 3))
+                      min(ys) - 3))
+    # pre-warm: run the fountain for a while so the first frame already looks steady
+    warm = min(P["life"], 3.0)
+    while warm > 1e-9:
+        d = min(0.1, warm)
+        _embers_advance(state, P, layout, d)
+        warm -= d
 
 
 def _sources(layout, idx, where, bins) -> list[tuple[float, float, int | None, bool]]:
@@ -337,13 +402,19 @@ def _sources(layout, idx, where, bins) -> list[tuple[float, float, int | None, b
         xs = [px[i].x for i in idx]
         lo, hi = min(xs), max(xs)
         mid = (lo + hi) / 2
+
+        def over_target(p):              # target bulbs well under it to catch what falls
+            return any(abs(px[j].x - p.x) <= 2.0 and px[j].y < p.y - 3.0
+                       for b in range(math.floor(p.x) - 2, math.floor(p.x) + 3) for j in bins.get(b, ()))
+
         above = sorted((p for p in px if p.i not in tgt and p.y > top + 0.3 and lo - 1 <= p.x <= hi + 1),
                        key=lambda p: (-p.y, abs(p.x - mid)))
-        if above:
-            a = above[0]
+        a = next((p for p in above if over_target(p)), None)
+        if a is not None:
             pts = [(a.x, a.y + 0.2, None)]
         else:
-            i = max(idx, key=lambda i: (px[i].y, -abs(px[i].x - mid)))
+            # the target's own top bulb, preferring one on a track so sparks slide off it
+            i = max(idx, key=lambda i: (i in where, px[i].y, -abs(px[i].x - mid)))
             pts = [(px[i].x, px[i].y, i)]
     out = []
     for x, y, i in pts:
@@ -355,19 +426,27 @@ def _sources(layout, idx, where, bins) -> list[tuple[float, float, int | None, b
 
 def _spawn(state, P):
     rng = state["rng"]
-    srcs = state["sources"]
-    if not srcs:
+    srcs, scatter = state["sources"], state["scatter"]
+    if not srcs and not scatter:
         return
-    x, y, bulb, has_below = srcs[rng.randrange(len(srcs))]
     sp = _Spark(state["count"])
     state["count"] += 1
     sp.wind = (rng.random() * 2 - 1) * P["drift"] * 4.0
     sp.heat = 0.9 + 0.1 * rng.random()
+    if scatter and (not srcs or srcs[0][2] is not None or rng.random() < 0.5):
+        # flat target: a spark lands anywhere on the line and skids off along it (mixed
+        # half and half with sparks raining from a peak overhead, when there is one)
+        sp.mode = SLIDE
+        sp.tr, sp.s = state["where"][scatter[rng.randrange(len(scatter))]]
+        sp.v = (1 if rng.random() < 0.5 else -1) * (1.2 + 2.3 * rng.random())
+        state["sparks"].append(sp)
+        return
+    x, y, bulb, has_below = srcs[rng.randrange(len(srcs))]
     spill = bulb is None or (has_below and rng.random() < P["spill"])
     if spill:
         sp.mode = FALL
         sp.x, sp.y = x + (rng.random() - 0.5) * 0.6, y - 0.05
-        sp.vx = (rng.random() * 2 - 1) * (1.0 + 7.0 * P["spread"])
+        sp.vx = (rng.random() * 2 - 1) * (1.5 + 12.0 * P["spread"])
         sp.vy = rng.random() * (0.5 + 3.0 * P["spread"])
     else:
         sp.mode = SLIDE
@@ -479,10 +558,16 @@ def embers(t, ctx, P, state):
     frame = _blank(n, P["background"])
     if not idx:
         return frame
-    if state.get("sig") != _signature(layout, idx):
+    if state.get("sig") != _signature(layout, idx) or state.get("seed") != P["seed"]:
         _embers_reset(state, layout, idx, P)
+    _embers_advance(state, P, layout, min(MAX_DT, max(0.0, ctx.dt or 0.0)))
+    _embers_draw(frame, state, P, layout)
+    return _finish(frame, idx)
+
+
+def _embers_advance(state, P, layout, dt):
+    """Spawn, move, cool and cull the sparks over dt seconds."""
     rng = state["rng"]
-    dt = min(MAX_DT, max(0.0, ctx.dt or 0.0))
     sparks = state["sparks"]
 
     # --- spawn
@@ -513,8 +598,10 @@ def embers(t, ctx, P, state):
             keep.append(sp)
     sparks[:] = keep
 
-    # --- render
-    tracks, allowed, cols, px = state["tracks"], state["allowed"], P["colors"], layout.pixels
+
+def _embers_draw(frame, state, P, layout):
+    sparks = state["sparks"]
+    tracks, allowed, cols = state["tracks"], state["allowed"], P["colors"]
     glow = P["glow"]
     for sp in sparks:
         heat = sp.heat
@@ -542,4 +629,3 @@ def embers(t, ctx, P, state):
                 fb = glow * (1 - sp.landed / 0.3)
                 fc = lerp(col, (1.0, 0.9, 0.6), 0.5)
                 geo.splat_path(frame, pth, sp.s, (fc[0] * fb, fc[1] * fb, fc[2] * fb), 2.2)
-    return _finish(frame, idx)
