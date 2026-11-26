@@ -5,14 +5,14 @@
     {
       "effect": "candy_cane",
       "target": ["North wall", "Front eave", "South wall", "South gable", "Lower roofline"],
-      "params": {"colors": ["#ff0a0a", "#00d030"], "width": 4, "blend": 0.15, "speed": 1},
-      "fx": [{"type": "glitter", "params": {"density": 0.35, "base": 0.6, "decay": 0.25}}]
+      "params": {"colors": ["#ff0a0a", "#00b828"], "width": 4, "blend": 0, "speed": 1},
+      "fx": [{"type": "glitter", "params": {"density": 0.35, "base": 0.8, "decay": 0.25}}]
     },
     {
       "effect": "text",
       "target": "Peak",
-      "params": {"text": "MERRY CHRISTMAS <3", "colors": ["#ff1a1a", "#00d040"],
-                 "color_mode": "words", "speed": 5.5, "sparkle": 0.3, "border": "twinkle",
+      "params": {"text": "MERRY XMAS", "colors": ["#fff0c0"], "background": "#700006",
+                 "color_mode": "solid", "speed": 5.5, "sparkle": 0.3, "border": "twinkle",
                  "border_color": "#ffb000"}
     },
     {

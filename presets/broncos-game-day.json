@@ -14,10 +14,10 @@
       "params": {
         "colors": [
           "#ff4a00",
-          "#1030ff"
+          "#2050ff"
         ],
         "spacing": 36,
-        "speed": 22,
+        "speed": 12,
         "flash": 1,
         "level": 0.7
       }
@@ -28,12 +28,12 @@
       "params": {
         "colors": [
           "#ff4a00",
-          "#1030ff"
+          "#2050ff"
         ],
-        "width": 3,
+        "width": 5,
         "speed": 8,
         "axis": "x",
-        "blend": 0.2
+        "blend": 0
       }
     },
     {
@@ -41,11 +41,11 @@
       "target": "Front gable outline",
       "params": {
         "colors": [
-          "#ff4a00"
+          "#ffffff"
         ],
-        "background": "#1030ff",
-        "spacing": 4,
-        "width": 2,
+        "background": "#ff4a00",
+        "spacing": 6,
+        "width": 1.5,
         "speed": 12
       }
     },

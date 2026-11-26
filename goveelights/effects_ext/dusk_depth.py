@@ -173,6 +173,7 @@ def _vivid(c: Color, amount: float) -> Color:
 GLOW = H("#ffa818")
 STAR = H("#e8eeff")
 STAR_WINDOW, STAR_FADE = 30.0, 3.0
+AURORA = [H("#00ff60"), H("#10ff90"), H("#00e0c0"), H("#9020ff")]
 
 
 @effect("dusk", "Sky at dusk", [
@@ -195,6 +196,9 @@ STAR_WINDOW, STAR_FADE = 30.0, 3.0
     Param("stars", "number", 0.12, "Stars", 0, 0.5, 0.01, help="share of the upper bulbs that twinkle once it's dark"),
     Param("star_height", "number", 0.35, "Stars from height", 0, 1, 0.05,
           help="stars only above this height (0 = the porch and flat eaves get stars too)"),
+    Param("aurora", "number", 0, "Night aurora", 0, 1, 0.05,
+          help="once it's fully dark, slow green, teal and violet curtains drift across the upper "
+               "bulbs (the gable), so the night keeps moving; 0 = off"),
     Param("height", "choice", "blend", "Gradient over", options=["blend", "whole house", "each run"],
           help="whole house: porch = horizon, apex = zenith; each run: every run gets the full sky; "
                "blend: half of each, so the gables sweep from horizon to zenith and the porch stays warmest"),
@@ -227,6 +231,16 @@ def dusk(t, p, P):
     if vv > 0:
         c = _vivid(c, vv)
     wn = sky["night"]
+    au = P["aurora"]
+    if wn > 0 and au > 0:
+        # curtains hang from the top: strongest at the apex, gone below mid-height
+        hh = clamp((h - 0.25) / 0.35)
+        if hh > 0:
+            v = _vnoise(p.x * 0.1 + t * 0.14, t * 0.06, 23)
+            v = clamp((v - 0.25) * 2.5)
+            if v > 0:
+                col = palette(AURORA, _vnoise(p.x * 0.035 - t * 0.04, 0.5, 29), cyclic=False)
+                c = lerp(c, col, au * wn * hh * v)
     st = P["stars"]
     if wn > 0 and st > 0 and h > P["star_height"]:
         # the stars are re-chosen every STAR_WINDOW seconds, the old set fading out over

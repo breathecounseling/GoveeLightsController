@@ -11,10 +11,11 @@
       "params": {
         "colors": [
           "#8000ff",
-          "#b040ff",
+          "#3a0070",
           "#20ff40",
+          "#3a0070",
           "#9000ff",
-          "#7000ff"
+          "#b040ff"
         ],
         "scale": 10,
         "speed": 2
@@ -35,7 +36,7 @@
         "count": 3,
         "flicker": 0.2,
         "pop": 0,
-        "background": "#6000ff",
+        "background": "#b030ff",
         "glow": 0.6,
         "outline": 0.7,
         "seed": 13,
@@ -43,11 +44,19 @@
       }
     },
     {
+      "effect": "breathe",
+      "target": "Lower roofline",
+      "params": {
+        "colors": [
+          "#ff5000"
+        ],
+        "period": 5,
+        "min": 0.7
+      }
+    },
+    {
       "effect": "sparkle",
-      "target": [
-        "Flat eaves",
-        "Lower roofline"
-      ],
+      "target": "Flat eaves",
       "blend": "add",
       "params": {
         "color": "#40ff40",

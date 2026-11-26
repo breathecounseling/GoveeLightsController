@@ -31,7 +31,7 @@
           "#ff28c8"
         ],
         "canton_rows": 0,
-        "wave": 0.2,
+        "wave": 0.35,
         "wavelength": 14,
         "speed": 1.5,
         "intro": 0
@@ -50,10 +50,26 @@
           "#ffb020",
           "#e8ff40"
         ],
-        "background": "#2a14c0",
+        "background": "#3018e0",
         "density": 0.15,
-        "duration": 2.2,
+        "duration": 1.5,
         "seed": 12
+      }
+    },
+    {
+      "effect": "glitter",
+      "target": "Front gable outline",
+      "params": {
+        "colors": [
+          "#ffa000",
+          "#ffb820",
+          "#ff8a00"
+        ],
+        "level": 0.8,
+        "shimmer": 0.25,
+        "density": 0.2,
+        "length": 12,
+        "speed": 0
       }
     }
   ]

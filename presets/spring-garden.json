@@ -7,12 +7,12 @@
   "layers": [
     {
       "effect": "gradient",
-      "opacity": 0.6,
+      "opacity": 0.85,
       "params": {
         "colors": [
-          "#30ff40",
+          "#20e040",
           "#00d070",
-          "#a0ff20"
+          "#80f020"
         ],
         "length": 40,
         "speed": 1.5
@@ -32,9 +32,9 @@
           "#ff6a30",
           "#ffffff"
         ],
-        "background": "#0c9020",
+        "background": "#10b028",
         "density": 0.35,
-        "duration": 5,
+        "duration": 3,
         "seed": 41
       }
     },
@@ -44,11 +44,11 @@
       "blend": "lighten",
       "params": {
         "colors": [
-          "#ff8ad0",
-          "#ffe060",
-          "#b080ff"
+          "#ffe000",
+          "#ffffff",
+          "#ffb000"
         ],
-        "density": 0.1,
+        "density": 0.2,
         "life": 3,
         "drift": 1.5,
         "seed": 8
