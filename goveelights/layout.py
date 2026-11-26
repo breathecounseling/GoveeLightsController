@@ -36,7 +36,10 @@ class Run:
 
     def positions(self) -> list[tuple[float, float]]:
         """(x, y) for every physical bulb index, interpolated from knots."""
-        knots = sorted((int(k[0]), float(k[1]), float(k[2])) for k in self.geometry)
+        knots = {}
+        for k in self.geometry:                    # one knot per index (a hand-edited file may repeat one)
+            knots[int(k[0])] = (int(k[0]), float(k[1]), float(k[2]))
+        knots = sorted(knots.values())
         if not knots:
             return [(float(i), 0.0) for i in range(self.count)]
         out = []

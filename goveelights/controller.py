@@ -1220,6 +1220,8 @@ class Controller:
         measured = shows.fit_mapping(L, points, only)
         geo = shows.merged_geometry(L, measured)
         with self.cfg.lock:
+            for d in self.cfg.devices.values():       # undo steps back this apply only
+                d.pop("geometry_prev", None)
             for mac, knots in geo.items():
                 d = self.cfg.devices[mac]
                 d["geometry_prev"] = d.get("geometry", [])

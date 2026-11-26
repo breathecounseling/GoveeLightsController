@@ -161,6 +161,9 @@ class Config:
             data = json.load(f)
         changed = []
         with self.lock:
+            if any("geometry" in e for e in data.get("devices", {}).values()):
+                for d in self.devices.values():      # an older map undo must not undo the import
+                    d.pop("geometry_prev", None)
             for mac, entry in data.get("devices", {}).items():
                 d = self.devices.setdefault(mac, copy.deepcopy(DEVICE_DEFAULTS))
                 for k in ("name", "order", "reversed", "hidden", "pixel_count", "geometry", "enabled"):
