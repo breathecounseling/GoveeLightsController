@@ -77,6 +77,22 @@ BUILTIN_SHOWS: dict[str, dict] = {
             {"preset": "winter-sparkle", "seconds": 150, "transition": "crossfade", "fade": 6},
         ],
     },
+    "Santa's coming": {
+        "builtin": True,
+        "description": "A six-minute Christmas Eve loop: a starry night with shooting stars, the "
+                       "advent calendar opening its doors, Santa's sleigh flying over the stars, "
+                       "dripping icicles, the house wrapped like a present (it unwraps in a "
+                       "burst of sparkles), then the lit Christmas tree. Loops all evening.",
+        "end": "loop",
+        "cues": [
+            {"preset": "starry-night", "seconds": 60, "transition": "black", "fade": 3},
+            {"preset": "advent-calendar", "seconds": 45, "transition": "crossfade", "fade": 3},
+            {"preset": "starry-night-sleigh", "seconds": 75, "transition": "crossfade", "fade": 3},
+            {"preset": "icicles", "seconds": 45, "transition": "crossfade", "fade": 3},
+            {"preset": "gift-wrap", "seconds": 60, "transition": "wipe", "fade": 2},
+            {"preset": "christmas-tree", "seconds": 75, "transition": "rise", "fade": 3},
+        ],
+    },
 }
 
 

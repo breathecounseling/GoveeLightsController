@@ -1,0 +1,17 @@
+{
+  "name": "Starry night sleigh ride",
+  "tags": ["Holiday", "Christmas"],
+  "layers": [
+    {
+      "effect": "starry_night",
+      "target": "all",
+      "params": {"shooting_every": 14, "doubles": 0.15}
+    },
+    {
+      "effect": "sleigh",
+      "target": "Eaves",
+      "params": {"stars": 0, "every": 22},
+      "blend": "lighten"
+    }
+  ]
+}
