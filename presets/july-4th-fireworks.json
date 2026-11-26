@@ -11,10 +11,11 @@
       "params": {
         "colors": [
           "#ffffff",
-          "#b0c4ff"
+          "#ff0010",
+          "#ffffff"
         ],
         "background": "#0a1a90",
-        "density": 0.1,
+        "density": 0.22,
         "duration": 2.5,
         "seed": 4
       }
@@ -80,9 +81,9 @@
           "#4060ff"
         ],
         "rate": 40,
-        "burst_size": 54, "burst_speed": 27,
+        "burst_size": 60, "burst_speed": 32,
         "crackle": 0.5,
-        "embers": 0.3,
+        "embers": 0.15,
         "finale": 75,
         "finale_shells": 18,
         "launch_zone": "Porch",

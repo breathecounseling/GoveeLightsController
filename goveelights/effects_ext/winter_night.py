@@ -840,6 +840,9 @@ def _bd_burst(st, rng, x, y, n, speed, cols, up=False):
           help="how bright the rest of the house glows (glow colour) while the ball waits"),
     Param("wait_chase", "number", 0.0, "Waiting chase", 0, 1, 0.05,
           help="slow bright bands of the glow colour travelling along the house while it waits"),
+    Param("drop_glow", "number", 0.0, "Glow while it drops", 0, 0.6, 0.01,
+          help="a floor under the rest of the house while the ball comes down, so it drains "
+               "toward this level instead of going dark (0 = drains almost to black)"),
     Param("sky_color", "color", "#000000", "Gable sky",
           help="the zigzag's background behind the waiting ball (black = dark with a few stars); "
                "it shimmers slowly and dims while the ball comes down so the digits read"),
@@ -960,7 +963,7 @@ def ball_drop(t, ctx, P, st):
             p = px[i]
             if phase == "drop":
                 below = _smooth((by - p.y) / 1.5 + 0.5) if p.y > ybot - 0.5 else 1.0
-                lvl = 0.05 + 0.25 * below + 0.35 * tick
+                lvl = 0.05 + 0.25 * below + 0.35 * tick + P["drop_glow"]
             else:
                 lvl = _bd_wait_level(P, p, i, clock, seed)
             g, _ = glint(i, clock, 0.08, 0.05, 0.4, seed, 1)

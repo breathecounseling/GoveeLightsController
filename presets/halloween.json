@@ -11,7 +11,7 @@
         ],
         "group": 4,
         "period": 3,
-        "fade": 0
+        "fade": 0.35
       }
     },
     {
@@ -24,18 +24,28 @@
         ],
         "group": 1,
         "period": 3,
-        "fade": 0,
+        "fade": 0.35,
         "axis": "y"
       }
     },
     {
       "effect": "sparkle",
       "params": {
-        "color": "#60ff20",
-        "rate": 4,
-        "decay": 0.45
+        "color": "#000000",
+        "background": "#ffffff",
+        "rate": 9,
+        "decay": 0.5
       },
-      "blend": "lighten"
+      "blend": "multiply"
+    },
+    {
+      "effect": "sparkle",
+      "params": {
+        "color": "#40ff00",
+        "rate": 9,
+        "decay": 0.5
+      },
+      "blend": "add"
     }
   ],
   "tags": [

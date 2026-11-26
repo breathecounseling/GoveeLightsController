@@ -5,24 +5,24 @@
     {
       "effect": "starry_night",
       "target": "all",
-      "params": {"sky": "#0010ff", "sky2": "#2400c8", "sky_level": 0.42, "stars": 0.05,
+      "params": {"sky": "#0010ff", "sky2": "#2400c8", "sky_level": 0.6, "stars": 0.05,
                  "star_colors": ["#ffffff", "#ffe6a8"], "star_level": 1.0, "twinkle": 0.85,
-                 "twinkle_speed": 1.6, "shooting_every": 9, "shooting_speed": 26, "tail": 12,
-                 "tail_color": "#d8e4ff", "doubles": 0.15, "zigzag": 0.6}
+                 "twinkle_speed": 1.6, "shooting_every": 6, "shooting_speed": 22, "tail": 18,
+                 "tail_color": "#d8e4ff", "doubles": 0.25, "zigzag": 1.0}
     },
     {
       "effect": "sleigh",
       "target": "Eaves",
-      "params": {"stars": 0.9, "every": 11, "speed": 15, "background": "#00066c",
+      "params": {"stars": 0.9, "every": 11, "speed": 15, "background": "#000c9c",
                  "sleigh_color": "#ff0000", "trim_color": "#ffc000", "deer_color": "#ff9020",
-                 "sparkle_colors": ["#ffb000", "#ffd040", "#ffffff"], "sparkle": 1.4, "trail": 2.2,
+                 "sparkle_colors": ["#ffb000", "#ffc000", "#ffffff"], "sparkle": 1.6, "trail": 1.2,
                  "jingle": 0.35}
     },
     {
       "effect": "twinkle",
       "target": ["Peak", "Accent"],
       "blend": "lighten",
-      "params": {"colors": ["#ffffff", "#fff0c0", "#ffd890"], "density": 0.08, "duration": 2.2, "seed": 31}
+      "params": {"colors": ["#ffffff", "#fff0c0", "#ffd890"], "density": 0.08, "duration": 1.6, "seed": 31}
     }
   ]
 }

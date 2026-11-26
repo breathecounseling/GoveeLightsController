@@ -4,20 +4,30 @@
   "layers": [
     {
       "effect": "solid",
-      "params": {"color": "#00061c"}
+      "params": {"color": "#000848"}
     },
     {
       "effect": "scanner",
-      "params": {"color": "#ff1010", "width": 8, "speed": 40, "axis": "run"},
+      "target": ["Eaves", "Accent"],
+      "params": {"color": "#ff1010", "width": 11, "speed": 40, "axis": "run"},
       "mod": {"speed": {"shape": "sine", "rate": 0.08, "depth": 0.3}},
-      "fx": [{"type": "trails", "params": {"length": 0.3}}, {"type": "mirror", "params": {"axis": "run"}}],
+      "fx": [{"type": "trails", "params": {"length": 0.45}}, {"type": "mirror", "params": {"axis": "run"}}],
       "blend": "lighten"
     },
     {
       "effect": "scanner",
-      "params": {"color": "#1040ff", "width": 7, "speed": 29, "axis": "run"},
+      "target": ["Eaves", "Accent"],
+      "params": {"color": "#1040ff", "width": 10, "speed": 29, "axis": "run"},
       "mod": {"speed": {"shape": "sine", "rate": 0.06, "depth": 0.3}},
-      "fx": [{"type": "trails", "params": {"length": 0.3}}],
+      "fx": [{"type": "trails", "params": {"length": 0.45}}],
+      "blend": "lighten"
+    },
+    {
+      "effect": "sweep",
+      "target": "Peak",
+      "params": {"colors": ["#ff1010", "#300000", "#000000", "#000000", "#1040ff", "#000030", "#000000", "#000000"],
+                 "arms": 1, "speed": 24},
+      "mod": {"speed": {"shape": "sine", "rate": 0.07, "depth": 0.3}},
       "blend": "lighten"
     }
   ]

@@ -8,23 +8,27 @@
     {
       "effect": "fireworks",
       "params": {
-        "rate": 34,
-        "burst_size": 38,
+        "rate": 56,
+        "burst_size": 54,
+        "burst_speed": 32,
+        "crackle": 0.2,
+        "trail": 0.1,
+        "colors": ["#ff0010", "#00ff30", "#1838ff", "#ff00c0", "#ffa000", "#00e0ff"],
         "style": "Mixed",
-        "embers": 1.0
+        "embers": 0.3
       },
       "target": "Whole front"
     },
     {
       "effect": "glitter",
       "params": {
-        "colors": ["#ff2020", "#20ff40", "#ffc020", "#3a8cff", "#ff40d0", "#ff7000"],
-        "level": 0.05,
+        "colors": ["#ff0010", "#00ff30", "#ffa000", "#1838ff", "#ff00c0", "#ff5000"],
+        "level": 0.35,
         "shimmer": 0.4,
-        "density": 0.14,
+        "density": 0.2,
         "attack": 0.01,
-        "decay": 0.35,
-        "whiteness": 0.3,
+        "decay": 0.3,
+        "whiteness": 0,
         "bloom": 0.6,
         "length": 9,
         "speed": 3,

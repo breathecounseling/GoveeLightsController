@@ -448,10 +448,14 @@ def _spawn(state, P):
         sp.x, sp.y = x + (rng.random() - 0.5) * 0.6, y - 0.05
         sp.vx = (rng.random() * 2 - 1) * (1.5 + 12.0 * P["spread"])
         sp.vy = rng.random() * (0.5 + 3.0 * P["spread"])
+        if P["pour"] > 0:                   # pour from along the roof, not just the apex
+            sp.x += (rng.random() * 2 - 1) * P["pour"] * 0.7
     else:
         sp.mode = SLIDE
         sp.tr, sp.s = state["where"][bulb]
         sp.v = (1 if rng.random() < 0.5 else -1) * (1.0 + 2.5 * rng.random())
+        if P["pour"] > 0:
+            sp.s = clamp(sp.s + (rng.random() * 2 - 1) * P["pour"], 0.0, state["tracks"][sp.tr].length)
     state["sparks"].append(sp)
 
 
@@ -544,6 +548,9 @@ def _embers_step(state, P, layout, h, rng):
                "(only where there are lights below to land on, e.g. the zigzag and porch)"),
     Param("spread", "number", 0.4, "Spray width", 0, 1, 0.05,
           help="how widely the sparks that tumble off the peak spray out sideways, like a sparkler fountain"),
+    Param("pour", "number", 0.0, "Pour width (bulbs)", 0, 20, 0.5,
+          help="0 = every spark starts at the peak; higher = sparks start anywhere this far "
+               "either side of it along the roof, so the apex is not one bright blob"),
     Param("catch", "number", 0.15, "Caught on the way down", 0, 1, 0.05,
           help="chance a falling spark settles on a light it passes (the lowest roofline catches all)"),
     Param("drift", "number", 0.3, "Drift", 0, 1, 0.05, help="sideways wander of falling sparks"),
