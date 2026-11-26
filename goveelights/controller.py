@@ -37,9 +37,13 @@ VISITOR_LIMITS = {"sparkle": (15.0, 3.0), "snow": (20.0, 4.0), "colour": (8.0, 1
 VISITOR_BUDGET = (4, 10.0)
 
 
+# Windows opens a device, not a file, for these names (con.json is the console).
+RESERVED = {"con", "prn", "aux", "nul", *(f"{d}{i}" for d in ("com", "lpt") for i in range(1, 10))}
+
+
 def slug(name: str) -> str:
-    s = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
-    return s[:64] or "preset"
+    s = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:64] or "preset"
+    return s + "-preset" if s in RESERVED else s
 
 
 class PresetStore:
@@ -48,7 +52,7 @@ class PresetStore:
         self.dir.mkdir(parents=True, exist_ok=True)
 
     def _path(self, pid: str) -> Path:
-        if not _ID.match(pid or ""):
+        if not _ID.match(pid or "") or pid in RESERVED:
             raise ValueError(f"bad preset id {pid!r}")
         return self.dir / f"{pid}.json"
 

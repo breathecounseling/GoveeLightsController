@@ -67,7 +67,10 @@ class Engine:
         self.scene: Scene | None = None
         self._prev: Scene | None = None
         self._fade_start, self._fade_s = 0.0, 0.0
-        self.t0 = time.monotonic()
+        # perf_counter: before 3.13, Windows' monotonic()/time() tick only every 15.6 ms,
+        # which would make the t handed to effects step unevenly at 20-60 fps.
+        self.t0 = time.perf_counter()
+        self._wall0, self._pc0 = time.time(), self.t0
         self.last_colors: list[Color] = []
         self.stats = {"frames": 0, "render_ms": 0.0, "late": 0}
         self._run = False
@@ -76,7 +79,18 @@ class Engine:
         self._live_lock = threading.Lock()
 
     def now(self) -> float:
-        return time.monotonic() - self.t0
+        return time.perf_counter() - self.t0
+
+    def wall(self) -> float:
+        """time.time() with perf_counter resolution, for overlay fades and the hue sweep
+        (their start/until are wall-clock times). Re-anchors if the clocks drift apart
+        (clock set, NTP step, sleep)."""
+        pc = time.perf_counter()
+        w = self._wall0 + (pc - self._pc0)
+        real = time.time()
+        if abs(real - w) > 0.25:
+            self._wall0, self._pc0, w = real, pc, real
+        return w
 
     TRANSITIONS = ["cut", "crossfade", "wipe", "wipe-back", "rise", "iris", "flash", "black"]
 
@@ -117,7 +131,7 @@ class Engine:
             else:
                 old = prev.render(t, self.layout, self.master)
                 cols = self._transition(old, cols, f)
-        now = time.time()
+        now = self.wall()
         for name, ov in list(self.overlays.items()):
             sc, mode, op = ov[0], ov[1], ov[2]
             if len(ov) > 3:

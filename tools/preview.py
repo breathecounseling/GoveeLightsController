@@ -1,7 +1,7 @@
 """Render an effect/preset on the house layout to an image, to check how it looks.
 
     python3 tools/preview.py <preset-id | preset.json | effect-name> [--set key=value ...]
-        [--seconds 6] [--frames 8] [--fps 20] [--out /tmp/preview] [--layer N]
+        [--seconds 6] [--frames 8] [--fps 20] [--out <temp dir>/preview] [--layer N]
 
 Renders the scene at the real frame rate from t=0 (so effects with memory evolve as
 they would live) and saves --frames snapshots spread over --seconds as:
@@ -16,6 +16,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -25,7 +26,7 @@ from goveelights.layout import Layout, Run  # noqa: E402
 
 
 def house_layout() -> Layout:
-    data = json.loads((ROOT / "layouts" / "house.json").read_text())
+    data = json.loads((ROOT / "layouts" / "house.json").read_text(encoding="utf-8"))
     devs = data["devices"]
     runs = [Run(mac=m, name=d["name"], count=d["pixel_count"], reverse=d.get("reversed", False),
                 hidden=set(d.get("hidden", [])), geometry=d.get("geometry", []))
@@ -41,7 +42,7 @@ def main(argv=None):
     ap.add_argument("--seconds", type=float, default=6.0)
     ap.add_argument("--frames", type=int, default=8)
     ap.add_argument("--fps", type=float, default=20.0)
-    ap.add_argument("--out", default="/tmp/preview")
+    ap.add_argument("--out", default=os.path.join(tempfile.gettempdir(), "preview"))
     a = ap.parse_args(argv)
     os.chdir(ROOT)
     L = house_layout()
@@ -74,15 +75,17 @@ def main(argv=None):
     rows = "".join(f'<div style="display:flex;height:4px">' + "".join(
         f'<span style="flex:1;background:{rgb(c)}"></span>' for c in cols) + "</div>" for cols in strip)
     perf = f"render: avg {sum(ms) / len(ms):.1f} ms, worst {max(ms):.1f} ms per frame ({L.n} bulbs)"
-    html = (f'<body style="background:#000;color:#bbb;font:12px sans-serif;margin:8px">'
+    html = (f'<meta charset="utf-8"><body style="background:#000;color:#bbb;font:12px sans-serif;margin:8px">'
             f'<div>{a.what} {" ".join(a.set)} · {perf}</div>'
             + "".join(f'<div style="margin-top:6px">t = {t:.2f} s</div>{house(c)}' for t, c in snaps)
             + f'<div style="margin-top:8px">filmstrip (time runs down, every bulb in strip order)</div>{rows}</body>')
-    Path(a.out + ".html").write_text(html)
+    page = Path(a.out + ".html").resolve()
+    page.write_text(html, encoding="utf-8")
+    png = json.dumps(str(page.with_suffix(".png")))
     print(perf)
     js = (f"const {{chromium}}=require('playwright');(async()=>{{const b=await chromium.launch();"
-          f"const p=await b.newPage({{viewport:{{width:{W + 20},height:800}}}});await p.goto('file://{a.out}.html');"
-          f"await p.screenshot({{path:'{a.out}.png',fullPage:true}});await b.close()}})()")
+          f"const p=await b.newPage({{viewport:{{width:{W + 20},height:800}}}});await p.goto({json.dumps(page.as_uri())});"
+          f"await p.screenshot({{path:{png},fullPage:true}});await b.close()}})()")
     try:
         subprocess.run(["node", "-e", js], check=True, timeout=60, capture_output=True)
         print(f"wrote {a.out}.html and {a.out}.png")

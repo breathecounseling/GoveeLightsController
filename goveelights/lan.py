@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import socket
 import struct
 import threading
@@ -30,7 +31,17 @@ class GoveeLan:
 
     def _open(self) -> socket.socket:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if os.name == "nt":
+            # Windows SO_REUSEADDR would let a second copy bind 4002 too; claim it alone.
+            # And don't let an ICMP port-unreachable (a box rebooting, a stale IP) make
+            # the next recvfrom fail with WinError 10054.
+            s.setsockopt(socket.SOL_SOCKET, getattr(socket, "SO_EXCLUSIVEADDRUSE", -5), 1)
+            try:
+                s.ioctl(getattr(socket, "SIO_UDP_CONNRESET", 0x9800000C), False)
+            except (OSError, AttributeError, ValueError) as e:
+                log.debug("SIO_UDP_CONNRESET not set: %s", e)
+        else:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             s.bind(("", p.LISTEN_PORT))
         except OSError as e:
@@ -52,29 +63,41 @@ class GoveeLan:
         while not self._closed:
             try:
                 data, (ip, _port) = self.sock.recvfrom(65535)
+            except ConnectionResetError:          # Windows: ICMP unreachable from an earlier send
+                continue
             except OSError:
                 if self._closed:
                     return
                 time.sleep(0.1)
                 continue
             try:
-                msg = json.loads(data.decode("utf-8", "replace"))["msg"]
-            except (ValueError, KeyError, TypeError):
-                continue
-            cmd, d = msg.get("cmd"), msg.get("data") or {}
-            if cmd == "scan" and "device" in d:
-                d["source_ip"] = ip
-                if self.on_device:
-                    try:
-                        self.on_device(d)
-                    except Exception:  # noqa: BLE001
-                        log.exception("on_device failed")
-            elif cmd == "devStatus":
-                with self._lock:
-                    self._status[ip] = {"t": time.time(), **d}
-                    ev = self._status_ev.get(ip)
-                if ev:
-                    ev.set()
+                self._handle(data, ip)
+            except Exception:  # noqa: BLE001 - anyone on the LAN can send to 4002; never die
+                log.exception("bad datagram from %s", ip)
+
+    def _handle(self, data: bytes, ip: str):
+        try:
+            msg = json.loads(data.decode("utf-8", "replace"))["msg"]
+        except (ValueError, KeyError, TypeError):
+            return
+        if not isinstance(msg, dict):
+            return
+        cmd, d = msg.get("cmd"), msg.get("data") or {}
+        if not isinstance(d, dict):
+            return
+        if cmd == "scan" and "device" in d:
+            d["source_ip"] = ip
+            if self.on_device:
+                try:
+                    self.on_device(d)
+                except Exception:  # noqa: BLE001
+                    log.exception("on_device failed")
+        elif cmd == "devStatus":
+            with self._lock:
+                self._status[ip] = {"t": time.time(), **d}
+                ev = self._status_ev.get(ip)
+            if ev:
+                ev.set()
 
     # -------------------------------------------------------------- send
     def scan(self, extra_ips: list[str] | None = None):

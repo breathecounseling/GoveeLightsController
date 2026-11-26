@@ -10,14 +10,14 @@ import signal
 import sys
 import threading
 import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .auth import COOKIE, Auth
 from .config import Config
 from .controller import Controller
-from .diag_server import build_report, lan_ips
+from .diag_server import Server, build_report, lan_ips
 from .effects import EFFECTS, GROUP_ORDER
 from .fx import FX
 from .modulation import SHAPES
@@ -25,15 +25,10 @@ from .palettes import BUILTIN, all_palettes, categories
 from .scene import BLEND_INFO, BLENDS
 from . import schedule as sched
 from . import shows_builtin
+from . import winconsole
 
 log = logging.getLogger("goveelights")
 WEB = Path(__file__).resolve().parent / "web"
-
-
-class Server(ThreadingHTTPServer):
-    daemon_threads = True
-    # On Windows SO_REUSEADDR lets a second copy bind the same port; refuse instead.
-    allow_reuse_address = os.name != "nt"
 
 
 CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
@@ -592,7 +587,10 @@ def main(argv=None):
     background = sys.stdout is None or a.log
     logging.basicConfig(level=logging.DEBUG if a.verbose else logging.INFO,
                         filename=a.log or (str(Path(__file__).resolve().parent.parent / "goveelights.log") if sys.stdout is None else None),
-                        format="%(asctime)s %(levelname)s %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+                        format="%(asctime)s %(levelname)s %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S",
+                        encoding="utf-8")       # device names can hold any character
+    winconsole.disable_quickedit()             # a click in the console must not freeze logging
+    winconsole.fine_sleep()
     cfg = Config(a.config) if a.config else Config()
     port = a.port or cfg.data["server"].get("port", 8080)
     try:
@@ -617,6 +615,7 @@ def main(argv=None):
     for sig in ("SIGINT", "SIGTERM", "SIGBREAK"):
         if hasattr(signal, sig):
             signal.signal(getattr(signal, sig), quit_)
+    winconsole.on_console_close(quit_)         # closing the window ends us before SIGBREAK runs
     urls = "\n".join(f"      http://{ip}:{port}/" for ip in lan_ips())
     banner = (f"\n  Govee lights creator running.\n  On this PC:  http://localhost:{port}/\n"
               f"  On your phone (same network):\n{urls}\n  Config: {cfg.path}\n"

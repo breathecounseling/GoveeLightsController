@@ -159,13 +159,27 @@ def cmd_install_startup(uninstall=False):
     f.write_text(
         'Set sh = CreateObject("WScript.Shell")\r\n'
         f'sh.CurrentDirectory = "{root}"\r\n'
-        f'sh.Run """{pyw}"" -m goveelights serve --log ""{log}""", 0, False\r\n', encoding="utf-8")
+        f'sh.Run """{pyw}"" -m goveelights serve --log ""{log}""", 0, False\r\n',
+        encoding="utf-16")      # with a BOM: Windows Script Host reads BOM-less .vbs as ANSI (José → JosÃ©)
     print(f"Installed: {f}\nThe app will start hidden at your next login (log: {log}).\n"
           f"To start it now without a window, double-click that file.")
     return 0
 
 
 TASK = "GoveeLightsController"
+FW_RULES = ("Govee lights (discovery)", "Govee lights (web)")
+
+
+def firewall_cmds(port: int, add: bool = True) -> list[list[str]]:
+    """netsh commands for the boot task's inbound rules. It runs pythonw as SYSTEM, which
+    never gets a firewall prompt, so allow the ports (Private networks) instead."""
+    base = ["netsh", "advfirewall", "firewall"]
+    cmds = [base + ["delete", "rule", f"name={n}"] for n in FW_RULES]
+    if add:
+        for n, proto, p in zip(FW_RULES, ("UDP", "TCP"), (4002, port)):
+            cmds.append(base + ["add", "rule", f"name={n}", "dir=in", "action=allow",
+                                f"protocol={proto}", f"localport={p}", "profile=private"])
+    return cmds
 
 
 def cmd_service(uninstall=False):
@@ -178,6 +192,8 @@ def cmd_service(uninstall=False):
     if uninstall:
         r = subprocess.run(["schtasks", "/Delete", "/TN", TASK, "/F"], capture_output=True, text=True)
         print(r.stdout or r.stderr)
+        for c in firewall_cmds(0, add=False):
+            subprocess.run(c, capture_output=True, text=True)
         return r.returncode
     root = Path(__file__).resolve().parent.parent
     exe = Path(sys.executable)
@@ -204,6 +220,14 @@ def cmd_service(uninstall=False):
         tmp.unlink(missing_ok=True)
     if r.returncode:
         raise SystemExit((r.stderr or r.stdout).strip() + "\n(Run this in an administrator PowerShell.)")
+    from .config import Config
+    port = int(Config().data["server"].get("port", 8080))
+    fw_ok = True
+    for c in firewall_cmds(port):              # delete (so a re-install doesn't pile up rules), then add
+        rc = subprocess.run(c, capture_output=True, text=True).returncode
+        fw_ok = fw_ok and (rc == 0 or "delete" in c)
+    print("Firewall: allowed UDP 4002 and TCP %d in on Private networks." % port if fw_ok else
+          "Firewall rules could not be added; see README (Phone page never loads).")
     print(f"Installed scheduled task '{TASK}': starts 30 s after boot, no login needed, restarts if it stops.\n"
           f"Start it now: schtasks /Run /TN {TASK}    Log: {root / 'goveelights.log'}\n"
           f"Remove the login-time launcher if you installed it: python -m goveelights uninstall-startup")

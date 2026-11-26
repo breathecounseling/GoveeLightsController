@@ -4,10 +4,38 @@ from __future__ import annotations
 import copy
 import json
 import os
+import tempfile
 import threading
+import time
 from pathlib import Path
 
 DEFAULT_PATH = Path(os.environ.get("GOVEE_CONFIG", Path(__file__).resolve().parent.parent / "govee_config.json"))
+
+def write_json(path: Path, data, mode: int = 0o644, retries: int = 10, **dump_kw):
+    """Write JSON atomically. A unique temp file, so a stale one held open elsewhere can't
+    block saves; and on Windows os.replace fails with PermissionError while a virus
+    scanner, OneDrive or an editor briefly has either file open, so retry a little."""
+    path = Path(path)
+    fd, tmp = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
+    try:
+        with open(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, **dump_kw)
+        os.chmod(tmp, mode)                     # mkstemp makes it owner-only
+        for i in range(retries):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                if i == retries - 1:
+                    raise
+                time.sleep(0.05)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
 
 DEFAULTS = {
     "server": {"host": "0.0.0.0", "port": 8080, "bind_ip": ""},
@@ -92,10 +120,7 @@ class Config:
 
     def save(self):
         with self.lock:
-            tmp = self.path.with_suffix(".tmp")
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(self.data, f, indent=2, sort_keys=False)
-            os.replace(tmp, self.path)
+            write_json(self.path, self.data, indent=2, sort_keys=False)
 
     @property
     def devices(self) -> dict:
@@ -112,6 +137,7 @@ class Config:
         mac = info["device"]
         with self.lock:
             new = mac not in self.devices
+            before = copy.deepcopy(self.devices.get(mac))
             d = self.devices.setdefault(mac, copy.deepcopy(DEVICE_DEFAULTS))
             if new:
                 d["name"] = f"{info.get('sku', 'Govee')} {mac.replace(':', '')[-4:]}"
@@ -125,7 +151,8 @@ class Config:
             d["firmware"] = {k: info[k] for k in
                              ("bleVersionHard", "bleVersionSoft", "wifiVersionHard", "wifiVersionSoft")
                              if k in info}
-            self.save()
+            if new or d != before:              # every scan answers again: skip identical saves
+                self.save()
             return new
 
     def import_layout(self, path) -> list[str]:
