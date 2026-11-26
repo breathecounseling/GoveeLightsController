@@ -511,6 +511,13 @@ class BuiltinShowTests(unittest.TestCase):
         self.assertEqual(nye[j + 1]["preset"], "grand-finale")
         self.assertIn("text-happy-new-year", [c.get("preset") for c in nye[j + 1:]])
         self.assertEqual(B["Winter wonderland loop"]["end"], "loop")
+        santa = B["Santa's coming"]
+        self.assertEqual(santa["end"], "loop")
+        secs = sum(c["seconds"] for c in santa["cues"])
+        self.assertTrue(5 * 60 <= secs <= 7 * 60, secs)
+        order = [c["preset"] for c in santa["cues"]]
+        for p in ("starry-night", "advent-calendar", "starry-night-sleigh", "gift-wrap", "icicles", "christmas-tree"):
+            self.assertIn(p, order)
 
     def test_listed_playable_copyable_not_overwritten(self):
         r = Rig(self, datetime(2026, 12, 24, 19, 0).astimezone())

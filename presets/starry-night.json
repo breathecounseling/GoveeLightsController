@@ -1,0 +1,11 @@
+{
+  "name": "Starry night",
+  "tags": ["Holiday", "Christmas", "Ambient"],
+  "layers": [
+    {
+      "effect": "starry_night",
+      "target": "all",
+      "params": {}
+    }
+  ]
+}

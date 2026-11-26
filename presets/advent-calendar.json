@@ -1,0 +1,17 @@
+{
+  "name": "Advent calendar",
+  "tags": ["Holiday", "Christmas"],
+  "layers": [
+    {
+      "effect": "twinkle",
+      "target": ["North wall", "Front eave", "South wall", "South gable", "Garage", "Garage peak"],
+      "params": {"colors": ["#ffe0b0"], "background": "#ffb060", "density": 0.15, "duration": 3.0, "seed": 6},
+      "opacity": 0.2
+    },
+    {
+      "effect": "advent",
+      "target": ["Whole front gable", "Porch"],
+      "params": {}
+    }
+  ]
+}

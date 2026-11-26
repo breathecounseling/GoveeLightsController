@@ -1,0 +1,17 @@
+{
+  "name": "Gift wrap",
+  "tags": ["Holiday", "Christmas"],
+  "layers": [
+    {
+      "effect": "twinkle",
+      "target": ["North wall", "Front eave", "South wall", "South gable", "Garage", "Garage peak"],
+      "params": {"colors": ["#ffe0b0"], "background": "#ffb060", "density": 0.15, "duration": 3.0, "seed": 4},
+      "opacity": 0.22
+    },
+    {
+      "effect": "gift_wrap",
+      "target": ["Whole front gable", "Porch"],
+      "params": {"unwrap_every": 45}
+    }
+  ]
+}
