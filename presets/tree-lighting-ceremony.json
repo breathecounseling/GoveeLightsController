@@ -1,0 +1,38 @@
+{
+  "name": "Tree lighting ceremony",
+  "tags": [
+    "Holiday",
+    "Christmas"
+  ],
+  "layers": [
+    {
+      "effect": "tree",
+      "params": {
+        "intro": 12,
+        "relight": 3,
+        "burst_every": 10
+      },
+      "target": "Whole front gable"
+    },
+    {
+      "effect": "presents",
+      "params": {},
+      "target": "Porch"
+    },
+    {
+      "effect": "twinkle",
+      "params": {
+        "colors": [
+          "#ffd090",
+          "#ffb060"
+        ],
+        "density": 0.12,
+        "duration": 1.6,
+        "seed": 3
+      },
+      "target": "Porch",
+      "blend": "add",
+      "opacity": 0.45
+    }
+  ]
+}

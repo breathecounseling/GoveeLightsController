@@ -1,0 +1,53 @@
+{
+  "name": "Icy tree",
+  "tags": [
+    "Holiday",
+    "Winter"
+  ],
+  "layers": [
+    {
+      "effect": "tree",
+      "params": {
+        "body": "#0050ff",
+        "body2": "#0090ff",
+        "level": 0.8,
+        "shimmer": 0.3,
+        "shade": 0.3,
+        "garland": "#ffffff",
+        "garland_style": "swag",
+        "garland_width": 2.2,
+        "garland_spacing": 12,
+        "speed": 0.8,
+        "garland_sparkle": 2.0,
+        "ornament_colors": [
+          "#ffffff",
+          "#00e0ff",
+          "#a020ff",
+          "#ffffff",
+          "#40ffd0"
+        ],
+        "density": 0.16,
+        "glints": 0.25,
+        "star": "#e8f4ff",
+        "glow": "#7090ff",
+        "glow_level": 0.22,
+        "intro": 6
+      },
+      "target": "Whole front gable"
+    },
+    {
+      "effect": "presents",
+      "params": {
+        "colors": [
+          "#0050ff",
+          "#ffffff",
+          "#00c0ff",
+          "#8020ff"
+        ],
+        "ribbon": "#ffffff",
+        "background": "#6080ff"
+      },
+      "target": "Porch"
+    }
+  ]
+}

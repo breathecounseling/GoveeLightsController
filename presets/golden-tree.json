@@ -1,0 +1,66 @@
+{
+  "name": "Golden tree",
+  "tags": [
+    "Holiday",
+    "Christmas"
+  ],
+  "layers": [
+    {
+      "effect": "tree",
+      "params": {
+        "body": "#ff7a00",
+        "body2": "#ffa000",
+        "level": 0.6,
+        "shimmer": 0.35,
+        "shade": 0.2,
+        "garland": "#fff4e0",
+        "garland_style": "swag",
+        "garland_width": 2.2,
+        "garland_spacing": 12,
+        "speed": 1.0,
+        "garland_sparkle": 1.8,
+        "ornament_colors": [
+          "#ff0000",
+          "#c00040",
+          "#ff0060",
+          "#ff0000"
+        ],
+        "density": 0.15,
+        "glints": 0.2,
+        "star": "#fff0d0",
+        "glow": "#ffb060",
+        "glow_level": 0.3,
+        "intro": 6
+      },
+      "target": "Whole front gable"
+    },
+    {
+      "effect": "presents",
+      "params": {
+        "colors": [
+          "#ff1000",
+          "#ff9000",
+          "#c00030",
+          "#ffd060"
+        ],
+        "ribbon": "#ffffff"
+      },
+      "target": "Porch"
+    },
+    {
+      "effect": "twinkle",
+      "params": {
+        "colors": [
+          "#ffd090",
+          "#ffb060"
+        ],
+        "density": 0.12,
+        "duration": 1.6,
+        "seed": 3
+      },
+      "target": "Porch",
+      "blend": "add",
+      "opacity": 0.45
+    }
+  ]
+}
