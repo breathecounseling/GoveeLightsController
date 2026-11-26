@@ -87,6 +87,33 @@ what is below what). They are plug-ins in `goveelights/effects_ext/`:
   automatically, add a showtime at 23:55 with date `12-31` and "only when on" unticked
   (it switches the lights on for the show if needed). See `goveelights/shows_builtin.py`.
 * **Featured tonight** (top of Play): the big scenes in one swipeable row.
+* **Tonight card** (top of Shows): the evening's plan at a glance, with on and off times
+  and why, the program (and which rule picked it), showtimes, countdowns, games, weather
+  and the visitor page. Below that is a checklist (boxes answering, schedule on, bulb
+  counts, showtimes that would fire before lights-on...). Each warning has a one-line fix
+  and a button that opens the right screen. The same data is at `GET /api/tonight`.
+* **Holiday calendar** (Shows → Schedule → *Use the holiday calendar*): one tap adds a
+  ready-made year, placed after your own rules so yours still win:
+  - Valentine's week, St Patrick's, Easter week, July 4th, the Halloween fortnight,
+    Thanksgiving and Broncos Sundays in the fall.
+  - The Christmas season, then Advent with the advent calendar.
+  - Christmas Eve (with the *Santa's coming* show), Christmas Day, and New Year's Eve
+    (on until 12:30 am, with the countdown show at 23:55), then New Year's Day.
+  - January winter scenes.
+
+  The preview lists any of your own rules that would hide calendar nights, so you can
+  switch them off. Tap again later to refresh it, or remove it.
+
+**Year-round looks:**
+* *Valentine's hearts* (hearts rise up the gable and pop at the apex) and *Valentine's glow*.
+* *St Patrick's Day* (rainbow rows).
+* *Easter pastels* (striped eggs float up).
+* *Fourth of July flag* (stripes with a starry blue canton, rippling) and *Fourth of July
+  fireworks*.
+* *Haunted house* (ghosts with dark eyes drift across) and *Halloween pumpkin* (a
+  jack-o'-lantern face with candle flicker).
+* *Thanksgiving harvest* and *Broncos game day*.
+* *Winter elegance*, *Spring garden* and *Summer evening*.
 
 Preview any effect or preset on the house without lights:
 `python tools/preview.py christmas-tree --seconds 8 --out preview` writes `preview.html`/`.png`.
