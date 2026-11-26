@@ -96,6 +96,23 @@ class DuskTests(unittest.TestCase):
         b = self.render({"demo": 30}, t=12.3)[1]
         self.assertEqual(a, b)
 
+    def test_stars_twinkle_out_and_move(self):
+        L = house()
+        P = EFFECTS["dusk"].resolve({"demo": 20, "clouds": 0, "stars": 0.3})
+        base = EFFECTS["dusk"].resolve({"demo": 20, "clouds": 0, "stars": 0})
+        px = L.pixels
+
+        def starred(t):
+            return {i for i in range(L.n)
+                    if abs(lum(EFFECTS["dusk"].fn(t, px[i], P)) - lum(EFFECTS["dusk"].fn(t, px[i], base))) > 0.02}
+        times = [22.0 + k * 0.1 for k in range(40)]
+        sets = [starred(t) for t in times]
+        every = set.intersection(*sets)
+        self.assertTrue(any(sets))
+        self.assertLess(len(every), max(1, len(set.union(*sets))) // 2)   # stars go dark too
+        # a new set of stars in a later 30 s window
+        self.assertNotEqual(starred(22.0), starred(22.0 + 27 * 2))
+
     def test_demo_loop_is_continuous(self):
         prev = dd._demo_elevation(0, 10)
         for k in range(1, 400):
@@ -184,6 +201,41 @@ class CascadeTests(unittest.TestCase):
         for i in range(L.n):
             self.assertAlmostEqual(out[i][0], 0.6)
 
+    def test_changing_curve_keeps_layer_lit(self):
+        L = house()
+        fn, st = FX["cascade"].fn, {}
+        lit = [(0.8, 0.8, 0.8)] * L.n
+        for k in range(60):                              # curve modulated every frame
+            P = FX["cascade"].resolve({"curve": 1.0 + 0.04 * (k % 2), "depth_fade": 0})
+            out = fn(lit, self.ctx(L, dt=0.05 if k else 0.0, clock=k * 0.05), P, st)
+        self.assertTrue(all(lum(out[i]) > 2.0 for i in range(L.n)))
+        P = FX["cascade"].resolve({"mode": "from apex", "depth_fade": 0})
+        out = fn(lit, self.ctx(L, clock=3.0), P, st)    # a mode change keeps it lit too
+        self.assertTrue(all(lum(out[i]) > 2.0 for i in range(L.n)))
+
+    def test_restart_cascades_in_afresh(self):
+        L = house()
+        fn, st = FX["cascade"].fn, {}
+        P = FX["cascade"].resolve({"delay": 1.0, "depth_fade": 0})
+        red = [(1.0, 0.0, 0.0)] * L.n
+        for k in range(40):
+            fn(red, self.ctx(L, dt=0.05 if k else 0.0, clock=k * 0.05), P, st)
+        blue = [(0.0, 0.0, 1.0)] * L.n
+        out = fn(blue, self.ctx(L, dt=0.0, clock=20.0), P, st)   # the clock jumped: restarted
+        bottom = min(range(L.n), key=lambda i: L.pixels[i].y)
+        self.assertEqual(out[bottom], (0.0, 0.0, 0.0))  # not stale red: cascading in again
+
+    def test_depth_fade_dims_the_far_bulbs(self):
+        L = house()
+        fn, st = FX["cascade"].fn, {}
+        P = FX["cascade"].resolve({"delay": 0.05, "depth_fade": 0.5})
+        lit = [(1.0, 1.0, 1.0)] * L.n
+        for k in range(20):
+            out = fn(lit, self.ctx(L, dt=0.05 if k else 0.0, clock=k * 0.05), P, st)
+        top = max(range(L.n), key=lambda i: L.pixels[i].y)
+        bottom = min(range(L.n), key=lambda i: L.pixels[i].y)
+        self.assertLess(lum(out[top]), lum(out[bottom]))  # the roof is farther from the street
+
     def test_deterministic(self):
         L = house()
         runs = []
@@ -256,10 +308,44 @@ class ApexMirrorTests(unittest.TestCase):
         self.assertEqual([round(c[0], 2) for c in out], [0, .1, .2, .3, .4, .5, .4, .3, .2, .1, 0])
         # flare brightens the apex when light arrives there
         idx = L.indices("Whole front gable")
-        frame = [(0.5, 0.0, 0.0)] * L.n
+        frame = [(0.0, 0.0, 0.1)] * L.n
+        for i in (41, 42, 43, 44):
+            frame[i] = (0.5, 0.0, 0.0)
         off = fn(frame, Ctx(L, idx, 0, 0), FX["apex_mirror"].resolve({"flare": 0}), {})
         on = fn(frame, Ctx(L, idx, 0, 0), FX["apex_mirror"].resolve({"flare": 1}), {})
         self.assertGreater(lum(on[42]), lum(off[42]) + 0.2)
+
+    def test_flare_ignores_a_steady_background(self):
+        L = house()
+        idx = L.indices("Whole front gable")
+        frame = [(0.4, 0.2, 0.6)] * L.n
+        out = FX["apex_mirror"].fn(frame, Ctx(L, idx, 0, 0), FX["apex_mirror"].resolve({"flare": 1}), {})
+        self.assertEqual(out, frame)
+
+    def test_flare_stays_in_range(self):
+        L = house()
+        idx = L.indices("Whole front gable")
+        white = [(1.0, 1.0, 1.0)] * L.n
+        out = FX["apex_mirror"].fn(white, Ctx(L, idx, 0, 0), FX["apex_mirror"].resolve({"flare": 1}), {})
+        valid(self, out, L.n)
+        frame = [(0.0, 0.0, 0.0)] * L.n
+        for i in (41, 42, 43, 44):
+            frame[i] = (1.0, 1.0, 1.0)
+        out = FX["apex_mirror"].fn(frame, Ctx(L, idx, 0, 0), FX["apex_mirror"].resolve({"flare": 1}), {})
+        valid(self, out, L.n)
+
+    def test_unpaired_bulbs_go_dark(self):
+        L = house()
+        idx = L.indices(["Flat eaves", "Lower roofline"])
+        fn = FX["apex_mirror"].fn
+        frame = [(0.0, 0.0, 0.2)] * L.n
+        for i in idx:
+            frame[i] = (1.0, 0.5, 0.0) if i in (92, 250) else (0.0, 0.0, 0.2)
+        out = fn(frame, Ctx(L, idx, 0, 0), FX["apex_mirror"].resolve({"flare": 0, "centre": "main gable apex"}), {})
+        self.assertEqual(out[92], (0.0, 0.0, 0.2))      # far south corner: no partner, background
+        self.assertEqual(out[250], (0.0, 0.0, 0.2))     # garage peak: no partner
+        keep = fn(frame, Ctx(L, idx, 0, 0), FX["apex_mirror"].resolve({"flare": 0, "centre": "main gable apex", "blank_unpaired": False}), {})
+        self.assertEqual(keep[92], (1.0, 0.5, 0.0))
 
 
 class PresetTests(unittest.TestCase):

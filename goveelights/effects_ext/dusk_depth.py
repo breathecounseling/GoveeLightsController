@@ -159,12 +159,13 @@ def _vnoise(x: float, y: float, seed: int) -> float:
 
 GLOW = H("#ffa818")
 STAR = H("#e8eeff")
+STAR_WINDOW, STAR_FADE = 30.0, 3.0
 
 
 @effect("dusk", "Sky at dusk", [
-    Param("colors", "colors", ["#2448ff", "#3018e0", "#6a1cd8"], "Night palette",
+    Param("colors", "colors", ["#1a60ff", "#2a18d0", "#7a10c8"], "Night palette",
           help="the sky once it's dark, from the lowest bulbs to the highest"),
-    Param("night_level", "number", 0.85, "Night brightness", 0.2, 1, 0.05,
+    Param("night_level", "number", 0.65, "Night brightness", 0.2, 1, 0.05,
           help="dims the night palette (keep it high: dark blues read as off on LEDs)"),
     Param("demo", "number", 0, "Demo: whole dusk in (s)", 0, 600, 1,
           help="0 = follow the real sun; otherwise race through a whole dusk in this many seconds, "
@@ -176,8 +177,9 @@ STAR = H("#e8eeff")
     Param("sun_glow", "number", 0.6, "Sunset glow", 0, 1, 0.05,
           help="warm afterglow low on the side of the house where the sun went down"),
     Param("stars", "number", 0.12, "Stars", 0, 0.5, 0.01, help="share of the upper bulbs that twinkle once it's dark"),
-    Param("height", "choice", "whole house", "Gradient over", options=["whole house", "each run"],
-          help="whole house: porch = horizon, apex = zenith; each run: every run gets the full sky"),
+    Param("height", "choice", "blend", "Gradient over", options=["blend", "whole house", "each run"],
+          help="whole house: porch = horizon, apex = zenith; each run: every run gets the full sky; "
+               "blend: half of each, so the gables sweep from horizon to zenith and the porch stays warmest"),
     Param("lat", "number", 40.3764, "Latitude", -89, 89, 0.0001),
     Param("lon", "number", -104.6922, "Longitude (east +)", -180, 180, 0.0001),
 ], "The house glows like the sky behind it right now: gold and orange low on the porch, rose and "
@@ -186,7 +188,8 @@ STAR = H("#e8eeff")
     group="Scenes")
 def dusk(t, p, P):
     sky = dusk_sky(t, P)
-    h = p.ny if P["height"] == "whole house" else p.rny
+    mode = P["height"]
+    h = p.ny if mode == "whole house" else p.rny if mode == "each run" else 0.5 * (p.ny + p.rny)
     # away from where the sun set, the same height shows sky from higher up (cooler)
     far = abs(p.nx - sky["sun_x"])
     c = palette(sky["stops"], clamp(h + 0.3 * (far - 0.45)), cyclic=False)
@@ -204,10 +207,20 @@ def dusk(t, p, P):
         c = (c[0] * k, c[1] * k, c[2] * k)
     wn = sky["night"]
     st = P["stars"]
-    if wn > 0 and st > 0 and h > 0.35 and hash01(p.i, 4242) < st:
-        r = hash01(p.i, 77)
-        tw = 0.5 + 0.5 * math.sin(t * (0.6 + 1.4 * r) * 2 * math.pi + r * 40)
-        c = lerp(c, STAR, wn * (0.25 + 0.75 * tw * tw * tw))
+    if wn > 0 and st > 0 and h > 0.35:
+        # the stars are re-chosen every STAR_WINDOW seconds, the old set fading out over
+        # the last STAR_FADE s while the new one fades in: they appear, sparkle and fade
+        win = math.floor(t / STAR_WINDOW)
+        u = t - win * STAR_WINDOW
+        xf = clamp((u - (STAR_WINDOW - STAR_FADE)) / STAR_FADE)
+        s = 0.0
+        for w, k in ((1.0 - xf, win), (xf, win + 1)):
+            if w > 0 and hash01(p.i, 4242 + k) < st:
+                r = hash01(p.i, 77 + k)
+                tw = 0.5 + 0.5 * math.sin(t * (0.6 + 1.4 * r) * 2 * math.pi + r * 40)
+                s += w * tw ** 6
+        if s > 0.002:
+            c = lerp(c, STAR, wn * min(1.0, s))
     return (clamp(c[0]), clamp(c[1]), clamp(c[2]))
 
 
@@ -277,39 +290,45 @@ _MIN_STEP = 1.0 / 120          # history resolution: bounded memory at any frame
 
 
 def _cascade_geometry(ctx, mode: str, curve: float, st: dict):
-    """Per target bulb: delay fraction 0..1; plus the bulbs sorted by it. Cached in state,
-    recomputed when the layout, target, mode or curve change."""
+    """Per target bulb: delay fraction 0..1, viewer-distance fraction 0..1 (for the depth
+    fade), and the bulbs sorted by delay. Cached in state, recomputed when the layout,
+    target, mode or curve change. Only a layout/target change clears the history (it is
+    stored per target bulb, so it stays valid when just the delays change)."""
     g = st.get("geom")
-    if g and g[0] is ctx.layout and g[1] is ctx.idx and g[2] == (mode, curve) and len(g[3]) == len(ctx.idx):
-        return g[3], g[4]
+    same_target = bool(g) and g[0] is ctx.layout and g[1] is ctx.idx and len(g[3]) == len(ctx.idx)
+    if same_target and g[2] == (mode, curve):
+        return g[3], g[4], g[5]
     px, idx = ctx.layout.pixels, ctx.idx
     if not idx:
-        fr, order = [], []
+        fr, order, far = [], [], []
     else:
         ys = [px[i].y for i in idx]
         xs = [px[i].x for i in idx]
         ylo, yhi = min(ys), max(ys)
+        ax, ay = apex_point(ctx.layout, idx)
+        half = max(1e-6, max(abs(x - ax) for x in xs))
+        yspan = max(1e-6, yhi - ylo)
+        # how far each bulb is from the viewer: lower roofs are in front (the porch roof is
+        # nearer the street than the eaves) and the middle is a little nearer than the ends
+        far = [0.8 * (y - ylo) / yspan + 0.2 * abs(x - ax) / half for x, y in zip(xs, ys)]
         if mode == "height-up":
             raw = [y - ylo for y in ys]
         elif mode == "from apex":
-            ax, ay = apex_point(ctx.layout, idx)
             raw = [math.hypot(x - ax, y - ay) for x, y in zip(xs, ys)]
         elif mode == "from the street":
-            # lower bulbs are closer to the street (the porch roof is in front of the eaves);
-            # the middle of the house is a little closer than its far ends
-            ax, _ = apex_point(ctx.layout, idx)
-            half = max(1e-6, max(abs(x - ax) for x in xs))
-            span = max(1e-6, yhi - ylo)
-            raw = [0.8 * (y - ylo) / span + 0.2 * abs(x - ax) / half for x, y in zip(xs, ys)]
+            raw = far
         else:                                   # height-down: the roof first, the porch last
             raw = [yhi - y for y in ys]
         lo, hi = min(raw), max(raw)
         span = hi - lo
         fr = [((r - lo) / span) ** curve if span > 1e-9 else 0.0 for r in raw]
         order = sorted(range(len(idx)), key=lambda k: fr[k])
-    st["geom"] = (ctx.layout, ctx.idx, (mode, curve), fr, order)
-    st["hist"] = []                              # history is aligned to the target: start over
-    return fr, order
+        flo, fhi = min(far), max(far)
+        far = [(f - flo) / (fhi - flo) if fhi - flo > 1e-9 else 0.0 for f in far]
+    st["geom"] = (ctx.layout, ctx.idx, (mode, curve), fr, order, far)
+    if not same_target:
+        st["hist"] = []                          # history is aligned to the target: start over
+    return fr, order, far
 
 
 @fx("cascade", "Depth cascade", [
@@ -322,7 +341,8 @@ def _cascade_geometry(ctx, mode: str, curve: float, st: dict):
     Param("curve", "number", 1.0, "Delay curve", 0.3, 3, 0.05,
           help="1 = even; below 1 = speeds up as it goes (like a falling drop); above 1 = slows down"),
     Param("depth_fade", "number", 0.25, "Depth fade", 0, 0.9, 0.05,
-          help="the most delayed (farthest) bulbs are this much dimmer, for a sense of distance"),
+          help="bulbs farther from the street (higher up the house, out at its ends) are this much "
+               "dimmer, for a sense of distance"),
 ], "Delays the layer bulb by bulb so anything it does sweeps across the house with real depth: "
    "flashes fall from the roof down to the porch, or ripple outward from the apex. The layer "
    "cascades in when it starts.")
@@ -331,9 +351,18 @@ def cascade(frame, ctx, P, st):
     if not idx or len(frame) != len(ctx.layout.pixels):
         return frame
     mode = P["mode"] if P["mode"] in CASCADE_MODES else "height-down"
-    fr, order = _cascade_geometry(ctx, mode, float(P["curve"]), st)
+    fr, order, far = _cascade_geometry(ctx, mode, float(P["curve"]), st)
     maxd = min(MAX_DELAY, max(0.0, float(P["delay"])))
-    dt = min(0.1, max(0.0, float(ctx.dt or 0.0)))
+    raw_dt = max(0.0, float(ctx.dt or 0.0))
+    dt = min(0.1, raw_dt)
+    # the layer restarted (its clock jumped) or was switched off for a while (no frames
+    # for over a second of wall time): forget the old frames and cascade in afresh
+    clock, now = float(ctx.clock or 0.0), _time.monotonic()
+    last = st.get("clock")
+    if st.get("hist") and ((last is not None and abs(clock - (last + raw_dt)) > 0.5)
+                           or now - st.get("wall", now) > 1.0):
+        st["hist"] = []
+    st["clock"], st["wall"] = clock, now
     t = st.get("t", 0.0) + dt
     st["t"] = t
     hist = st.setdefault("hist", [])
@@ -375,7 +404,7 @@ def cascade(frame, ctx, P, st):
         else:
             c = b[1][k]
         if fade:
-            m = 1 - fade * f
+            m = 1 - fade * far[k]
             c = (c[0] * m, c[1] * m, c[2] * m)
         out[i] = c
     return out
@@ -434,7 +463,11 @@ def _mirror_partners(ctx, centre: str):
     Param("centre", "choice", "auto", "Mirror around", options=MIRROR_CENTRES,
           help="auto: the front gable apex if it's over this target, else the target's highest peak"),
     Param("flare", "number", 0.5, "Peak flare", 0, 1, 0.05,
-          help="light reaching the apex from both sides flares up there, brighter and whiter"),
+          help="light arriving at the apex flares up there, brighter and whiter (only when it stands "
+               "out from the rest of the layer, so a steady background never flares)"),
+    Param("blank_unpaired", "bool", True, "Darken unmatched bulbs",
+          help="bulbs on the copied-to side with no mirror partner (e.g. the garage beyond the far "
+               "end of the reflection) go dark instead of running out of step"),
 ], "Folds the layer at the gable apex instead of the middle of the lights: the two sides of the "
    "roof become mirror images, so anything moving meets at the peak and flares there.")
 def apex_mirror(frame, ctx, P, st):
@@ -452,23 +485,29 @@ def apex_mirror(frame, ctx, P, st):
                 out[i] = (max(a[0], b[0]), max(a[1], b[1]), max(a[2], b[2]))
     else:
         dest = -1 if src == "right half (north)" else 1
+        dark = None
         for i in idx:
             if side[i] == dest:
                 j = partner[i]
                 if j is not None:
                     out[i] = frame[j]
+                elif P["blank_unpaired"]:
+                    if dark is None:             # the layer's background: its darkest colour
+                        dark = min((frame[k] for k in idx), key=lambda c: c[0] + c[1] + c[2])
+                    out[i] = dark
     fl = P["flare"]
     if fl > 0 and near:
-        # brightest light arriving at the apex, whitened a little and splashed around it
+        # brightest light arriving at the apex, whitened a little and splashed around it;
+        # driven by how much it stands out from the layer, so a lit background never flares
         peak = max((out[i] for i, _ in near), key=lambda c: c[0] + c[1] + c[2])
+        pl = (peak[0] + peak[1] + peak[2]) / 3
+        ml = sum(out[i][0] + out[i][1] + out[i][2] for i in idx) / (3 * len(idx))
+        amt = clamp((pl - ml) / max(0.05, pl))
         m = max(peak)
-        if m > 0.02:
+        if m > 0.02 and amt > 0.01:
             hot = lerp(peak, (m, m, m), 0.35)
-            add = []
             for i, w in near:
-                k = fl * w * 0.8
-                add.append((i, (hot[0] * k, hot[1] * k, hot[2] * k)))
-            for i, a in add:
+                k = fl * w * 0.8 * amt
                 c = out[i]
-                out[i] = (c[0] + a[0], c[1] + a[1], c[2] + a[2])
+                out[i] = (min(1.0, c[0] + hot[0] * k), min(1.0, c[1] + hot[1] * k), min(1.0, c[2] + hot[2] * k))
     return out

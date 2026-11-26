@@ -17,13 +17,14 @@
       "params": {
         "color": "#ffffff",
         "tail_color": "#ff2040",
-        "tail": 10,
-        "count": 4,
-        "speed": 18,
-        "axis": "strip"
+        "tail": 8,
+        "count": 7,
+        "speed": -9,
+        "axis": "x",
+        "background": "#001048"
       },
       "target": "Whole front gable",
-      "blend": "lighten",
+      "blend": "normal",
       "fx": [
         {
           "type": "apex_mirror",
@@ -41,11 +42,17 @@
         "tail_color": "#ff3000",
         "tail": 14,
         "count": 2,
-        "speed": 26,
-        "axis": "x"
+        "speed": -26,
+        "axis": "x",
+        "background": "#001048"
       },
-      "target": ["Flat eaves", "Lower roofline"],
-      "blend": "lighten",
+      "target": [
+        "North wall",
+        "Front eave",
+        "Porch",
+        "Garage"
+      ],
+      "blend": "normal",
       "fx": [
         {
           "type": "apex_mirror",
