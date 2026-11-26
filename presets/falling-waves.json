@@ -1,0 +1,40 @@
+{
+  "name": "Falling waves",
+  "tags": [
+    "Ambient",
+    "Holiday"
+  ],
+  "layers": [
+    {
+      "effect": "solid",
+      "params": {
+        "color": "#001c60"
+      },
+      "target": "all"
+    },
+    {
+      "effect": "wave",
+      "params": {
+        "color": "#30c8ff",
+        "color2": "#000000",
+        "wavelength": 16,
+        "sharpness": 5,
+        "speed": -8,
+        "axis": "y"
+      },
+      "target": "Whole front",
+      "blend": "lighten",
+      "fx": [
+        {
+          "type": "cascade",
+          "params": {
+            "mode": "height-down",
+            "delay": 1.0,
+            "curve": 0.5,
+            "depth_fade": 0.2
+          }
+        }
+      ]
+    }
+  ]
+}
