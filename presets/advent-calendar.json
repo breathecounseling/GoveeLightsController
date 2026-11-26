@@ -1,24 +1,63 @@
 {
   "name": "Advent calendar",
-  "tags": ["Holiday", "Christmas"],
+  "tags": [
+    "Holiday",
+    "Christmas"
+  ],
   "layers": [
     {
       "effect": "twinkle",
-      "target": ["North wall", "Front eave", "South wall", "South gable", "Garage", "Garage peak"],
-      "params": {"colors": ["#ffe0a0"], "background": "#ffb000", "density": 0.15, "duration": 3.0, "seed": 6},
+      "target": [
+        "North wall",
+        "Front eave",
+        "South wall",
+        "South gable",
+        "Garage",
+        "Garage peak"
+      ],
+      "params": {
+        "colors": [
+          "#ffe0b0"
+        ],
+        "background": "#ffa850",
+        "density": 0.15,
+        "duration": 3.0,
+        "seed": 6
+      },
       "opacity": 0.65
     },
     {
       "effect": "advent",
-      "target": ["Whole front gable", "Porch"],
-      "params": {"open_colors": ["#ff1810", "#10c828"], "today_color": "#fff4d0", "sparkle": 1.6,
-                 "closed_color": "#ffb000", "closed_level": 0.3,
-                 "frame_color": "#ff1010", "frame_level": 0.6, "intro": 4}
+      "target": [
+        "Whole front gable",
+        "Porch"
+      ],
+      "params": {
+        "open_colors": [
+          "#ff1810",
+          "#ffb020"
+        ],
+        "today_color": "#fff4d0",
+        "sparkle": 1.6,
+        "closed_color": "#00a828",
+        "closed_level": 0.35,
+        "frame_color": "#00b020",
+        "frame_level": 0.6,
+        "intro": 4
+      }
     },
     {
       "effect": "twinkle",
       "target": "Porch",
-      "params": {"colors": ["#ffc040", "#ffe090"], "density": 0.12, "duration": 1.6, "seed": 3},
+      "params": {
+        "colors": [
+          "#ffc040",
+          "#ffe090"
+        ],
+        "density": 0.12,
+        "duration": 1.6,
+        "seed": 3
+      },
       "blend": "add",
       "opacity": 0.5
     }

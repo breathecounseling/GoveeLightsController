@@ -9,9 +9,9 @@
       "effect": "gradient",
       "params": {
         "colors": [
-          "#0028d0",
-          "#0a20b0",
-          "#0034e0"
+          "#0818b0",
+          "#0a1490",
+          "#0c20c0"
         ],
         "length": 80,
         "speed": 1
@@ -21,9 +21,9 @@
       "effect": "gradient",
       "params": {
         "colors": [
-          "#0030d8",
-          "#1020b8",
-          "#0040e8"
+          "#0a1cb8",
+          "#10169c",
+          "#0a26c8"
         ],
         "length": 40,
         "speed": 0.6

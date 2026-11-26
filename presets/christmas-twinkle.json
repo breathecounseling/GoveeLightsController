@@ -3,10 +3,15 @@
   "layers": [
     {
       "effect": "candy_cane",
-      "target": ["Eaves", "Accent"],
+      "target": "all",
       "params": {
-        "colors": ["#ff0000", "#00b018"],
-        "width": 6,
+        "colors": [
+          "#ff0000",
+          "#ffa850",
+          "#00b018",
+          "#ffa850"
+        ],
+        "width": 4,
         "blend": 0,
         "speed": 1.5
       }
@@ -15,7 +20,14 @@
       "effect": "flag",
       "target": "Peak",
       "params": {
-        "colors": ["#ff0000", "#00b018", "#00b018", "#00b018", "#00b018", "#ffc860"],
+        "colors": [
+          "#ff0000",
+          "#00b018",
+          "#00b018",
+          "#00a014",
+          "#00b018",
+          "#ffd080"
+        ],
         "canton_rows": 0,
         "wave": 0.25,
         "wavelength": 14,
@@ -28,7 +40,7 @@
       "effect": "twinkle",
       "params": {
         "colors": [
-          "#ffffff",
+          "#fff4e0",
           "#ffd070"
         ],
         "density": 0.15,

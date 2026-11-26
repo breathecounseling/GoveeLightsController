@@ -6,6 +6,13 @@
   ],
   "layers": [
     {
+      "effect": "solid",
+      "params": {
+        "color": "#000a40"
+      },
+      "target": "all"
+    },
+    {
       "effect": "fireworks",
       "params": {
         "rate": 56,
@@ -13,28 +20,45 @@
         "burst_speed": 32,
         "crackle": 0.2,
         "trail": 0.1,
-        "colors": ["#ff0010", "#00ff30", "#1838ff", "#ff00c0", "#ffa000", "#00e0ff"],
+        "colors": [
+          "#ff1020",
+          "#ffffff",
+          "#2848ff",
+          "#ff30b0",
+          "#ffb020",
+          "#30d8ff"
+        ],
         "style": "Mixed",
         "embers": 0.3
       },
-      "target": "Whole front"
+      "target": "Whole front",
+      "blend": "lighten"
     },
     {
       "effect": "glitter",
       "params": {
-        "colors": ["#ff0010", "#00ff30", "#ffa000", "#1838ff", "#ff00c0", "#ff5000"],
-        "level": 0.35,
-        "shimmer": 0.4,
+        "colors": [
+          "#ffb030",
+          "#ff2010",
+          "#fff0d0"
+        ],
+        "level": 0,
+        "shimmer": 0,
         "density": 0.2,
         "attack": 0.01,
-        "decay": 0.3,
-        "whiteness": 0,
+        "decay": 0.35,
+        "whiteness": 0.3,
         "bloom": 0.6,
         "length": 9,
         "speed": 3,
         "seed": 23
       },
-      "target": ["North wall", "Front eave", "South gable", "Lower roofline"],
+      "target": [
+        "North wall",
+        "Front eave",
+        "South gable",
+        "Lower roofline"
+      ],
       "blend": "lighten"
     }
   ]

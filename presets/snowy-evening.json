@@ -9,26 +9,23 @@
       "effect": "gradient",
       "params": {
         "colors": [
-          "#ff9a20",
-          "#ff8a10",
-          "#ffb040"
+          "#ffa850",
+          "#ff9c48",
+          "#ffb468"
         ],
         "length": 60,
         "speed": 0.8
       },
       "opacity": 0.85,
-      "target": [
-        "Eaves",
-        "Accent"
-      ]
+      "target": "all"
     },
     {
       "effect": "gradient",
       "params": {
         "colors": [
-          "#0020a0",
-          "#00157a",
-          "#0a28b0"
+          "#000e78",
+          "#061a98",
+          "#000a64"
         ],
         "length": 40,
         "speed": 0.6

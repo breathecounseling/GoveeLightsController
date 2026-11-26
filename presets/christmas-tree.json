@@ -9,9 +9,9 @@
       "effect": "twinkle",
       "params": {
         "colors": [
-          "#ffd890"
+          "#ffe0b0"
         ],
-        "background": "#ff9a20",
+        "background": "#ffa850",
         "density": 0.18,
         "duration": 3.0,
         "seed": 11
@@ -24,7 +24,7 @@
         "Garage peak"
       ],
       "blend": "normal",
-      "opacity": 0.45
+      "opacity": 0.75
     },
     {
       "effect": "tree",

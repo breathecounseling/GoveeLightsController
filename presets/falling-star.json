@@ -1,10 +1,33 @@
 {
   "name": "Falling star",
-  "tags": ["Holiday", "Christmas"],
+  "tags": [
+    "Holiday",
+    "Christmas"
+  ],
   "layers": [
     {
       "effect": "falling_star",
-      "params": {"every": 4.5, "background": "#001070", "stars": 1.0, "burst": 1.2}
+      "params": {
+        "every": 3.5,
+        "background": "#000c62",
+        "stars": 1.5,
+        "burst": 1.6,
+        "tail": 16
+      }
+    },
+    {
+      "effect": "twinkle",
+      "target": "Zigzag top half",
+      "blend": "lighten",
+      "params": {
+        "colors": [
+          "#ffffff",
+          "#ffe6a8"
+        ],
+        "density": 0.1,
+        "duration": 1.8,
+        "seed": 43
+      }
     }
   ]
 }

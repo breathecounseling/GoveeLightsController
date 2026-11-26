@@ -1,11 +1,35 @@
 {
   "name": "Sleigh grand tour",
-  "tags": ["Holiday", "Christmas"],
+  "tags": [
+    "Holiday",
+    "Christmas"
+  ],
   "layers": [
     {
       "effect": "sleigh_tour",
-      "params": {"speed": 14, "background": "#001278", "stars": 1.1, "sparkle": 1.6, "trail": 3.0,
-                 "trail_level": 0.75, "dust": 0.6}
+      "params": {
+        "speed": 14,
+        "background": "#000c60",
+        "stars": 1.5,
+        "sparkle": 1.8,
+        "trail": 3.0,
+        "trail_level": 0.75,
+        "dust": 0.6
+      }
+    },
+    {
+      "effect": "twinkle",
+      "target": "Zigzag top half",
+      "blend": "lighten",
+      "params": {
+        "colors": [
+          "#ffffff",
+          "#ffe6a8"
+        ],
+        "density": 0.1,
+        "duration": 1.8,
+        "seed": 41
+      }
     }
   ]
 }
