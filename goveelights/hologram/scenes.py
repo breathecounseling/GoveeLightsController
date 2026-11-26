@@ -82,6 +82,8 @@ class Scene:
     default_colors: tuple = ()
     palette_role = ""          # what palette colours recolour (shown in the app)
     splice = True              # False: each fan of a set shows its own copy, not a slice of one picture
+    max_seconds = 12.0         # the longest loop it may be made at (a story scene runs longer)
+    story = False              # a story with beats (it plays one way through each loop)
 
     def __init__(self, ctx: Ctx):
         self.ctx = ctx
@@ -97,7 +99,8 @@ class Scene:
     def info(cls) -> dict:
         return {"id": cls.id, "name": cls.name, "blurb": cls.blurb, "seconds": cls.seconds, "fps": cls.fps,
                 "colors": list(cls.default_colors), "palette_role": cls.palette_role,
-                "team": cls.id == "football", "splice": cls.splice}
+                "team": cls.id == "football", "splice": cls.splice, "max_seconds": cls.max_seconds,
+                "story": cls.story}
 
 
 # ---------------------------------------------------------------- shared pieces
@@ -828,3 +831,9 @@ class Football(Scene):
 
 
 SCENES: dict[str, type] = {cls.id: cls for cls in (Sleigh, Pumpkin, Ghosts, Fireworks, SnowGlobe, Wreath, NewYear, Football)}
+
+# The story scenes live in story.py (they import the shared pieces above); listed right
+# after the sleigh so the Christmas scenes sit together in the app.
+from .story import SantaLanding  # noqa: E402
+
+SCENES = {"sleigh": Sleigh, SantaLanding.id: SantaLanding, **SCENES}

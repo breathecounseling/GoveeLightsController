@@ -16,9 +16,83 @@ python -m goveelights hologram fireworks --palette "Patriotic"
 python -m goveelights hologram football --team "#c8102e,#ffffff" --formats gif,mp4,png
 ```
 
-Scenes: Santa's sleigh over the moon, jack-o'-lantern with ghosts, ghost swirl, fireworks,
-snow globe, star and wreath, Happy New Year, game-day field goal (in your team colours).
-Every clip loops seamlessly: the last frame runs straight back into the first.
+Scenes: Santa's sleigh over the moon, **Santa lands** (a 24 s story, below), jack-o'-lantern
+with ghosts, ghost swirl, fireworks, snow globe, star and wreath, Happy New Year, game-day
+field goal (in your team colours). Every clip loops seamlessly: the last frame runs
+straight back into the first.
+
+### Santa lands (santa-landing)
+
+A little film, about 24 s a loop (12 to 40 s with `--seconds`): night sky, moon and snow
+over a snowy roof with twinkling string lights; the sleigh and reindeer swoop down in an
+arc from the top left, touch down with a bounce and a puff of snow; Santa crouches, hops
+out, turns to face the street and waves while "HO HO HO!" and "MERRY CHRISTMAS!" pop up;
+he hops back in, the reindeer run along the roof and the sleigh takes off past the moon
+in a trail of sparkles that fades before the loop starts again. Rudolph's nose glows the
+whole time. A palette recolours the sleigh and the roof lights ("Match the house" makes
+the roof lights the colours the real lights are playing).
+
+On one fan or a row the whole story plays in the middle fan of the row. On two rows
+(2 × 2, 2 × 3, 2 × 4) Santa is drawn twice as big in the middle bottom fan, the sleigh
+and reindeer run on into the next fan, the words appear in the fan above him and the moon
+sits in the top right fan, so a big wall reads from across the street.
+
+```
+python -m goveelights hologram santa-landing --layout 2x3 --size 480 --diameter 65
+```
+
+## Other big displays: a projector, a screen, an LED matrix
+
+The same scenes can be made for hardware that is much cheaper per square metre than a
+wall of fans:
+
+```
+python -m goveelights hologram santa-landing --frame 1920x1080                 # projector
+python -m goveelights hologram santa-landing --frame 16:9 --size 1080 --background night   # TV
+python -m goveelights hologram santa-landing --matrix 64x32 --preview          # see it in the terminal
+python -m goveelights hologram santa-landing --matrix 64x32                    # GIF + raw RGB + LED-look GIF
+python -m goveelights hologram santa-landing --matrix 64x32 --live 192.168.1.60   # EXPERIMENTAL, WLED over DDP
+```
+
+In the app: More → Hologram fans → Display: *Hologram fans*, *Projector or screen* or
+*LED matrix*.
+
+* **Frame** (`--frame WxH` or an aspect like `16:9` at `--size` pixels tall): one
+  rectangular picture, any shape; MP4 / GIF / PNG. `--background black` (the default) keeps
+  black as "no light", which is what you want for a projector aimed at the house wall or a
+  white sheet hung in a window (the classic "window ghost" trick); `night` adds a deep-blue
+  sky for a TV. The story scene uses the whole width; the other scenes are laid out across
+  it as a row of overlapping virtual fans, so snow and flights fill the picture.
+* **Matrix** (`--matrix WxH`, 8 to 256 a side): the scene is drawn several times bigger and
+  each LED gets the average of the patch it covers (area-averaged downsampling), so thin
+  lines become dim LEDs instead of flickering in and out; the words are drawn one LED per
+  font cell so they stay sharp. `--gamma 2.2` darkens mid-tones for raw LEDs (leave it at
+  1 if WLED's own gamma correction is on). Files: a native-size GIF (recent WLED builds with
+  GIF support can play it from the device with the Image effect), `.rgb` (W × H × 3 bytes a
+  frame, frames back to back, rows from the top left, or zig-zag with `--serpentine`) plus a
+  `.json` note of the size and frame rate, and `-view.gif`, a blown-up "what the LEDs look
+  like" GIF for checking the art.
+* **Live on WLED (experimental)**: `--live IP[:PORT]` renders the matrix frames and streams
+  them with the same DDP packets the app uses for WLED strips (UDP 4048), looping until
+  Ctrl-C (or `--loops N`). Set the panel up in WLED (Config → 2D) first. Don't point it at a
+  WLED device the house layout also drives. It is a command-line tool only; the app and the
+  schedule never start it. Untested against a real panel here.
+
+## Are big fan walls DIY-able for less?
+
+Roughly (2026 prices, check before buying):
+
+* **Off-the-shelf fan walls** (5 to 6 ft splice sets with a frame) cost a lot because each
+  fan is a sealed, synced, rain-rated product with its own controller. Several separate
+  42 to 65 cm outdoor fans plus a home-made frame are cheaper than a kit, at the cost of
+  syncing them by hand.
+* **DIY POV fans** (an ESP32 and an LED strip on a spinning bar) are a known hobby project,
+  but a 1.5 m blade spinning outdoors needs serious balancing, a strong motor, slip-ring or
+  inductive power and a solid guard. It is not a weekend build, and the safety risk is real.
+* **Cheaper big pictures**: a used 1080p projector aimed at the wall or at a white sheet in a
+  window gives the biggest picture for the money (`--frame`); an LED matrix from P10 / P5
+  panels or WS2812 grids driven by WLED gives a bright, weatherproofable sign for less than
+  a fan wall (`--matrix`), at a much lower resolution. Both play this app's scenes.
 
 Each run writes, per fan: an animated GIF and an H.264 MP4 (only if `ffmpeg` is on the
 PC's PATH; it's skipped otherwise). PNG frames are only written if asked: tick "PNG
@@ -45,8 +119,8 @@ full-size files are made in a separate, low-priority process so the lights never
   guard**. The dome keeps rain and snow off the motor and fingers off the blades.
 * **Splicing sets.** Some fans can be "spliced": several fans mounted side by side play
   one big picture between them. Sets of 2, 3 or 4 with a mounting frame and a group-sync
-  feature in the app are the easiest. Pick the matching layout in the app (1 × 2, 1 × 3,
-  1 × 4 or 2 × 2), set the fan size and the gap between blade tips as mounted, and load
+  feature in the app are the easiest. Pick the matching layout in the app (a row of 2 to
+  6, or 2 × 2, 2 × 3, 2 × 4), set the fan size and the gap between blade tips as mounted, and load
   each fan's own file.
 * **How clips get on.** Through the maker's phone app over Wi-Fi or Bluetooth, or by
   copying files to the fan's SD card. Check the listing says it accepts your own videos
@@ -93,5 +167,6 @@ could call later. With no driver registered those calls only log.
   spacing. Whatever falls in the gaps is lost, so key art sits inside one fan and only
   things in motion cross between fans.
 * **Loops**: 4 to 10 s at 20 to 30 fps; every moving thing completes whole cycles so the loop
-  has no jump.
+  has no jump. A story (Santa lands) runs longer and is a timeline that starts and ends on
+  the same empty sky.
 * **Size**: 720 × 720 is safe for most fan apps; they scale to the fan's own resolution.

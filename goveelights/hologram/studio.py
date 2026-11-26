@@ -26,11 +26,16 @@ import time
 from collections import OrderedDict
 from pathlib import Path
 
-from . import LAYOUT_NAMES, SCENES, Clip, FanLayout, export
+from . import LAYOUT_NAMES, SCENES, Clip, FanLayout, export, targets
+from .render import max_seconds
 
 log = logging.getLogger("goveelights")
 SIZES = (240, 360, 480, 720, 1080)
 PREVIEW_FPS = 12
+PREVIEW_FPS_LONG = 10       # a 24 s story at 12 fps would be a slow, heavy preview
+DISPLAYS = ("fans", "frame", "matrix")
+FRAMES = ("1280x720", "1920x1080", "3840x2160", "1024x768", "1080x1920")     # the app's choices (any WxH works)
+MATRICES = ("16x16", "32x8", "32x16", "32x32", "64x32", "64x64", "128x64")
 JOB_TIMEOUT = 20 * 60
 _HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 _PKG_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -146,16 +151,39 @@ def parse(ctl, b: dict, preview: bool) -> dict:
         raise ValueError("pick a layout")
     diameter = _num(b, "diameter", 10, 300, 42.0)
     spacing = _num(b, "spacing", 0, 1200, 0.0)
-    seconds = _num(b, "seconds", 2, 12, SCENES[scene].seconds)
+    seconds = _num(b, "seconds", 2, max_seconds(scene), SCENES[scene].seconds)
     fps = _num(b, "fps", 10, 30, SCENES[scene].fps)
+    display = str(b.get("display") or "fans")
+    if display not in DISPLAYS:
+        raise ValueError("display must be fans, frame or matrix")
     count = FanLayout(lay).count
     if preview:
-        size = 240 if count == 1 else 140 if count <= 3 else 112
-        fps = PREVIEW_FPS
+        size = 240 if count == 1 else 140 if count <= 3 else 112 if count <= 4 else 96
+        fps = PREVIEW_FPS if seconds <= 12 else PREVIEW_FPS_LONG
     else:
         size = int(_num(b, "size", 64, 1080, 480))
         if size not in SIZES:
             raise ValueError(f"size must be one of {', '.join(map(str, SIZES))}")
+    background = str(b.get("background") or "black")
+    if background not in targets.BACKGROUNDS:
+        raise ValueError("background must be black or night")
+    extra = {"display": display}
+    if display == "frame":
+        w, h = targets.parse_wh(b.get("frame") or "1280x720", "frame")
+        targets.FrameLayout(w, h, background)                         # checks the size
+        extra.update(dims=(w, h), background=background)
+        if preview:                                                   # small, same shape
+            k = 320 / max(w, h)
+            w, h = max(64, int(round(w * k / 2)) * 2), max(64, int(round(h * k / 2)) * 2)
+        layout = targets.FrameLayout(w, h, background)
+    elif display == "matrix":
+        w, h = targets.parse_wh(b.get("matrix") or "64x32", "matrix")
+        gamma = _num(b, "gamma", 0.5, 3.5, 1.0)
+        serp = bool(b.get("serpentine"))
+        layout = targets.MatrixLayout(w, h, gamma, serp, background)
+        extra.update(dims=(w, h), background=background, gamma=gamma, serpentine=serp)
+    else:
+        layout = FanLayout(lay, size=size, diameter_cm=diameter, spacing_cm=spacing)
     team = b.get("team") or None
     if team is not None:
         if not isinstance(team, list) or not 1 <= len(team) <= 2 or not all(isinstance(c, str) and _HEX.match(c) for c in team):
@@ -167,9 +195,9 @@ def parse(ctl, b: dict, preview: bool) -> dict:
         year = int(_num(b, "year", 2000, 2200, 0))
     else:
         year = None
-    return {"scene": scene, "layout": FanLayout(lay, size=size, diameter_cm=diameter, spacing_cm=spacing),
+    return {"scene": scene, "layout": layout,
             "seconds": seconds, "fps": fps, "colors": resolve_colours(ctl, b.get("colors", "")),
-            "team": team, "year": year}
+            "team": team, "year": year, "extra": extra}
 
 
 def _kill_tree(proc):
@@ -212,7 +240,7 @@ class Studio:
             return
         files = [f for f in j["files"] if isinstance(f, str) and export.safe_name(f) and (self.out / f).is_file()]
         if files:
-            keep = {k: j[k] for k in ("scene", "layout", "size", "started", "total", "seconds") if k in j}
+            keep = {k: j[k] for k in ("scene", "layout", "size", "started", "total", "seconds", "display", "label") if k in j}
             sk = j.get("skipped")
             self._job = {**keep, "state": "done", "files": files, "done": keep.get("total", 0),
                          "skipped": sk if isinstance(sk, dict) else {}}
@@ -234,7 +262,7 @@ class Studio:
             presets = []
         ff = export.ffmpeg_info()
         return {"scenes": [cls.info() for cls in SCENES.values()],
-                "layouts": LAYOUT_NAMES, "sizes": list(SIZES),
+                "layouts": LAYOUT_NAMES, "sizes": list(SIZES), "frames": list(FRAMES), "matrices": list(MATRICES),
                 "palettes": sorted(all_palettes(getattr(ctl, "user_palettes", None) or {})),
                 "presets": presets, "team": team_colours(ctl),
                 "mp4": bool(ff), "encoder": ff.get("encoder", ""), "job": self.job()}
@@ -243,7 +271,8 @@ class Studio:
     def preview(self, ctl, b: dict) -> dict:
         args = parse(ctl, b, preview=True)
         lay = args["layout"]
-        key = json.dumps({**{k: v for k, v in args.items() if k != "layout"}, "layout": lay.to_dict()}, sort_keys=True)
+        key = json.dumps({**{k: v for k, v in args.items() if k != "layout"}, "layout": lay.to_dict()}, sort_keys=True,
+                         default=list)
         with self.lock:
             hit = self._cache.get(key)
             if hit:
@@ -251,8 +280,10 @@ class Studio:
                 return hit
         t0 = time.time()
         clip = Clip(args["scene"], lay, args["seconds"], args["fps"], args["colors"], args["team"], args["year"])
-        gifs = export.preview_gifs(clip)
+        led = max(2, min(10, 320 // max(lay.w, lay.h))) if args["extra"]["display"] == "matrix" else 0
+        gifs = export.preview_gifs(clip, led_scale=led)
         res = {"ok": True, "tiles": ["data:image/gif;base64," + base64.b64encode(g).decode() for g in gifs],
+               "display": args["extra"]["display"], "out": list(getattr(lay, "out_size", (lay.size, lay.size))),
                "layout": lay.to_dict(), "seconds": clip.seconds, "colors": args["colors"] or [],
                "team": args["team"] or [], "year": clip.ctx.year, "ms": int((time.time() - t0) * 1000)}
         with self.lock:
@@ -267,7 +298,7 @@ class Studio:
         if not self.out.is_dir():
             return
         for p in self.out.iterdir():
-            if p.is_file() and p.suffix in (".gif", ".mp4", ".zip", ".png", ".json", ".tmp") and export.safe_name(p.name):
+            if p.is_file() and p.suffix in (".gif", ".mp4", ".zip", ".png", ".json", ".tmp", ".rgb") and export.safe_name(p.name):
                 try:
                     p.unlink()
                 except OSError:
@@ -275,9 +306,12 @@ class Studio:
 
     def start(self, ctl, b: dict) -> dict:
         args = parse(ctl, b, preview=False)
-        fmts = b.get("formats") or list(export.DEFAULT_FORMATS)
+        ex = args["extra"]
+        fmts = b.get("formats") or (["gif", "rgb", "view"] if ex["display"] == "matrix" else list(export.DEFAULT_FORMATS))
         if not isinstance(fmts, list) or not all(f in export.FORMATS for f in fmts):
-            raise ValueError("formats must be a list of gif, png, mp4")
+            raise ValueError("formats must be a list of gif, png, mp4 (a matrix also rgb, view)")
+        if ex["display"] != "matrix" and any(f in export.MATRIX_ONLY for f in fmts):
+            raise ValueError("rgb and view are only for an LED matrix")
         lay = args["layout"]
         with self.lock:
             if self._proc is not None and self._proc.poll() is None:
@@ -285,11 +319,22 @@ class Studio:
             self.out.mkdir(parents=True, exist_ok=True)
             self._clean()
             prog = self.out / "progress.json"
-            argv = [sys.executable, "-m", "goveelights", "hologram", args["scene"], "--layout", lay.name,
-                    "--size", str(lay.size), "--seconds", f"{args['seconds']:g}", "--fps", f"{args['fps']:g}",
-                    "--diameter", f"{lay.diameter_cm:g}", "--spacing", f"{lay.spacing_cm:g}",
+            argv = [sys.executable, "-m", "goveelights", "hologram", args["scene"],
+                    "--seconds", f"{args['seconds']:g}", "--fps", f"{args['fps']:g}",
                     "--formats", ",".join(fmts), "--zip-png", "--json", "--out", str(self.out),
                     "--progress-file", str(prog)]
+            if ex["display"] == "frame":
+                argv += ["--frame", "%dx%d" % ex["dims"], "--background", ex["background"]]
+                label, size = "%d × %d picture" % ex["dims"], ex["dims"][1]
+            elif ex["display"] == "matrix":
+                argv += ["--matrix", "%dx%d" % ex["dims"], "--gamma", f"{ex['gamma']:g}", "--background", ex["background"]]
+                if ex["serpentine"]:
+                    argv.append("--serpentine")
+                label, size = "%d × %d LED matrix" % ex["dims"], ex["dims"][1]
+            else:
+                argv += ["--layout", lay.name, "--size", str(lay.size),
+                         "--diameter", f"{lay.diameter_cm:g}", "--spacing", f"{lay.spacing_cm:g}"]
+                label, size = ("1 fan" if lay.name == "1" else lay.name) + f", {lay.size} px", lay.size
             if args["colors"]:
                 argv += ["--palette", ",".join(args["colors"])]
             if args["team"]:
@@ -307,7 +352,8 @@ class Studio:
                     argv = [shutil.which("nice"), "-n", "10"] + argv
             self._proc = subprocess.Popen(argv, cwd=str(_PKG_ROOT), env=env, stdin=subprocess.DEVNULL,
                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=flags, **extra)
-            self._job = {"state": "running", "scene": args["scene"], "layout": lay.name, "size": lay.size,
+            self._job = {"state": "running", "scene": args["scene"], "layout": lay.name, "size": size,
+                         "display": ex["display"], "label": label,
                          "started": time.time(), "done": 0, "total": int(round(args["seconds"] * args["fps"])),
                          "files": [], "skipped": {}}
             threading.Thread(target=self._wait, args=(self._proc, self._job), daemon=True).start()

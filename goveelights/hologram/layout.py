@@ -7,7 +7,8 @@ the blades must not touch), so the art lines up across the gaps the way it will 
 railing. What falls in a gap between fans is never seen, so scenes keep key art inside
 the circles.
 
-Layouts: "1" (single fan), "1x2", "1x3", "1x4" (a row), "2x2" (a square of four).
+Layouts: "1" (single fan), "1x2" ... "1x6" (a row), "2x2" (a square of four), "2x3" and
+"2x4" (two rows: a big wall of fans on a roofline).
 """
 from __future__ import annotations
 
@@ -15,12 +16,15 @@ from dataclasses import dataclass
 
 from .canvas import Canvas
 
-LAYOUTS = {"1": (1, 1), "1x2": (1, 2), "1x3": (1, 3), "1x4": (1, 4), "2x2": (2, 2)}
-LAYOUT_NAMES = {"1": "Single fan", "1x2": "Row of 2", "1x3": "Row of 3", "1x4": "Row of 4", "2x2": "Square of 4"}
+LAYOUTS = {"1": (1, 1), "1x2": (1, 2), "1x3": (1, 3), "1x4": (1, 4), "2x2": (2, 2),
+           "1x5": (1, 5), "1x6": (1, 6), "2x3": (2, 3), "2x4": (2, 4)}
+LAYOUT_NAMES = {"1": "Single fan", "1x2": "Row of 2", "1x3": "Row of 3", "1x4": "Row of 4", "2x2": "Square of 4",
+                "1x5": "Row of 5", "1x6": "Row of 6", "2x3": "2 rows of 3", "2x4": "2 rows of 4"}
 
 
 @dataclass
 class FanLayout:
+    kind = "fans"                # (a class attribute: not a dataclass field)
     name: str = "1"
     size: int = 720              # pixels across one fan's clip (square)
     diameter_cm: float = 42.0    # blade tip to blade tip
@@ -54,6 +58,11 @@ class FanLayout:
     @property
     def count(self) -> int:
         return self.rows * self.cols
+
+    @property
+    def out_size(self) -> tuple[int, int]:
+        """Pixels of each output clip (one square per fan)."""
+        return (self.size, self.size)
 
     @property
     def pitch(self) -> int:

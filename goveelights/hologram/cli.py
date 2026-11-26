@@ -4,6 +4,11 @@
     python -m goveelights hologram sleigh --layout 1x3 --size 720 --seconds 8 --out holo/
     python -m goveelights hologram fireworks --palette "Patriotic"
     python -m goveelights hologram football --team "#c8102e,#ffffff" --formats gif,mp4,png
+    python -m goveelights hologram santa-landing --layout 2x3 --size 480
+    python -m goveelights hologram santa-landing --frame 1920x1080          # projector / screen
+    python -m goveelights hologram santa-landing --frame 16:9 --background night
+    python -m goveelights hologram santa-landing --matrix 64x32 --gamma 2.2 --preview
+    python -m goveelights hologram santa-landing --matrix 64x32 --live 192.168.1.60   (experimental)
 """
 from __future__ import annotations
 
@@ -13,7 +18,8 @@ import sys
 import time
 from pathlib import Path
 
-from . import LAYOUT_NAMES, LAYOUTS, SCENES, Clip, FanLayout, export
+from . import LAYOUT_NAMES, LAYOUTS, SCENES, Clip, FanLayout, export, targets
+from .render import max_seconds
 
 
 def user_palettes(config) -> dict:
@@ -59,7 +65,7 @@ def main(argv=None) -> int:
     ap.add_argument("--layout", default="1", choices=list(LAYOUTS),
                     help="1 = single fan, 1xN = a row of N, 2x2 = a square (default 1)")
     ap.add_argument("--size", type=int, default=720, help="pixels across each fan's clip (default 720)")
-    ap.add_argument("--seconds", type=float, help="loop length (2-12, default per scene)")
+    ap.add_argument("--seconds", type=float, help="loop length (2-12, a story up to 40; default per scene)")
     ap.add_argument("--fps", type=float, help="frames a second (10-30, default per scene)")
     ap.add_argument("--diameter", type=float, default=42.0, help="fan diameter in cm (default 42)")
     ap.add_argument("--spacing", type=float, default=0.0, help="fan centre spacing in cm (default diameter + 10%%)")
@@ -67,8 +73,22 @@ def main(argv=None) -> int:
     ap.add_argument("--config", help="config file to read your own palettes from (default: the app's)")
     ap.add_argument("--team", help="team colours for the football scene: #hex,#hex")
     ap.add_argument("--year", type=int, help="year for the New Year scene (default: the coming one)")
-    ap.add_argument("--formats", default=",".join(export.DEFAULT_FORMATS),
-                    help="any of gif,png,mp4 (default gif,mp4; mp4 needs ffmpeg; png = every frame as a PNG)")
+    ap.add_argument("--frame", metavar="WxH|A:B",
+                    help="a projector / screen picture instead of fans: 1920x1080, or an aspect like 16:9 "
+                         "(its height is --size)")
+    ap.add_argument("--background", default="black", choices=list(targets.BACKGROUNDS),
+                    help="frame / matrix: black (= no light: projecting on the house wall) or night "
+                         "(a deep-blue sky, for a TV or screen)")
+    ap.add_argument("--matrix", metavar="WxH", help="an LED pixel matrix instead of fans, e.g. 64x32 (WLED, P10 panels)")
+    ap.add_argument("--gamma", type=float, default=1.0, help="matrix: LED gamma (1 = none, 2.2 typical; "
+                    "leave 1 if WLED's own gamma correction is on)")
+    ap.add_argument("--serpentine", action="store_true", help="matrix: rows zig-zag (raw file / live order)")
+    ap.add_argument("--preview", action="store_true", help="print a few frames in the terminal (24-bit colour) and stop")
+    ap.add_argument("--live", metavar="IP[:PORT]", help="EXPERIMENTAL matrix: stream to WLED over DDP instead of writing files")
+    ap.add_argument("--loops", type=int, default=0, help="--live: times through the loop (default: until Ctrl-C)")
+    ap.add_argument("--formats", default=None,
+                    help="any of gif,png,mp4 (default gif,mp4; mp4 needs ffmpeg; png = every frame as a PNG); "
+                         "a matrix also takes rgb (raw frames + .json) and view (an LED-look GIF), default gif,rgb,view")
     ap.add_argument("--local-palette", action="store_true", help="GIF: a palette per frame instead of one per clip")
     ap.add_argument("--zip-png", action="store_true", help="put each fan's PNG frames in a zip")
     ap.add_argument("--sheet", action="store_true", help="also write a contact sheet PNG of 8 frames")
@@ -81,18 +101,38 @@ def main(argv=None) -> int:
         for sid, cls in SCENES.items():
             print(f"  {sid:<10} {cls.name}: {cls.blurb}")
         print("Layouts: " + ", ".join(f"{k} ({v})" for k, v in LAYOUT_NAMES.items()))
+        print("Other displays: --frame WxH (projector / screen), --matrix WxH (LED matrix)")
         return 0 if a.list else 2
     if a.scene not in SCENES:
         raise SystemExit(f"unknown scene '{a.scene}' (one of {', '.join(SCENES)})")
+    if a.frame and a.matrix:
+        raise SystemExit("pick --frame or --matrix, not both")
+    if a.seconds and not 2 <= a.seconds <= max_seconds(a.scene):
+        raise SystemExit(f"seconds must be 2 to {max_seconds(a.scene):g} for this scene")
     try:
-        lay = FanLayout(a.layout, size=a.size, diameter_cm=a.diameter, spacing_cm=a.spacing)
+        if a.frame:
+            w, h = targets.parse_frame(a.frame, a.size)
+            lay = targets.FrameLayout(w, h, a.background)
+        elif a.matrix:
+            w, h = targets.parse_wh(a.matrix, "--matrix")
+            lay = targets.MatrixLayout(w, h, a.gamma, a.serpentine, a.background)
+        else:
+            lay = FanLayout(a.layout, size=a.size, diameter_cm=a.diameter, spacing_cm=a.spacing)
         clip = Clip(a.scene, lay, a.seconds, a.fps, colours(a.palette, "--palette", a.config), colours(a.team, "--team"), a.year)
     except ValueError as e:
         raise SystemExit(str(e)) from None
-    fmts = [f.strip().lower() for f in a.formats.split(",") if f.strip()]
+    if a.preview:
+        return _preview(clip)
+    if a.live:
+        return _live(clip, a)
+    kind = getattr(lay, "kind", "fans")
+    fdef = "gif,rgb,view" if kind == "matrix" else ",".join(export.DEFAULT_FORMATS)
+    fmts = [f.strip().lower() for f in (a.formats or fdef).split(",") if f.strip()]
     bad = [f for f in fmts if f not in export.FORMATS]
     if bad:
-        raise SystemExit(f"unknown format(s) {', '.join(bad)} (gif, png, mp4)")
+        raise SystemExit(f"unknown format(s) {', '.join(bad)} (gif, png, mp4; a matrix also rgb, view)")
+    if kind != "matrix" and any(f in export.MATRIX_ONLY for f in fmts):
+        raise SystemExit("rgb and view are for an LED matrix (--matrix WxH)")
     prog = Path(a.progress_file) if a.progress_file else None
     last = [0.0]
 
@@ -119,10 +159,39 @@ def main(argv=None) -> int:
     else:
         if sys.stdout.isatty():
             print()
-        print(f"{SCENES[a.scene].name}: {clip.count} frames at {clip.fps:g} fps, {lay.count} fan(s), "
+        what = {"frame": f"a {lay.out_size[0]}x{lay.out_size[1]} frame",
+                "matrix": f"a {lay.out_size[0]}x{lay.out_size[1]} LED matrix"}.get(kind, f"{lay.count} fan(s)")
+        print(f"{SCENES[a.scene].name}: {clip.count} frames at {clip.fps:g} fps, {what}, "
               f"{res['seconds']} s -> {Path(a.out).resolve()}")
         for f in res["files"]:
             print("  " + f)
         for k, why in res["skipped"].items():
             print(f"  (skipped {k}: {why})")
+    return 0
+
+
+def _preview(clip) -> int:
+    """A few key frames in the terminal: an LED matrix pixel for pixel, anything else
+    averaged down to fit."""
+    from .targets import ansi
+    for k in range(6):
+        t = (k + 0.5) / 6
+        print(f"t = {t * clip.seconds:4.1f} s")
+        for tile in clip.tiles_at(t, mask=False):
+            print(ansi(tile, 64 if clip.layout.count > 1 else 96))
+    return 0
+
+
+def _live(clip, a) -> int:
+    from . import live
+    try:
+        host, port = live.parse_host(a.live)
+        print(f"Rendering {clip.count} frames...", flush=True)
+        frames = live.render(clip)
+    except ValueError as e:
+        raise SystemExit(str(e)) from None
+    print(f"EXPERIMENTAL: streaming {SCENES[clip.scene_id].name} to {host}:{port} over DDP at {clip.fps:g} fps"
+          + (f", {a.loops} loop(s)" if a.loops > 0 else " (Ctrl-C stops)"), flush=True)
+    n = live.stream(frames, host, port, clip.fps, a.loops)
+    print(f"sent {n} frames")
     return 0

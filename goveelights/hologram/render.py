@@ -1,13 +1,19 @@
-"""Turn a scene + a fan layout into frames: one wide canvas per frame, cut into one square
-clip per fan."""
+"""Turn a scene + a layout into frames: one wide canvas per frame, cut into one square
+clip per fan (FanLayout), or kept as one picture (targets.FrameLayout) or averaged down
+to an LED matrix (targets.MatrixLayout)."""
 from __future__ import annotations
 
 from .canvas import Canvas
 from .layout import FanLayout
 from .scenes import SCENES, Ctx
 
-MIN_SECONDS, MAX_SECONDS = 2.0, 12.0
+MIN_SECONDS, MAX_SECONDS = 2.0, 12.0          # story scenes allow longer (Scene.max_seconds)
 MIN_FPS, MAX_FPS = 10, 30
+
+
+def max_seconds(scene: str) -> float:
+    """The longest loop a scene may be made at (12 s, or longer for a story scene)."""
+    return float(getattr(SCENES[scene], "max_seconds", 0) or MAX_SECONDS)
 
 
 class Clip:
@@ -19,8 +25,9 @@ class Clip:
         self.scene_id = scene
         self.layout = layout or FanLayout()
         self.seconds = float(seconds or cls.seconds)
-        if not MIN_SECONDS <= self.seconds <= MAX_SECONDS:
-            raise ValueError(f"seconds must be {MIN_SECONDS:g} to {MAX_SECONDS:g}")
+        top = max_seconds(scene)
+        if not MIN_SECONDS <= self.seconds <= top:
+            raise ValueError(f"seconds must be {MIN_SECONDS:g} to {top:g}")
         self.fps = float(fps or cls.fps)
         if not MIN_FPS <= self.fps <= MAX_FPS:
             raise ValueError(f"fps must be {MIN_FPS} to {MAX_FPS}")

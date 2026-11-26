@@ -247,6 +247,12 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
 .hofiles a em{font-style:normal;color:var(--dim);font-size:12px}
 .hotips{font-size:13px;line-height:1.45;color:var(--text);margin:0;padding-left:18px}
 .hotips li{margin-bottom:6px}
+#hoDisp button{min-height:44px;line-height:1.15;font-size:13px}
+#hoLayouts{flex-wrap:wrap}
+#hoLayouts button{flex:1 0 17%;min-height:44px}
+.hostage .scr{position:absolute;left:0;top:0;width:100%;height:100%;border-radius:6px;overflow:hidden;background:#000;box-shadow:0 0 0 2px #2c3542,0 0 18px #0008}
+.hostage .scr img{display:block;width:100%;height:100%}
+.hostage .scr.px img{image-rendering:pixelated}
 </style>
 </head>
 <body>
@@ -467,25 +473,48 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
     <p class="help" id="hoInfo"></p>
   </div>
   <div class="card">
-    <h2>Fans</h2>
+    <h2>Display</h2>
+    <div class="seg" id="hoDisp" role="group" aria-label="Display">
+      <button data-v="fans" onclick="hoSet('display','fans')">Hologram fans</button>
+      <button data-v="frame" onclick="hoSet('display','frame')">Projector or screen</button>
+      <button data-v="matrix" onclick="hoSet('display','matrix')">LED matrix</button>
+    </div>
+    <div id="hoFrameRows">
+      <div class="knob"><label>Picture</label><select id="hoFrame" onchange="hoFrameSel(this.value)"></select><span></span></div>
+      <div class="knob" id="hoFrameCRow" style="display:none"><label>Pixels</label><input id="hoFrameC" inputmode="text" autocomplete="off" placeholder="width x height, e.g. 1920x1080" onchange="hoFrameC(this.value)"><span></span></div>
+      <div class="knob"><label>Background</label><select id="hoBg" onchange="hoSet('background',this.value)"><option value="black">Black (projecting on the house: black = no light)</option><option value="night">Night sky (a TV or screen)</option></select><span></span></div>
+      <p class="help">Any shape works: the scenes fill the width. On a projector, black is simply no light, so only Santa and the snow land on the wall.</p>
+    </div>
+    <div id="hoMatrixRows">
+      <div class="knob"><label>Matrix</label><select id="hoMatrix" onchange="hoMatrixSel(this.value)"></select><span></span></div>
+      <div class="knob" id="hoMatrixCRow" style="display:none"><label>LEDs</label><input id="hoMatrixC" inputmode="text" autocomplete="off" placeholder="width x height, e.g. 64x32" onchange="hoMatrixC(this.value)"><span></span></div>
+      <div class="knob"><label>Gamma</label><select id="hoGamma" onchange="hoSet('gamma',+this.value)"><option value="1">None (WLED corrects it)</option><option value="2.2">2.2 (raw LEDs)</option></select><span></span></div>
+      <div class="knob"><label>Wiring</label><select id="hoSerp" onchange="hoSet('serp',this.value==='1')"><option value="0">Rows (WLED 2D set up)</option><option value="1">Zig-zag rows</option></select><span></span></div>
+      <p class="help">Each LED is the average of the picture it covers, so thin lines turn dim rather than vanish. The "raw RGB" file is the frames byte for byte, for WLED over DDP; to play it live, see the tips below.</p>
+    </div>
+    <div id="hoFanRows">
+    <h3 style="margin:10px 0 0;font-size:14px">Fans</h3>
     <div class="seg" id="hoLayouts"></div>
     <div class="knob"><label>Fan size</label><select id="hoDia" onchange="hoDiaSel(this.value)"><option value="30">30 cm</option><option value="42">42 cm</option><option value="50">50 cm</option><option value="56">56 cm</option><option value="65">65 cm</option><option value="75">75 cm</option><option value="100">100 cm</option><option value="custom">Other…</option></select><span></span></div>
     <div class="knob" id="hoDiaCRow" style="display:none"><label>Fan cm</label><input type="number" id="hoDiaC" min="10" max="300" step="1" inputmode="numeric" placeholder="blade tip to tip" onchange="hoDiaC(this.value)"><span></span></div>
     <div class="knob" id="hoGapRow"><label>Gap</label><input id="hoGap" type="range" min="0" max="60" step="1"><output id="oHoGap"></output></div>
     <p class="help" id="hoGapHelp">The gap between neighbouring fans' blade tips, as mounted. Splice mode: each fan plays its own slice of one big picture, so measure it.</p>
+    </div>
     <div class="knob"><label>Colours</label><select id="hoCols" onchange="hoSet('colors',this.value)"></select><span></span></div>
     <div class="knob" id="hoTeamRow"><label>Team</label><div class="row"><input type="color" id="hoT1" onchange="hoTeam()"><input type="color" id="hoT2" onchange="hoTeam()"><button class="sm ghost" onclick="hoSet('team',null)">Reset</button></div><span></span></div>
     <div class="knob" id="hoYearRow"><label>Year</label><input type="number" id="hoYear" min="2000" max="2200" inputmode="numeric" onchange="hoYear(this.value)"><span></span></div>
-    <div class="knob"><label>Loop</label><select id="hoSecs" onchange="hoSet('seconds',+this.value||null)"><option value="">scene's own</option><option value="4">4 s</option><option value="6">6 s</option><option value="8">8 s</option><option value="10">10 s</option></select><span></span></div>
+    <div class="knob"><label>Loop</label><select id="hoSecs" onchange="hoSet('seconds',+this.value||null)"></select><span></span></div>
   </div>
   <div class="card">
     <h2>Make the files</h2>
-    <div class="knob"><label>Size</label><select id="hoSize" onchange="hoSet('size',+this.value)"></select><span></span></div>
+    <div class="knob" id="hoSizeRow"><label>Size</label><select id="hoSize" onchange="hoSet('size',+this.value)"></select><span></span></div>
     <div class="knob"><label>Frame rate</label><select id="hoFps" onchange="hoSet('fps',+this.value||null)"><option value="">scene's own</option><option value="20">20 fps</option><option value="24">24 fps</option><option value="30">30 fps</option></select><span></span></div>
     <div class="row wrap" style="gap:14px;margin:6px 0">
       <label class="row"><input type="checkbox" id="hoGif" checked> <span>GIF</span></label>
       <label class="row"><input type="checkbox" id="hoMp4" checked> <span>MP4</span></label>
       <label class="row"><input type="checkbox" id="hoPng"> <span>PNG frames (zip)</span></label>
+      <label class="row" id="hoRgbL"><input type="checkbox" id="hoRgb" checked> <span>Raw RGB (WLED)</span></label>
+      <label class="row" id="hoViewL"><input type="checkbox" id="hoView" checked> <span>LED-look GIF</span></label>
     </div>
     <p class="help" id="hoMp4Note"></p>
     <div class="row"><button class="pri grow" id="hoMakeBtn" onclick="hoMake()">Make files</button><button id="hoCancel" style="display:none" onclick="post('hologram/cancel').then(hoPoll)">Cancel</button></div>
@@ -493,7 +522,23 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
     <p class="help" id="hoJobNote"></p>
     <div class="hofiles" id="hoFiles"></div>
   </div>
-  <div class="card">
+  <div class="card" id="hoTipsFrame">
+    <h2>Projector or screen</h2>
+    <ul class="hotips">
+      <li><b>Projector on the house:</b> play the MP4 on a loop (most media players and many projectors' USB players loop a file). Black is no light, so keep the background black and aim at a light wall or a white sheet in a window.</li>
+      <li><b>TV or monitor in a window:</b> pick the night-sky background, or keep black for a "floating" look on an OLED.</li>
+      <li><b>Size:</b> make it the projector's own resolution (1920 × 1080 for most), so nothing is rescaled.</li>
+    </ul>
+  </div>
+  <div class="card" id="hoTipsMatrix">
+    <h2>LED matrix</h2>
+    <ul class="hotips">
+      <li><b>WLED:</b> set the panel up under Config → 2D, then either upload the small GIF (recent WLED builds with GIF support play it with the Image effect) or stream it live from the PC (experimental): <code>python -m goveelights hologram santa-landing --matrix 64x32 --live &lt;WLED IP&gt;</code></li>
+      <li><b>Raw RGB:</b> width × height × 3 bytes a frame, frames back to back, rows from the top left (or zig-zag); the .json file next to it gives the size and frame rate.</li>
+      <li><b>LED-look GIF:</b> just to check how it will look from the street.</li>
+    </ul>
+  </div>
+  <div class="card" id="hoTipsFans">
     <h2>Loading them onto the fans</h2>
     <ul class="hotips">
       <li><b>One file per fan.</b> Each fan gets its own clip (fan 1 is the left one; on a square of four: top left, top right, bottom left, bottom right). Upload it in the fan's own app (Wi-Fi or Bluetooth) or copy it to the fan's SD card, then set the fan to loop it.</li>
@@ -2196,7 +2241,9 @@ async function setupFinish(){
 
 // ------------------------------------------------------------- hologram fans (More -> Hologram fans)
 let HOI = null, HO = null, hoTimer = null, hoPollT = null, hoSeq = 0, hoNoCols = '';
-const HO_DEF = {scene: 'sleigh', layout: '1', diameter: 42, gap: 4, colors: '', team: null, year: null, seconds: null, fps: null, size: 720};
+const HO_DEF = {scene: 'sleigh', layout: '1', diameter: 42, gap: 4, colors: '', team: null, year: null, seconds: null, fps: null, size: 720,
+                display: 'fans', frame: '1280x720', background: 'black', matrix: '64x32', gamma: 1, serp: false};
+const HO_WH = /^\s*(\d{2,4})\s*[x×*]\s*(\d{1,4})\s*$/i;
 function hoSave(){ store.set('holo', JSON.stringify(HO)) }
 async function loadHolo(){
   if (!HO){ let s = {}; try { s = JSON.parse(store.get('holo', '{}')) || {} } catch(e) {} HO = Object.assign({}, HO_DEF, s) }
@@ -2206,16 +2253,22 @@ async function loadHolo(){
   if (!HOI.sizes.includes(HO.size)) HO.size = 720;
   if (!(HO.diameter >= 10 && HO.diameter <= 300)) HO.diameter = 42;
   if (HO.year != null && !hoYearOk(HO.year)) HO.year = null;     // a bad year saved earlier would fail every preview
-  $('hoScenes').innerHTML = HOI.scenes.map(x => `<button class="chip" data-id="${esc(x.id)}">${esc(x.name)}</button>`).join('');
+  if (!['fans', 'frame', 'matrix'].includes(HO.display)) HO.display = 'fans';
+  if (!HO_WH.test(HO.frame || '')) HO.frame = HO_DEF.frame;
+  if (!HO_WH.test(HO.matrix || '')) HO.matrix = HO_DEF.matrix;
+  $('hoScenes').innerHTML = HOI.scenes.map(x => `<button class="chip" data-id="${esc(x.id)}">${esc(x.name)}${x.story ? ' ▶' : ''}</button>`).join('');
   $('hoScenes').querySelectorAll('button').forEach(b => b.onclick = () => hoSet('scene', b.dataset.id));
-  $('hoLayouts').innerHTML = Object.entries(HOI.layouts).map(([k, v]) => `<button data-v="${esc(k)}" title="${esc(v)}">${k === '1' ? '1 fan' : esc(k)}</button>`).join('');
+  $('hoLayouts').innerHTML = Object.entries(HOI.layouts).map(([k, v]) => `<button data-v="${esc(k)}" title="${esc(v)}" aria-label="${esc(v)}">${k === '1' ? '1 fan' : esc(k)}</button>`).join('');
   $('hoLayouts').querySelectorAll('button').forEach(b => b.onclick = () => hoSet('layout', b.dataset.v));
+  const fnames = {'1280x720': 'HD 1280 × 720 (16:9)', '1920x1080': 'Full HD 1920 × 1080 (16:9)', '3840x2160': '4K 3840 × 2160', '1024x768': '1024 × 768 (4:3)', '1080x1920': 'Portrait 1080 × 1920'};
+  $('hoFrame').innerHTML = (HOI.frames || []).map(f => `<option value="${esc(f)}">${esc(fnames[f] || f)}</option>`).join('') + '<option value="custom">Other…</option>';
+  $('hoMatrix').innerHTML = (HOI.matrices || []).map(f => `<option value="${esc(f)}">${esc(f.replace('x', ' × '))} LEDs</option>`).join('') + '<option value="custom">Other…</option>';
   const opts = [['', "Scene's own"], ['house', 'Match the house (what is playing)']]
     .concat(HOI.palettes.map(n => ['pal:' + n, 'Palette: ' + n]))
     .concat(HOI.presets.map(p => ['preset:' + p.id, 'Preset: ' + p.name]));
   $('hoCols').innerHTML = opts.map(([v, n]) => `<option value="${esc(v)}">${esc(n)}</option>`).join('');
   $('hoSize').innerHTML = HOI.sizes.map(n => `<option value="${n}">${n} × ${n}${n === 720 ? ' (most fans)' : ''}</option>`).join('');
-  $('hoMp4Note').textContent = HOI.mp4 ? 'MP4 is H.264, square, made with ffmpeg (' + HOI.encoder + ').' : 'MP4 needs ffmpeg on the PC (not found), so only GIF and PNG frames can be made.';
+  $('hoMp4Note').textContent = HOI.mp4 ? 'MP4 is H.264, made with ffmpeg (' + HOI.encoder + ').' : 'MP4 needs ffmpeg on the PC (not found), so only GIF and PNG frames can be made.';
   $('hoMp4').disabled = !HOI.mp4; if (!HOI.mp4) $('hoMp4').checked = false;
   $('hoGap').oninput = e => { $('oHoGap').textContent = e.target.value + ' cm' };
   $('hoGap').onchange = e => hoSet('gap', +e.target.value);
@@ -2224,6 +2277,22 @@ async function loadHolo(){
 function hoForm(){
   $('hoScenes').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.id === HO.scene));
   $('hoScenes').querySelector('.on')?.scrollIntoView({block: 'nearest', inline: 'nearest'});
+  const d = HO.display;
+  $('hoDisp').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === d));
+  $('hoFanRows').style.display = d === 'fans' ? '' : 'none';
+  $('hoFrameRows').style.display = d === 'frame' ? '' : 'none';
+  $('hoMatrixRows').style.display = d === 'matrix' ? '' : 'none';
+  $('hoSizeRow').style.display = d === 'fans' ? '' : 'none';
+  $('hoRgbL').style.display = $('hoViewL').style.display = d === 'matrix' ? '' : 'none';
+  $('hoTipsFans').style.display = d === 'fans' ? '' : 'none';
+  $('hoTipsFrame').style.display = d === 'frame' ? '' : 'none';
+  $('hoTipsMatrix').style.display = d === 'matrix' ? '' : 'none';
+  const stdF = [...$('hoFrame').options].some(o => o.value === HO.frame);
+  $('hoFrame').value = stdF ? HO.frame : 'custom'; $('hoFrameCRow').style.display = stdF ? 'none' : ''; if (!stdF) $('hoFrameC').value = HO.frame;
+  const stdM = [...$('hoMatrix').options].some(o => o.value === HO.matrix);
+  $('hoMatrix').value = stdM ? HO.matrix : 'custom'; $('hoMatrixCRow').style.display = stdM ? 'none' : ''; if (!stdM) $('hoMatrixC').value = HO.matrix;
+  $('hoBg').value = HO.background === 'night' ? 'night' : 'black';
+  $('hoGamma').value = HO.gamma === 2.2 ? '2.2' : '1'; $('hoSerp').value = HO.serp ? '1' : '0';
   $('hoLayouts').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === HO.layout));
   const stdDia = [...$('hoDia').options].some(o => o.value === String(HO.diameter));
   $('hoDia').value = stdDia ? String(HO.diameter) : 'custom'; $('hoDiaCRow').style.display = stdDia ? 'none' : '';
@@ -2236,10 +2305,23 @@ function hoForm(){
   $('hoTeamRow').style.display = sc.team ? '' : 'none';
   const tm = HO.team || HOI.team; $('hoT1').value = tm[0]; $('hoT2').value = tm[1] || tm[0];
   $('hoYearRow').style.display = HO.scene === 'newyear' ? '' : 'none'; $('hoYear').value = HO.year || '';
-  $('hoSecs').value = HO.seconds ? String(HO.seconds) : ''; $('hoFps').value = HO.fps ? String(HO.fps) : ''; $('hoSize').value = String(HO.size);
+  const maxS = sc.max_seconds || 12, secs = maxS > 12 ? [12, 16, 20, 24, 30, 40] : [4, 6, 8, 10];
+  if (HO.seconds && HO.seconds > maxS) HO.seconds = null;          // a long story loop is too long for the others
+  $('hoSecs').innerHTML = `<option value="">scene's own (${sc.seconds || ''} s)</option>` + secs.filter(n => n <= maxS).map(n => `<option value="${n}">${n} s</option>`).join('');
+  $('hoSecs').value = HO.seconds ? String(HO.seconds) : ''; if ($('hoSecs').value !== (HO.seconds ? String(HO.seconds) : '')) { HO.seconds = null; $('hoSecs').value = '' }
+  $('hoFps').value = HO.fps ? String(HO.fps) : ''; $('hoSize').value = String(HO.size);
   $('hoBlurb').textContent = sc.blurb || '';
   hoInfo(sc);
 }
+function hoWH(v, lo, hi, what){
+  const m = HO_WH.exec(v || '');
+  if (!m || +m[1] < lo || +m[2] < lo || +m[1] > hi || +m[2] > hi) { toast(what + ' must be width x height, each ' + lo + ' to ' + hi); return null }
+  return (+m[1]) + 'x' + (+m[2]);
+}
+function hoFrameSel(v){ if (v !== 'custom') return hoSet('frame', v); $('hoFrameCRow').style.display = ''; $('hoFrameC').value = HO.frame; $('hoFrameC').focus() }
+function hoFrameC(v){ const f = hoWH(v, 64, 3840, 'The picture'); if (f) hoSet('frame', f); else $('hoFrameC').value = HO.frame }
+function hoMatrixSel(v){ if (v !== 'custom') return hoSet('matrix', v); $('hoMatrixCRow').style.display = ''; $('hoMatrixC').value = HO.matrix; $('hoMatrixC').focus() }
+function hoMatrixC(v){ const f = hoWH(v, 8, 256, 'The matrix'); if (f) hoSet('matrix', f); else $('hoMatrixC').value = HO.matrix }
 function hoSet(k, v){ HO[k] = v; hoSave(); hoForm(); if (!['size', 'fps'].includes(k)) hoPreview() }
 function hoDiaSel(v){
   if (v !== 'custom') return hoSet('diameter', +v);
@@ -2260,7 +2342,8 @@ function hoYear(v){
 function hoTeam(){ HO.team = [$('hoT1').value, $('hoT2').value]; hoSave(); hoPreview() }
 function hoBody(){
   return {scene: HO.scene, layout: HO.layout, diameter: HO.diameter, spacing: HO.diameter + (HO.layout === '1' ? 0 : HO.gap),
-          colors: HO.colors, team: HO.scene === 'football' ? HO.team : null, year: HO.year, seconds: HO.seconds, fps: HO.fps, size: HO.size};
+          colors: HO.colors, team: HO.scene === 'football' ? HO.team : null, year: HO.year, seconds: HO.seconds, fps: HO.fps, size: HO.size,
+          display: HO.display, frame: HO.frame, matrix: HO.matrix, background: HO.background, gamma: HO.gamma, serpentine: HO.serp};
 }
 function hoPreview(){
   clearTimeout(hoTimer);
@@ -2276,6 +2359,16 @@ function hoStage(r){
   const L = r.layout, st = $('hoStage');
   const card = st.parentElement, cs = getComputedStyle(card);          // the card's content box, not its padding
   const W = Math.min(card.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 2, 560), k = W / L.canvas[0];
+  const sc0 = (HOI && HOI.scenes.find(x => x.id === HO.scene)) || {};
+  if (r.display && r.display !== 'fans') {                              // one rectangle: a screen or an LED matrix
+    const [ow, oh] = r.out, w = Math.min(W, Math.round(W * Math.min(1, 1.25 * ow / oh)));
+    st.style.width = w + 'px'; st.style.height = Math.round(w * oh / ow) + 'px';
+    st.innerHTML = `<div class="scr${r.display === 'matrix' ? ' px' : ''}"><img src="${r.tiles[0]}" alt="preview"></div>`;
+    $('hoNote').textContent = (r.display === 'matrix' ? ow + ' × ' + oh + ' LEDs' : HO.frame.replace('x', ' × ') + ' picture (preview smaller)') + '. Black is no light. Loop ' + r.seconds + ' s' + (sc0.story ? ' (a story: it plays through once a loop)' : '') + '.';
+    hoNoCols = HO.colors && !(r.colors || []).length ? HO.colors : '';
+    hoInfo(sc0);
+    return;
+  }
   st.style.width = W + 'px'; st.style.height = Math.round(L.canvas[1] * k) + 'px';
   st.innerHTML = r.tiles.map((src, i) => { const [x, y] = L.origins[i];
     return `<div class="fan" style="left:${x * k}px;top:${y * k}px;width:${L.size * k}px;height:${L.size * k}px"><img src="${src}" alt="fan ${i + 1}"><i></i>${r.tiles.length > 1 ? `<b>${i + 1}</b>` : ''}</div>` }).join('');
@@ -2292,7 +2385,8 @@ function hoInfo(sc){
     : sc.palette_role ? 'The chosen colours recolour the ' + sc.palette_role + '.' : '';
 }
 async function hoMake(){
-  const formats = [['gif', 'hoGif'], ['mp4', 'hoMp4'], ['png', 'hoPng']].filter(([, id]) => $(id).checked && !$(id).disabled).map(([f]) => f);
+  const formats = [['gif', 'hoGif'], ['mp4', 'hoMp4'], ['png', 'hoPng'], ['rgb', 'hoRgb'], ['view', 'hoView']]
+    .filter(([f, id]) => $(id).checked && !$(id).disabled && (HO.display === 'matrix' || !['rgb', 'view'].includes(f))).map(([f]) => f);
   if (!formats.length) return toast('Pick at least one kind of file');
   const r = await post('hologram/make', Object.assign(hoBody(), {formats}));
   if (r) { hoShowJob(r.job); hoPoll() }
@@ -2308,13 +2402,15 @@ function hoShowJob(j){
   const run = j.state === 'running';
   $('hoMakeBtn').disabled = run; $('hoCancel').style.display = run ? '' : 'none'; $('hoProg').style.display = run ? '' : 'none';
   $('hoProgBar').style.width = (run && j.total ? Math.round(100 * j.done / j.total) : 0) + '%';
-  const what = j.scene ? ((HOI && (HOI.scenes.find(x => x.id === j.scene) || {}).name) || j.scene) + ', ' + (j.layout === '1' ? '1 fan' : j.layout) + ', ' + j.size + ' px' : '';
+  const what = j.scene ? ((HOI && (HOI.scenes.find(x => x.id === j.scene) || {}).name) || j.scene) + ', ' + (j.label || ((j.layout === '1' ? '1 fan' : j.layout) + ', ' + j.size + ' px')) : '';
   $('hoJobNote').textContent = run ? 'Making ' + what + '… frame ' + (j.done || 0) + ' of ' + (j.total || '?') + ' (the lights keep running).'
     : j.state === 'done' ? 'Ready: ' + what + (j.seconds ? ' (took ' + Math.round(j.seconds) + ' s)' : '') + '. Download each fan\'s file:' + Object.entries(j.skipped || {}).map(([k, v]) => ' ' + k.toUpperCase() + ' skipped: ' + v + '.').join('')
     : j.state === 'failed' ? 'Could not make the files: ' + (j.error || 'unknown error') : j.state === 'cancelled' ? 'Cancelled.' : '';
   const files = j.state === 'done' ? (j.files || []) : [];
-  $('hoFiles').innerHTML = files.map(f => { const m = f.match(/fan(\d+)/), ext = f.endsWith('-png.zip') ? 'PNG frames (zip)' : f.split('.').pop().toUpperCase();
-    return `<a href="/api/hologram/file?name=${encodeURIComponent(f)}" download="${esc(f)}"><span>${m ? 'Fan ' + m[1] : 'The fan'}: ${esc(ext)}</span><em>${esc(f)}</em></a>` }).join('');
+  const who = j.display === 'matrix' ? 'Matrix' : j.display === 'frame' ? 'Picture' : 'The fan';
+  $('hoFiles').innerHTML = files.map(f => { const m = f.match(/fan(\d+)/);
+    const ext = f.endsWith('-png.zip') ? 'PNG frames (zip)' : f.endsWith('-view.gif') ? 'LED-look GIF' : f.endsWith('.rgb') ? 'raw RGB frames' : f.endsWith('.json') ? 'size and frame rate (JSON)' : f.split('.').pop().toUpperCase();
+    return `<a href="/api/hologram/file?name=${encodeURIComponent(f)}" download="${esc(f)}"><span>${m ? 'Fan ' + m[1] : who}: ${esc(ext)}</span><em>${esc(f)}</em></a>` }).join('');
 }
 
 // ------------------------------------------------------------- boot

@@ -129,7 +129,8 @@ def _studio_for(ctl):
     return Studio(base / "hologram_clips")
 
 
-_FILE_TYPES = {".gif": "image/gif", ".mp4": "video/mp4", ".zip": "application/zip", ".png": "image/png"}
+_FILE_TYPES = {".gif": "image/gif", ".mp4": "video/mp4", ".zip": "application/zip", ".png": "image/png",
+               ".json": "application/json", ".rgb": "application/octet-stream"}
 
 
 def make_handler(ctl: Controller, on_quit, auth: Auth):

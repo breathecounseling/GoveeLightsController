@@ -2,6 +2,13 @@
 ffmpeg is installed (skipped otherwise) and, if asked, the PNG frames (a folder or a zip
 per fan). The default is GIF + MP4, the same as the app.
 
+The same goes for a projector / screen frame (one picture, any aspect) and an LED matrix
+(targets.py), which can also have:
+    rgb   the raw frames, W x H x 3 bytes each, back to back, in wiring order, plus a
+          .json note of the size and frame rate (stream it to WLED over DDP, or feed any
+          pixel-pushing tool)
+    view  a blown-up GIF that looks like the LEDs, to check the art by eye
+
 One pass renders each frame once and feeds every fan's GIF, PNGs and ffmpeg pipe, so a
 four-fan set costs little more than one fan."""
 from __future__ import annotations
@@ -20,7 +27,8 @@ from . import gif
 from .canvas import Canvas
 from .render import Clip
 
-FORMATS = ("gif", "mp4", "png")
+FORMATS = ("gif", "mp4", "png", "rgb", "view")
+MATRIX_ONLY = ("rgb", "view")
 DEFAULT_FORMATS = ("gif", "mp4")
 FFMPEG_WAIT = 300           # seconds an encoder may take to finish after the last frame
 _H264 = ("libx264", "libopenh264", "h264_mf", "h264_videotoolbox", "h264_nvenc", "h264_qsv")
@@ -84,10 +92,11 @@ def ffmpeg_info() -> dict:
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
-def _ffmpeg_proc(info: dict, size: int, fps: float, out: Path):
+def _ffmpeg_proc(info: dict, size, fps: float, out: Path):
+    w, h = size if isinstance(size, tuple) else (size, size)
     enc = info["encoder"]
     args = [info["path"], "-hide_banner", "-loglevel", "error", "-y",
-            "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{size}x{size}", "-r", f"{fps:g}", "-i", "-",
+            "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{w}x{h}", "-r", f"{fps:g}", "-i", "-",
             "-an", "-c:v", enc, "-pix_fmt", "yuv420p"]
     if enc == "libx264":
         args += ["-preset", "medium", "-crf", "16", "-profile:v", "high", "-tune", "animation"]
@@ -102,6 +111,8 @@ def _ffmpeg_proc(info: dict, size: int, fps: float, out: Path):
 def names(clip: Clip) -> list[str]:
     """Base file name of each fan's clip."""
     lay = clip.layout
+    if hasattr(lay, "file_stem"):                   # a frame or a matrix: one picture
+        return [lay.file_stem(clip.scene_id)]
     stem = f"{clip.scene_id}-{lay.size}"
     if lay.count == 1:
         return [stem]
@@ -121,19 +132,24 @@ def export(clip: Clip, out_dir, formats=DEFAULT_FORMATS, local_palette: bool = F
     files: list[str] = []
     skipped: dict = {}
     n = clip.count
-    size = lay.size
+    ow, oh = getattr(lay, "out_size", (lay.size, lay.size))
+    matrix = getattr(lay, "kind", "") == "matrix"
+    for f in MATRIX_ONLY:
+        if f in formats and not matrix:
+            formats.remove(f)
+            skipped[f] = "only for an LED matrix"
 
     procs = []
     if "mp4" in formats:
         info = ffmpeg_info()
         if not info:
             skipped["mp4"] = "ffmpeg with an H.264 encoder was not found on PATH"
-        elif size % 2:
-            skipped["mp4"] = "MP4 (yuv420p) needs an even size"
+        elif ow % 2 or oh % 2:
+            skipped["mp4"] = "MP4 (yuv420p) needs an even width and height"
         else:
             for b in base:
                 p = out / f"{b}.mp4"
-                procs.append((p, _ffmpeg_proc(info, size, clip.fps, p)))
+                procs.append((p, _ffmpeg_proc(info, (ow, oh), clip.fps, p)))
 
     writers = []
     gfiles = []
@@ -148,7 +164,7 @@ def export(clip: Clip, out_dir, formats=DEFAULT_FORMATS, local_palette: bool = F
             pals = [gif.build_palette(s) for s in samples]
         for k, b in enumerate(base):
             fh = open(out / f"{b}.gif", "wb")
-            w = gif.GifWriter(fh, size, size, clip.fps, local=local_palette)
+            w = gif.GifWriter(fh, ow, oh, clip.fps, local=local_palette)
             if pals:
                 w.set_palette(pals[k])
             writers.append(w)
@@ -168,11 +184,25 @@ def export(clip: Clip, out_dir, formats=DEFAULT_FORMATS, local_palette: bool = F
                     old.unlink()
                 pngdirs.append(d)
 
+    rawf = view = vfh = None
+    vscale = 1
+    if "rgb" in formats:
+        rawf = open(out / f"{base[0]}.rgb", "wb")
+    if "view" in formats:
+        from .targets import led_view
+        vscale = max(4, min(16, 720 // max(ow, oh)))
+        vfh = open(out / f"{base[0]}-view.gif", "wb")
+        view = gif.GifWriter(vfh, ow * vscale, oh * vscale, clip.fps)
+
     ok = False
     try:
         for i in range(n):
             tiles = clip.frame(i)
             for k, tile in enumerate(tiles):
+                if rawf:
+                    rawf.write(lay.wire_order(tile))
+                if view:
+                    view.add(led_view(tile, vscale, max(1, vscale // 5)))
                 if writers:
                     writers[k].add(tile)
                 if procs or pngdirs or zips:
@@ -183,7 +213,7 @@ def export(clip: Clip, out_dir, formats=DEFAULT_FORMATS, local_palette: bool = F
                         except (BrokenPipeError, OSError):
                             pass
                     if pngdirs or zips:
-                        data = png_bytes(size, size, rgb)
+                        data = png_bytes(ow, oh, rgb)
                         nm = f"frame_{i + 1:04d}.png"
                         if pngdirs:
                             (pngdirs[k] / nm).write_bytes(data)
@@ -200,6 +230,13 @@ def export(clip: Clip, out_dir, formats=DEFAULT_FORMATS, local_palette: bool = F
                 fh.close()
         for _, z in zips:
             z.close()
+        if rawf:
+            rawf.close()
+        if view:
+            try:
+                view.close()
+            finally:
+                vfh.close()
         for p, pr in procs:
             try:
                 pr.stdin.close()
@@ -228,6 +265,15 @@ def export(clip: Clip, out_dir, formats=DEFAULT_FORMATS, local_palette: bool = F
             except OSError:
                 pass
     files += [d.name + "/" for d in pngdirs] + [zp.name for zp, _ in zips]
+    if rawf:
+        import json
+        note = {"width": ow, "height": oh, "fps": clip.fps, "frames": n, "bytes_per_frame": ow * oh * 3,
+                "order": "serpentine rows (every other row right to left)" if lay.serpentine else "rows, top left first",
+                "format": "RGB, 8 bits a channel, frames back to back", "gamma": lay.gamma, "scene": clip.scene_id}
+        (out / f"{base[0]}.json").write_text(json.dumps(note, indent=1))
+        files += [f"{base[0]}.rgb", f"{base[0]}.json"]
+    if view:
+        files.append(f"{base[0]}-view.gif")
     return {"files": files, "skipped": skipped, "seconds": round(time.time() - t0, 2), "frames": n,
             "info": clip.info()}
 
@@ -248,20 +294,27 @@ def _stop(pr, path: Path):
         pass
 
 
-def preview_gifs(clip: Clip) -> list[bytes]:
-    """Small looping GIFs, one per fan, for the phone's live preview."""
+def preview_gifs(clip: Clip, led_scale: int = 0) -> list[bytes]:
+    """Small looping GIFs, one per fan (or one for a frame / matrix), for the phone's live
+    preview. led_scale > 1 blows a matrix up to look like its LEDs."""
+    ow, oh = getattr(clip.layout, "out_size", (clip.layout.size, clip.layout.size))
+    look = (lambda t: t)
+    if led_scale > 1:
+        from .targets import led_view
+        ow, oh = ow * led_scale, oh * led_scale
+        look = (lambda t: led_view(t, led_scale, max(1, led_scale // 5)))
     bufs = [io.BytesIO() for _ in range(clip.layout.count)]
-    ws = [gif.GifWriter(b, clip.layout.size, clip.layout.size, clip.fps) for b in bufs]
+    ws = [gif.GifWriter(b, ow, oh, clip.fps) for b in bufs]
     step = max(1, clip.count // 8)
     samples = [[] for _ in bufs]
     for i in range(0, clip.count, step):
         for k, tile in enumerate(clip.frame(i)):
-            samples[k].append(gif.keys(tile))
+            samples[k].append(gif.keys(look(tile)))
     for w, s in zip(ws, samples):
         w.set_palette(gif.build_palette(s))
     for tiles in clip.frames():
         for w, tile in zip(ws, tiles):
-            w.add(tile)
+            w.add(look(tile))
     for w in ws:
         w.close()
     return [b.getvalue() for b in bufs]
