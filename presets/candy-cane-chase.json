@@ -1,0 +1,23 @@
+{
+  "name": "Candy cane chase",
+  "tags": ["Holiday", "Christmas"],
+  "layers": [
+    {
+      "effect": "candy_cane",
+      "target": "all",
+      "params": {"colors": ["#ff0000", "#ffd8c8"], "width": 3, "speed": 7, "crisp": true}
+    },
+    {
+      "effect": "fan",
+      "target": "Peak",
+      "params": {"style": "sunburst", "colors": ["#ff0000"], "ray2": "#ffd8c8", "hub": "#ff1010",
+                 "feathers": 6, "speed": 1.2, "intro": 2, "level": 0.95, "glow_level": 0}
+    },
+    {
+      "effect": "sparkle",
+      "blend": "add",
+      "opacity": 0.5,
+      "params": {"rate": 4, "decay": 0.15}
+    }
+  ]
+}

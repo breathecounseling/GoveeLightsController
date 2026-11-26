@@ -1744,7 +1744,8 @@ class Controller:
     def _calendar(self) -> tuple[list[str], dict]:
         ids = [p["id"] for p in self.presets.list()]
         teams = (self.cfg.data.get("game") or {}).get("teams") or []
-        return ids, calendar_builtin.build(ids, [s["name"] for s in self.shows_list()], teams)
+        return ids, calendar_builtin.build(ids, [s["name"] for s in self.shows_list()], teams,
+                                           today=datetime.now().astimezone().date())
 
     def calendar_preview(self) -> dict:
         """What "Use the holiday calendar" would add, in date order from today."""
@@ -1774,9 +1775,17 @@ class Controller:
             if st["from"] != spec["from"]:
                 was = tonight.fmt_time(datetime.combine(today, sched._hm(spec["from"])))
                 about = (about.replace(was, when) + f" (moved from {was}: your lights come on after it)").strip()
-            sts.append({"show": st["show"], "date": st.get("date", ""), "time": when,
-                        "dates": calendar_builtin.fmt_range(calendar_builtin.next_range(
-                            {"from": st["date"], "to": st["date"]}, today)) if st.get("date") else "every day",
+            if st.get("date"):
+                dates = calendar_builtin.fmt_range(calendar_builtin.next_range(
+                    {"from": st["date"], "to": st["date"]}, today))
+            elif st.get("dates") or st.get("season"):
+                dates = calendar_builtin.fmt_dates(calendar_builtin.season_dates(st["season"], today)
+                                                   if st.get("season") else st["dates"], today)
+                if st.get("from") != st.get("to"):
+                    when += "–" + tonight.fmt_time(datetime.combine(today, sched._hm(st["to"])))
+            else:
+                dates = "every day"
+            sts.append({"show": st["show"], "date": st.get("date", ""), "time": when, "dates": dates,
                         "about": about, "forced": not st.get("only_when_on", True)})
         return {"rules": rules, "showtimes": sts, "skipped": cal["skipped"],
                 "playlists": {n: names.program_detail({"playlist": n}) for n in cal["playlists"]},

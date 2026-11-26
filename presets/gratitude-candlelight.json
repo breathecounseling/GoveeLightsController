@@ -1,0 +1,10 @@
+{
+  "name": "Candlelight of thanks",
+  "tags": ["Holiday", "Thanksgiving", "Ambient"],
+  "layers": [
+    {
+      "effect": "candlelight",
+      "params": {"level": 0.7, "waver": 0.3, "swell_every": 12}
+    }
+  ]
+}

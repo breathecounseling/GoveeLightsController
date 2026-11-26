@@ -93,6 +93,54 @@ BUILTIN_SHOWS: dict[str, dict] = {
             {"preset": "christmas-tree", "seconds": 75, "transition": "rise", "fade": 3},
         ],
     },
+    "Thanksgiving tonight": {
+        "builtin": True,
+        "description": "About 5 minutes of harvest warmth: the sun sets behind the zigzag, a "
+                       "turkey fans its tail on the gable, the harvest glow, GIVE THANKS, then a "
+                       "quiet moment of thanks by candlelight with light flowing out from the "
+                       "apex, and the turkey once more.",
+        "end": "resume",
+        "cues": [
+            {"preset": "harvest-sunset", "seconds": 60, "transition": "black", "fade": 3},
+            {"preset": "turkey-fan", "seconds": 50, "transition": "crossfade", "fade": 3},
+            {"preset": "thanksgiving-harvest", "seconds": 40, "transition": "crossfade", "fade": 3},
+            {"preset": "text-give-thanks", "seconds": 40, "transition": "iris", "fade": 2.5},
+            {"preset": "gratitude-candlelight", "seconds": 50, "transition": "crossfade", "fade": 5},
+            {"preset": "turkey-fan", "seconds": 40, "transition": "crossfade", "fade": 4},
+        ],
+    },
+    "Christmas on the roofline": {
+        "builtin": True,
+        "description": "About 5 minutes: Santa's sleigh tours the whole roofline, the tree is "
+                       "built and lit on the gable, a candy-cane chase with a peppermint swirl, "
+                       "snow piles up on the eaves, falling stars land on the porch, the grand "
+                       "finale, then the glowing tree. Made for the top of every hour.",
+        "end": "resume",
+        "cues": [
+            {"preset": "sleigh-grand-tour", "seconds": 45, "transition": "black", "fade": 2},
+            {"preset": "tree-lighting-ceremony", "seconds": 45, "transition": "crossfade", "fade": 3},
+            {"preset": "candy-cane-chase", "seconds": 35, "transition": "wipe", "fade": 2},
+            {"preset": "snow-piling-up", "seconds": 50, "transition": "crossfade", "fade": 4},
+            {"preset": "falling-star", "seconds": 30, "transition": "crossfade", "fade": 3},
+            {"preset": "grand-finale", "seconds": 40, "transition": "flash", "fade": 1},
+            {"preset": "christmas-tree", "seconds": 60, "transition": "rise", "fade": 3},
+        ],
+    },
+    "Broncos touchdown": {
+        "builtin": True,
+        "description": "For Broncos fans, three minutes of game-day hype in orange and blue: the game-day look, "
+                       "an orange-and-blue sunburst on the gable, a Hail Mary that lands on the "
+                       "porch, TOUCHDOWN! and GO BRONCOS!. Play it before kick-off or after a win.",
+        "end": "resume",
+        "cues": [
+            {"preset": "broncos-game-day", "seconds": 30, "transition": "flash", "fade": 1},
+            {"preset": "orange-crush", "seconds": 35, "transition": "wipe", "fade": 1.5},
+            {"preset": "hail-mary", "seconds": 25, "transition": "black", "fade": 1.5},
+            {"preset": "text-touchdown", "seconds": 35, "transition": "flash", "fade": 1},
+            {"preset": "text-go-broncos", "seconds": 35, "transition": "crossfade", "fade": 2},
+            {"preset": "orange-crush", "seconds": 20, "transition": "flash", "fade": 1},
+        ],
+    },
 }
 
 

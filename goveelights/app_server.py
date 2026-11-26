@@ -90,6 +90,16 @@ def validate_showtimes(val) -> None:
                 continue
             for x in ([d] if isinstance(d, str) else d if isinstance(d, list) else [None]):
                 _check_mmdd(x, f"{w}: '{f}'")
+        season = st.get("season")
+        if season is not None and season != []:
+            if not isinstance(season, list) or not all(isinstance(sp, list) and len(sp) == 2 for sp in season):
+                raise ValueError(f"{w}: 'season' must be a list of [from, to] dates")
+            for sp in season:
+                for x in sp:
+                    try:
+                        sched.resolve_date(x, 2028)
+                    except (AttributeError, KeyError, ValueError):
+                        raise ValueError(f"{w}: 'season' dates must be MM-DD or a holiday like thanksgiving+1") from None
 
 
 def validate_shows(val) -> None:

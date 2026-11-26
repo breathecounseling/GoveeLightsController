@@ -25,10 +25,14 @@ DEFAULT_PROGRAM = {"preset": "warm-white"}
 # Playlists the calendar brings along: name -> (minutes per item, crossfade s, [candidate lists]).
 # Each item is a list of preset ids; the first installed one is used, missing items are dropped.
 _PLAYLISTS = {
-    "Holiday: Christmas": (8, 4, [["christmas-tree"], ["gift-wrap"], ["starry-night-sleigh"], ["snowy-evening"],
+    "Holiday: Christmas": (8, 4, [["christmas-tree"], ["sleigh-grand-tour"], ["gift-wrap"], ["starry-night-sleigh"],
+                                  ["candy-cane-chase"], ["snowy-evening"], ["falling-star"],
                                   ["icy-tree", "golden-tree"], ["christmas-twinkle"]]),
-    "Holiday: Advent": (8, 4, [["christmas-tree"], ["advent-calendar"], ["gift-wrap"], ["starry-night-sleigh"],
-                               ["snowy-evening"], ["advent-calendar"], ["icy-tree", "golden-tree"]]),
+    "Holiday: Advent": (8, 4, [["christmas-tree"], ["advent-calendar"], ["sleigh-grand-tour"], ["gift-wrap"],
+                               ["starry-night-sleigh"], ["candy-cane-chase"], ["snowy-evening"], ["advent-calendar"],
+                               ["falling-star"], ["icy-tree", "golden-tree"]]),
+    "Holiday: Thanksgiving": (8, 5, [["turkey-fan"], ["thanksgiving-harvest"], ["harvest-sunset"],
+                                     ["gratitude-candlelight"], ["text-give-thanks"]]),
     "Holiday: Christmas Day": (8, 4, [["christmas-tree"], ["text-merry-christmas"], ["golden-tree"],
                                       ["gift-wrap"], ["christmas-twinkle"], ["starry-night-sleigh"]]),
     "Holiday: New Year": (6, 3, [["champagne-fizz"], ["golden-shimmer"], ["text-happy-new-year"],
@@ -53,11 +57,12 @@ _RULES = [
     {"name": "New Year's Day", "from": "01-01", "to": "01-01", "program": {"playlist": "Holiday: New Year"},
      "about": "champagne, gold and HAPPY NEW YEAR"},
     {"name": "Thanksgiving", "from": "thanksgiving-2", "to": "thanksgiving",
-     "program": {"evolve": ["thanksgiving-harvest", "thanksgiving"]}, "about": "autumn colours for the holiday"},
+     "program": {"playlist": "Holiday: Thanksgiving", "or": ["thanksgiving-harvest", "thanksgiving"]},
+     "about": "the turkey fan, harvest glow and sunset, candlelight and GIVE THANKS"},
     {"name": "Advent", "from": "12-01", "to": "12-23", "program": {"playlist": "Holiday: Advent"},
      "about": "the Christmas rotation with the advent calendar"},
     {"name": "Christmas season", "from": "thanksgiving", "to": "12-30", "program": {"playlist": "Holiday: Christmas"},
-     "about": "tree, gift wrap, sleigh ride, snowy evening"},
+     "about": "tree, sleigh tour, gift wrap, candy-cane chase, snowy evening and a falling star"},
     {"name": "Winter", "from": "01-02", "to": "01-31", "program": {"playlist": "Holiday: Winter"},
      "about": "icicles, snow and winter sparkle"},
     {"name": "Valentine's week", "from": "02-08", "to": "02-14", "program": {"playlist": "Holiday: Valentine's", "or": ["valentines-hearts", "valentines-glow", "valentines"]},
@@ -100,7 +105,59 @@ _SHOWTIMES = [
      "about": "Christmas Eve from 5:15 pm, looping until lights-off"},
     {"show": "New Year's Eve countdown", "from": "23:55", "to": "23:55", "every": 60, "date": "12-31",
      "only_when_on": False, "about": "31 December at 11:55 pm: the countdown hits zero at midnight"},
+    # top of the hour through the evening; "season" spans (holiday names allowed) become the
+    # showtime's "dates" for the season that is on now or coming next
+    {"show": "Thanksgiving tonight", "from": "18:00", "to": "21:00", "every": 60,
+     "season": [("thanksgiving", "thanksgiving")], "only_when_on": True,
+     "about": "Thanksgiving evening at the top of every hour, 6 to 9 pm"},
+    {"show": "Christmas on the roofline", "from": "18:00", "to": "21:00", "every": 60,
+     "season": [("thanksgiving+1", "12-23"), ("12-25", "12-30")], "only_when_on": True,
+     "about": "every evening of the season at the top of the hour, 6 to 9 pm "
+              "(not Christmas Eve: Santa's coming has the evening)"},
 ]
+
+
+def season_dates(spans, today: date) -> list[str]:
+    """'MM-DD' for every day of the spans [(from, to)], for the season that is on now or
+    comes next (the year of the last span's end)."""
+    for year in (today.year, today.year + 1):
+        try:
+            rng = [(sched.resolve_date(a, year), sched.resolve_date(b, year)) for a, b in spans]
+        except (KeyError, ValueError):
+            return []
+        if max(b for _, b in rng) >= today:
+            out = []
+            for a, b in rng:
+                d = a
+                while d <= b:
+                    out.append(f"{d:%m-%d}")
+                    d += timedelta(days=1)
+            return out
+    return []
+
+
+def fmt_dates(dates, today: date) -> str:
+    """['11-27', '11-28', ..., '12-23', '12-25'] -> 'Nov 27 – Dec 23, Dec 25'."""
+    ds = []
+    for s in dates or []:
+        try:
+            m, d = (int(x) for x in str(s).split("-"))
+            dd = date(today.year, m, d)
+        except ValueError:
+            continue
+        if dd < today - timedelta(days=200):          # e.g. January dates seen in December
+            dd = dd.replace(year=today.year + 1)
+        ds.append(dd)
+    ds.sort()
+    runs, out = [], []
+    for d in ds:
+        if runs and (d - runs[-1][1]).days == 1:
+            runs[-1][1] = d
+        else:
+            runs.append([d, d])
+    for a, b in runs:
+        out.append(fmt_range((a, b)))
+    return ", ".join(out)
 
 
 def _pick(cands: list[str], ids: set[str]) -> list[str]:
@@ -127,12 +184,14 @@ def _playlist(name: str, ids: set[str]) -> dict | None:
     return {"items": out, "fade": fade, "shuffle": False, TAG: True}
 
 
-def build(preset_ids, show_names, teams=()) -> dict:
+def build(preset_ids, show_names, teams=(), today: date | None = None) -> dict:
     """The calendar for the installed presets and shows:
     {"rules": [...], "playlists": {...}, "showtimes": [...], "skipped": [{"name", "note"}]}.
     Rules and showtimes carry "about" (a one-line description) only in "notes".
-    teams: the game settings' teams; the first NFL one gets its Sundays."""
+    teams: the game settings' teams; the first NFL one gets its Sundays.
+    today: for showtimes that follow a season (default: today)."""
     ids, shows = set(preset_ids), set(show_names)
+    today = today or date.today()
     playlists: dict[str, dict] = {}
     rules, notes, skipped = [], {}, []
     for spec in _RULES:
@@ -178,7 +237,14 @@ def build(preset_ids, show_names, teams=()) -> dict:
         if spec["show"] not in shows:
             skipped.append({"name": spec["show"], "note": f"needs the show '{spec['show']}' (not installed)"})
             continue
-        st = {k: v for k, v in spec.items() if k != "about"}
+        st = {k: v for k, v in spec.items() if k not in ("about", "season")}
+        if spec.get("season"):
+            # "season" is what the controller follows (re-resolved every year); "dates" is
+            # this season's days, for the showtime editor and older copies of the app
+            st["season"] = [list(sp) for sp in spec["season"]]
+            st["dates"] = season_dates(spec["season"], today)
+            if not st["dates"]:
+                continue
         st.update({"enabled": True, TAG: True})
         showtimes.append(st)
         notes["show:" + spec["show"]] = spec.get("about", "")
