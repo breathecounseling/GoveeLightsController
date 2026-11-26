@@ -143,7 +143,8 @@ class Controller:
             self.exit_diag()
         if on and not any(d.get("ip") for d in self.engine.output.devices.values()):
             raise ValueError("no devices with a known IP; scan first")
-        self.engine.set_live(on, release=True)
+        # a tap on Live always re-takes every box, in case the Govee app grabbed one
+        self.engine.set_live(on, release=True, force=on and manual)
 
     def settings(self, b: dict):
         e = self.engine
@@ -687,7 +688,7 @@ class Controller:
             self.engine.blackout = False
             self.engine.set_scene(Scene.from_dict({"layers": [{"effect": "mapcode"}]}))
             self.playing = {"kind": "event", "name": "Camera mapping pattern"}
-        self.set_live(True, manual=False)
+        self.engine.set_live(True, release=True, force=True)     # every box must show the pattern
         return {"on": MAP_ON, "off": MAP_OFF, "slot": MAP_SLOT, "bits": MAP_BITS, "cycle": map_cycle(),
                 "n": self.engine.layout.n}
 

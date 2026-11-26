@@ -45,13 +45,16 @@ class GoveeRazerOutput:
         s.ip = self.devices[mac]["ip"]
         return s
 
-    def start(self):
+    def start(self, force: bool = False):
+        """Put every box in realtime mode. force=True re-sends the enable even if we
+        think a box is already in realtime: the Govee app may have taken it back."""
         for mac in self.devices:
             s = self._streamer(mac)
             s.stop_anim()
             s.set_keepalive(0)
-            if not s.realtime:
+            if force or not s.realtime:
                 s.enable()
+        self._last.clear()                       # resend every frame
 
     def send_frame(self, run_id: str, pixels: Sequence[RGB]):
         key = tuple(pixels)

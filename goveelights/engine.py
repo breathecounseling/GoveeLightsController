@@ -146,11 +146,15 @@ class Engine:
         st["frames"] += 1
         st["render_ms"] = round((time.perf_counter() - t0) * 1000, 2)
 
-    def set_live(self, on: bool, release: bool = True):
-        """Start/stop sending to the lights. Rendering (preview) continues either way."""
+    def set_live(self, on: bool, release: bool = True, force: bool = False):
+        """Start/stop sending to the lights. Rendering (preview) continues either way.
+        force=True re-takes every box even if we're already live."""
         with self._live_lock:          # schedule and UI can race here
-            if on and not self.live:
-                self.output.start()
+            if on and (force or not self.live):
+                try:
+                    self.output.start(force=force)
+                except TypeError:                  # outputs without a force option
+                    self.output.start()
                 self.live = True
             elif not on and self.live:
                 self.live = False
