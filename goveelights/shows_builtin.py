@@ -72,7 +72,7 @@ BUILTIN_SHOWS: dict[str, dict] = {
             {"preset": "snowy-evening", "seconds": 240, "transition": "crossfade", "fade": 6},
             {"preset": "icy-tree", "seconds": 180, "transition": "crossfade", "fade": 6},
             {"preset": "falling-waves", "seconds": 180, "transition": "crossfade", "fade": 6},
-            {"preset": "dusk-to-night", "seconds": 180, "transition": "crossfade", "fade": 8},
+            {"preset": "dusk-demo", "seconds": 162, "transition": "crossfade", "fade": 8},   # one full demo cycle
             {"preset": "snow-piling-up", "seconds": 240, "transition": "crossfade", "fade": 6},
             {"preset": "winter-sparkle", "seconds": 150, "transition": "crossfade", "fade": 6},
         ],

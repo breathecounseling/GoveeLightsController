@@ -101,7 +101,8 @@ class Controller:
         self.vqueue: list[dict] = []                # visitor requests waiting
         self._vlast: dict[str, float] = {}          # visitor cooldowns by client
         self._showtimes_done: set = set()
-        self.dusk_intro: dict | None = None         # {"until", "program"}: the dusk sky at lights-on
+        self.dusk_intro: dict | None = None         # {"until", "program", "on"}: the dusk sky at lights-on
+        self._dusk_done: str | None = None          # the evening window ("on" time) an intro already ran for
         self._scoreboard_at: float | None = None    # when the next in-game scoreboard is due
         self._sched_key = "unset"
         self.sched_status: dict = {}
@@ -148,6 +149,8 @@ class Controller:
 
     def set_live(self, on: bool, manual: bool = True):
         if manual:
+            with self.lock:
+                self._dusk_to_program(fade=8.0 if on else 0.0)   # a Live tap ends the dusk intro
             self._manual()
         if on and self.diag_active:
             if not manual:
@@ -317,8 +320,10 @@ class Controller:
         self.playing = {"kind": "playlist", "name": st["name"], "item": item.get("preset"),
                         "item_name": (self.playing or {}).get("name")}
 
-    def run_program(self, prog: dict | None, manual: bool = False, fade: float | None = None):
-        """fade: seconds to crossfade from what is playing (None: each kind's usual)."""
+    def run_program(self, prog: dict | None, manual: bool = False, fade: float | None = None,
+                    live: bool = True):
+        """fade: seconds to crossfade from what is playing (None: each kind's usual).
+        live=False: only set up the program, leave the lights as they are."""
         if not prog:
             self.stop(manual=manual)
             return
@@ -328,7 +333,8 @@ class Controller:
             self.play_evolve(prog["evolve"], float(prog.get("minutes", 3)), manual=manual, fade=fade)
         elif prog.get("preset"):
             self.play_preset(prog["preset"], fade=1.0 if fade is None else fade, manual=manual)
-        self.set_live(True, manual=manual)
+        if live:
+            self.set_live(True, manual=manual)
 
     def stop(self, manual: bool = True, release: bool = True):
         with self.lock:
@@ -468,6 +474,8 @@ class Controller:
         if not cues:
             raise ValueError(f"show {name!r} has no cues")
         if manual:
+            with self.lock:
+                self._dusk_to_program(swap_only=True)    # the show returns to the program, not the dusk sky
             self._manual()
         now = time.time()
         anchor, aidx = self._show_anchor(cues, now)
@@ -549,15 +557,19 @@ class Controller:
             key = (k, now.date().isoformat(), mins)
             if key in self._showtimes_done:
                 continue
-            self._showtimes_done.add(key)
             if stt.get("only_when_on", True) and not self.engine.live:
+                self._showtimes_done.add(key)
                 continue
-            if self.interrupt and not self.interrupt.get("scoreboard"):
-                continue                            # don't cut off a countdown or a celebration (a scoreboard may go)
+            it = self.interrupt
+            if it and not (it.get("scoreboard") or it.get("visitor")):
+                continue                            # a countdown or celebration: try again next tick this minute
             try:
-                # only_when_on false: switch the lights on for it (and off again afterwards)
-                self.play_show(stt["show"], manual=False, force_live=not stt.get("only_when_on", True))
+                # only_when_on false: switch the lights on for it (and off again afterwards).
+                # A scoreboard or visitor pick stands aside (queued picks resume after the show).
+                if self.play_show(stt["show"], manual=False, force_live=not stt.get("only_when_on", True)):
+                    self._showtimes_done.add(key)
             except (KeyError, ValueError) as e:
+                self._showtimes_done.add(key)
                 log.warning("showtime failed: %s", e)
 
     # ------------------------------------------------------------- pad
@@ -826,7 +838,7 @@ class Controller:
             self.games[key] = {**self.games.get(key, {}), "error": str(e)}
             return 300
         prev = self.games.get(key)
-        self.games[key] = game or {"state": "none", "team": team}
+        self.games[key] = {**game, "polled": time.time()} if game else {"state": "none", "team": team}
         if not game:
             return 1800
         delay = float(self.cfg.data.get("game", {}).get("delay", 30))
@@ -837,6 +849,8 @@ class Controller:
             if prev.get("state") == "in" and game["state"] == "post" and game["score"] > game["opp_score"]:
                 self._pending.append((time.time() + delay, "win", game["colors"]))
         return 15 if game["state"] == "in" else 300
+
+    SCOREBOARD_FRESH = 120.0        # an in-progress game polled longer ago than this is not shown
 
     def _scoreboard_tick(self, now: float):
         """While a followed team is playing and the lights are on, show the score on the
@@ -850,8 +864,10 @@ class Controller:
             delay = max(0.0, min(600.0, float(g.get("delay", 30))))
         except (TypeError, ValueError):
             return
-        game = next((v for v in self.games.values()
-                     if isinstance(v, dict) and v.get("state") == "in" and "error" not in v), None)
+        teams = {f"{t.get('league')}:{t.get('team')}" for t in g.get("teams", []) if isinstance(t, dict)}
+        game = next((v for k, v in self.games.items()
+                     if k in teams and isinstance(v, dict) and v.get("state") == "in" and "error" not in v
+                     and now - float(v.get("polled") or 0) < self.SCOREBOARD_FRESH), None)
         if every <= 0 or not g.get("enabled") or game is None:
             self._scoreboard_at = None
             return
@@ -1084,10 +1100,17 @@ class Controller:
         self._sched_key = key
         log.info("schedule: %s", f"on ({ev['rule']}: {ev['program']})" if key else "off")
         with self.lock:
-            self.dusk_intro = None
+            di, self.dusk_intro = self.dusk_intro, None
         left = self._dusk_intro_left(now, ev, sch) if key else 0.0
+        if left > 0 and di and di.get("on") == ev["on"]:
+            with self.lock:                       # re-applied mid-intro (e.g. a schedule save): keep the sky
+                di["program"] = ev["program"]
+                self.dusk_intro = di
+            return
+        if left > 0 and ev.get("on") == self._dusk_done:
+            left = 0.0                            # this evening's intro already ran (or the owner ended it)
         try:
-            if left > 0 and self._start_dusk_intro(ev["program"], left, sch):
+            if left > 0 and self._start_dusk_intro(ev["program"], left, sch, ev.get("on")):
                 return
             self.run_program(ev["program"] if ev["active"] else None, manual=False)
         except (OSError, ValueError) as e:
@@ -1111,7 +1134,7 @@ class Controller:
         left = mins * 60 - (now - on).total_seconds()
         return left if 30 < left <= mins * 60 + 60 else 0.0
 
-    def _start_dusk_intro(self, prog: dict, left: float, sch: dict) -> bool:
+    def _start_dusk_intro(self, prog: dict, left: float, sch: dict, on: str | None = None) -> bool:
         try:
             lat = max(-89.0, min(89.0, float(sch.get("lat", 40.3764))))
             lon = max(-180.0, min(180.0, float(sch.get("lon", -104.6922))))
@@ -1122,13 +1145,36 @@ class Controller:
         try:
             with self.lock:
                 self.play_scene(d, {"kind": "dusk-intro", "name": "Dusk to night"}, fade=3.0, manual=False)
-                self.dusk_intro = {"until": time.time() + left, "program": prog}
+                self.dusk_intro = {"until": time.time() + left, "program": prog, "on": on}
+                self._dusk_done = on
         except ValueError as e:                   # e.g. the dusk effect is missing: straight to the program
             log.warning("dusk intro failed: %s", e)
             return False
         self.set_live(True, manual=False)
         log.info("schedule: dusk intro for %.0f s, then %s", left, prog)
         return True
+
+    def _dusk_to_program(self, fade: float = 8.0, swap_only: bool = False):
+        """A manual action during the dusk intro: the scheduled program takes the intro's
+        place, so whatever comes next (a show, a Live tap) returns to the program and not
+        to the dusk sky. swap_only: set the program up but keep the house showing what it
+        shows now (the caller is about to replace it). Call with self.lock held."""
+        di = self.dusk_intro
+        if not di:
+            return
+        self.dusk_intro = None
+        shown, playing, it = self.engine.scene, self.playing, self.interrupt
+        try:
+            self.run_program(di["program"], manual=False, fade=fade, live=False)
+        except (OSError, ValueError) as e:
+            log.warning("program after the dusk intro failed: %s", e)
+            return
+        if it is not None:                        # something plays over the intro: it now returns to the program
+            it["scene"], it["playing"] = self.scene_dict, self.playing
+            self.playing = playing
+            self.engine.set_scene(shown, 0)
+        elif swap_only:
+            self.engine.set_scene(shown, 0)
 
     def _dusk_tick(self, now: float):
         di = self.dusk_intro

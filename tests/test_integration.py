@@ -136,6 +136,10 @@ SCH = {"enabled": True, "on": "sunset", "on_offset_min": 0, "off_time": "23:00",
        "default": {"preset": "warm-white"}, "rules": []}
 
 
+def scene_effects_of(d: dict) -> list[str]:
+    return [l["effect"] for l in (d or {}).get("layers", [])]
+
+
 def scene_effects(ctl) -> list[str]:
     return [l["effect"] for l in (ctl.scene_dict or {}).get("layers", [])]
 
@@ -218,6 +222,77 @@ class DuskIntroTests(unittest.TestCase):
         self.assertIsNone(r2.ctl.playing)
         self.assertFalse(r2.ctl.engine.live)
 
+    def test_manual_show_during_the_intro_returns_to_the_program(self):
+        r = self.rig(minutes=20)
+        ctl = r.ctl
+        r.tick(60)
+        self.assertTrue(ctl.play_show("Christmas Eve spectacular"))
+        self.assertIsNone(ctl.dusk_intro)
+        self.assertEqual(ctl.engine._prev.name, "Dusk intro")       # the show fades in from the dusk sky
+        self.assertEqual(ctl.interrupt["playing"]["id"], "warm-white")
+        self.assertEqual([l["effect"] for l in ctl.interrupt["scene"]["layers"]],
+                         scene_effects_of(ctl.presets.get("warm-white")))
+        total = sum(c["seconds"] for c in shows_builtin.BUILTIN_SHOWS["Christmas Eve spectacular"]["cues"])
+        r.tick(total + 10)
+        self.assertIsNone(ctl.interrupt)
+        self.assertEqual(ctl.playing["kind"], "preset")
+        self.assertEqual(ctl.playing["id"], "warm-white")
+        self.assertNotIn("dusk", r.effects())
+        self.assertNotEqual(ctl.status()["playing"]["kind"], "dusk-intro")
+
+    def test_live_tap_during_the_intro_goes_to_the_program(self):
+        r = self.rig(minutes=20)
+        r.tick(30)
+        r.ctl.set_live(True)
+        self.assertIsNone(r.ctl.dusk_intro)
+        self.assertEqual(r.ctl.playing["id"], "warm-white")
+        self.assertEqual(r.ctl.engine._fade_s, 8.0)
+        self.assertTrue(r.ctl.engine.live)
+        r.tick(40 * 60)
+        self.assertEqual(r.ctl.playing["id"], "warm-white")
+        # Live off during the intro: back on later shows the program, not the dusk sky
+        r2 = self.rig(minutes=20)
+        r2.ctl.set_live(False)
+        self.assertFalse(r2.ctl.engine.live)
+        r2.ctl.set_live(True)
+        self.assertEqual(r2.ctl.playing["id"], "warm-white")
+        self.assertNotIn("dusk", r2.effects())
+
+    def test_intro_over_a_visitor_pick_ends_cleanly(self):
+        r = self.rig(minutes=20)
+        ctl = r.ctl
+        ctl.vqueue.append({"id": "candy-cane", "client": "x"})
+        r.tick(2)
+        self.assertTrue(ctl.interrupt.get("visitor"))
+        ctl.set_live(True)                                       # the owner taps Live mid-pick
+        self.assertEqual(ctl.playing["kind"], "event")           # the pick keeps playing ...
+        r.tick(70)
+        self.assertEqual(ctl.playing["id"], "warm-white")        # ... then the program, not the dusk sky
+        self.assertNotIn("dusk", r.effects())
+
+    def test_schedule_save_does_not_replay_the_intro(self):
+        r = self.rig(minutes=20)
+        ctl = r.ctl
+        r.tick(60)
+        ctl.set_live(True)                                       # ended by hand
+        ctl.resume_schedule()                                    # what a schedule save does
+        r.tick(20)
+        self.assertIsNone(ctl.dusk_intro)
+        self.assertEqual(ctl.playing["id"], "warm-white")
+        # saved while the intro is still running: it carries on, not restarted
+        r2 = self.rig(minutes=20)
+        until = r2.ctl.dusk_intro["until"]
+        r2.tick(5 * 60)
+        r2.ctl.resume_schedule()
+        r2.tick(20)
+        self.assertEqual(r2.ctl.playing["kind"], "dusk-intro")
+        self.assertEqual(r2.ctl.dusk_intro["until"], until)
+        r2.tick(15 * 60)
+        self.assertEqual(r2.ctl.playing["id"], "warm-white")
+        r2.ctl.resume_schedule()
+        r2.tick(20)
+        self.assertEqual(r2.ctl.playing["id"], "warm-white")    # not a second intro after it finished
+
     def test_waits_for_an_interrupt_before_switching(self):
         r = self.rig(minutes=2)
         ctl = r.ctl
@@ -258,17 +333,22 @@ GAME = {"id": "g1", "state": "in", "team": "DEN", "opponent": "PIT", "score": 17
 class ScoreboardTests(unittest.TestCase):
     def rig(self, every=10, seconds=20, enabled=True):
         r = Rig(self, datetime(2026, 11, 29, 19, 0).astimezone(),
-                {"game": {"enabled": enabled, "scoreboard_every": every, "scoreboard_seconds": seconds, "delay": 30},
+                {"game": {"enabled": enabled, "scoreboard_every": every, "scoreboard_seconds": seconds, "delay": 30,
+                          "teams": [{"league": "nfl", "team": "DEN"}]},
                  "schedule": {"enabled": False}})
         r.ctl.play_preset("warm-white")
         r.ctl.set_live(True)
         r.ctl.games = {"nfl:DEN": dict(GAME)}
         return r
 
-    def live_tick(self, r, seconds, step=2.0):
+    def live_tick(self, r, seconds, step=2.0, polling=True):
+        """polling: the live-data loop keeps refreshing the game (as _poll_game does)."""
         end = r.clock.t + seconds
         while r.clock.t < end:
             r.clock.t += step
+            if polling:
+                for v in r.ctl.games.values():
+                    v["polled"] = r.clock.t
             with r.ctl.lock:
                 r.ctl._scoreboard_tick(r.clock.t)
             r.ctl._tick_once(r.clock.t)
@@ -358,6 +438,29 @@ class ScoreboardTests(unittest.TestCase):
         r.ctl.games = {"nfl:DEN": {**GAME, "error": "timeout"}}
         self.live_tick(r, 120)
         self.assertIsNone(r.ctl.interrupt)
+
+    def test_only_followed_and_freshly_polled_games(self):
+        r = self.rig()
+        r.ctl.cfg.data["game"]["teams"] = [{"league": "nfl", "team": "KC"}]     # the owner switched teams
+        self.live_tick(r, 15 * 60, step=5)
+        self.assertIsNone(r.ctl.interrupt)
+        r = self.rig()
+        r.ctl.games["nfl:DEN"]["polled"] = r.clock.t
+        self.live_tick(r, 15 * 60, step=5, polling=False)      # polling stalled: the old 'in' state goes stale
+        self.assertIsNone(r.ctl.interrupt)
+        self.assertIsNone(r.ctl._scoreboard_at)
+
+    def test_poll_game_records_the_poll_time(self):
+        r = self.rig()
+        saved = (C.live.fetch_json, C.live.find_game)
+        self.addCleanup(lambda: (setattr(C.live, "fetch_json", saved[0]), setattr(C.live, "find_game", saved[1])))
+        C.live.fetch_json = lambda url: {}
+        C.live.find_game = lambda data, team: dict(GAME)
+        r.ctl.games = {}
+        r.ctl._poll_game({"league": "nfl", "team": "DEN"}, "nfl:DEN")
+        self.assertEqual(r.ctl.games["nfl:DEN"]["polled"], r.clock.t)
+        self.live_tick(r, 50, polling=False)
+        self.assertTrue(r.ctl.interrupt and r.ctl.interrupt.get("scoreboard"))
 
     def test_scene_renders_for_any_game(self):
         L = house()
@@ -594,6 +697,26 @@ class NewYearTests(unittest.TestCase):
         r2.ctl.set_live(True)
         r2.tick(5, schedule=False)
         self.assertIsNone(r2.ctl.interrupt)
+
+    def test_showtime_is_not_lost_to_a_visitor_pick_or_a_reminder(self):
+        stt = [{"show": self.NAME, "from": "23:55", "to": "23:55", "every": 60, "date": "12-31", "enabled": True}]
+        r = self.rig(23, 54, 30, showtimes=stt)
+        r.ctl.vqueue.extend([{"id": "candy-cane", "client": "a"}, {"id": "comets", "client": "b"}])
+        r.tick(2, schedule=False)
+        self.assertTrue(r.ctl.interrupt.get("visitor"))
+        r.tick(32, schedule=False)                               # 23:55: the show takes over the pick
+        self.assertEqual(r.ctl.status()["show"], self.NAME)
+        self.assertEqual(r.ctl.interrupt["playing"]["id"], "warm-white")
+        self.assertEqual(len(r.ctl.vqueue), 1)                   # the next pick waits for the show
+        # a 'days to' reminder at 23:55:00 only delays it a few seconds
+        r = self.rig(23, 54, 58, showtimes=stt)
+        self.assertTrue(r.ctl.start_interrupt(shows.days_scene(1), 8, "Days to go"))
+        r.tick(5, schedule=False)
+        self.assertEqual(r.ctl.interrupt["label"], "Days to go")
+        r.tick(10, schedule=False)
+        self.assertEqual(r.ctl.status()["show"], self.NAME)
+        r.tick(60, schedule=False)
+        self.assertEqual(r.ctl.status()["show"], self.NAME)      # started once, not restarted
 
     def test_lights_off_time_does_not_cut_the_show(self):
         sch = {"enabled": True, "on": "time", "on_time": "17:00", "off_time": "00:00",
