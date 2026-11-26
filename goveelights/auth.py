@@ -152,9 +152,32 @@ class Auth:
         return peer
 
     @staticmethod
+    def rate_key(ip: str) -> str:
+        """Key for per-client limits. One IPv6 user typically holds a whole /64, so
+        rotating the low bits must not count as a new client."""
+        try:
+            a = ipaddress.ip_address(ip)
+        except ValueError:
+            return ip
+        if a.version == 6 and a.ipv4_mapped:
+            return str(a.ipv4_mapped)
+        if a.version == 6:
+            return str(ipaddress.ip_network(f"{a}/64", strict=False))
+        return str(a)
+
+    @staticmethod
     def proxied(handler) -> bool:
-        return any(h in handler.headers for h in PROXY_HEADERS) or \
+        """True if this request, or any earlier request on the same connection, came
+        through a proxy/tunnel. A connection that has carried a tunnelled request is
+        never trusted again, so bytes smuggled inside it can't pass as a LAN request."""
+        hit = any(h in handler.headers for h in PROXY_HEADERS) or \
             any(k.lower() in PROXY_HEADERS for k in handler.headers.keys())
+        if hit:
+            try:
+                handler._via_proxy = True
+            except AttributeError:
+                pass
+        return hit or bool(getattr(handler, "_via_proxy", False))
 
     def trusted(self, handler) -> bool:
         """Direct request from the home network (never through a proxy/tunnel)."""
@@ -181,19 +204,28 @@ class Auth:
         return self.trusted(handler) or self.session_ok(self.cookie(handler))
 
     # ---------------------------------------------------------- lockout
-    def allow_attempt(self, ip: str) -> bool:
-        now = time.time()
-        q = self.fails.setdefault(ip, deque())
-        while q and q[0] < now - 600:
-            q.popleft()
+    def _prune(self, now: float):
         while self.all_fails and self.all_fails[0] < now - 600:
             self.all_fails.popleft()
-        return len(q) < 5 and len(self.all_fails) < 30
+        for k in [k for k, q in self.fails.items() if not q or q[-1] < now - 600]:
+            del self.fails[k]
+
+    def allow_attempt(self, ip: str) -> bool:
+        now = time.time()
+        with self.lock:
+            self._prune(now)
+            q = self.fails.get(self.rate_key(ip))
+            while q and q[0] < now - 600:
+                q.popleft()
+            return len(q or ()) < 5 and len(self.all_fails) < 30
 
     def record_fail(self, ip: str):
         now = time.time()
-        self.fails.setdefault(ip, deque()).append(now)
-        self.all_fails.append(now)
+        with self.lock:
+            self.fails.setdefault(self.rate_key(ip), deque()).append(now)
+            self.all_fails.append(now)
+            if len(self.fails) > 2000:
+                self._prune(now)
 
     def status(self, handler) -> dict:
         return {"password_set": self.password_set, "trusted": self.trusted(handler),
