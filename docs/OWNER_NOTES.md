@@ -49,6 +49,8 @@ their zones. If it never answers on the LAN, paste a Govee API key there and add
   the Accent, candlelight; shows *Thanksgiving tonight*, *Christmas on the roofline* and
   *Broncos touchdown*. Re-tap "Use the holiday calendar" once to get the first two at the
   top of the hour; they follow Thanksgiving's date by themselves in later years.
+  The Tonight card says so ("The holiday calendar has an update") until you do.
+  Thanksgiving night 2026 step by step: [TONIGHT.md](TONIGHT.md).
   A fourth run joins the whole-house looks once it has a bulb count.
 * Open-source prep: neutral defaults for new installs with the one-time migration above,
   target aliases, first-run setup, example layout, docs and `tools/export_public.py`.

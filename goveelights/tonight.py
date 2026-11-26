@@ -534,6 +534,11 @@ def _build(ctl, now: datetime, password_set) -> dict:
     except Exception:                         # noqa: BLE001 - a check must not break the plan
         logging.getLogger(__name__).exception("target check failed")
     checks += _show_checks(ctl, cfg, st_out, names)
+    if not failed:
+        try:
+            checks += _calendar_checks(ctl, cfg, sch, preset_list, d, on, off, prog, now)
+        except Exception:                     # noqa: BLE001 - a check must not break the plan
+            logging.getLogger(__name__).exception("calendar check failed")
     if missed:
         checks.append(_check("showtimes", WARN, "A showtime won't play tonight", "; ".join(missed[:3]),
                              "Move the showtime into the lit hours", "showtimes"))
@@ -636,7 +641,14 @@ def _device_checks(ctl, now: datetime) -> list[dict]:
                           + ": the app can't poll WLED for health; check them in Devices if they stay dark"))
     nocount = [dv.get("name") or m for m, dv in devs.items() if not dv.get("pixel_count")]
     runs = list(getattr(ctl.engine.layout, "runs", []) or [])
-    if nocount:
+    lit = " · ".join(f"{r.name} {r.count - len([k for k in r.hidden if 0 <= k < r.count])}" for r in runs)
+    if nocount and runs:
+        # a box found on the network that isn't in the show yet (e.g. a fourth one that
+        # ignores commands): the counted runs still light up, so it is not a failure
+        out.append(_check("counts", WARN, "A box isn't in the show yet",
+                          f"{', '.join(nocount)}: no bulb count, so it stays dark. The show plays on {lit} bulbs.",
+                          "More → Fourth run: check it and add it", "fourth"))
+    elif nocount:
         out.append(_check("counts", FAIL, "Bulb count unknown", ", ".join(nocount) + " won't light up",
                           "Count the bulbs in diagnostics", "devices"))
     else:
@@ -814,6 +826,49 @@ def _program_checks(sch: dict, d: date, prog, names: Names) -> list[dict]:
         out.append(_check("programs", WARN, f"{len(bad)} other schedule program{'s' if len(bad) > 1 else ''} broken",
                           "; ".join(bad[:3]), "Fix the rule's program", "sched"))
     return out
+
+
+def _calendar_checks(ctl, cfg: dict, sch: dict, preset_list, d: date, on: datetime, off: datetime,
+                     prog, now: datetime) -> list[dict]:
+    """A holiday calendar installed by an older version lacks what this one adds (shows at
+    the top of the hour, new rotations). Nothing changes by itself: say what is new,
+    tonight first, and where the one tap is (the calendar sheet's Update)."""
+    from . import calendar_builtin
+    if not calendar_builtin.installed(sch) or not hasattr(ctl, "shows_list"):
+        return []
+    ids = [p["id"] for p in preset_list]
+    teams = (cfg.get("game") or {}).get("teams") or []
+    fresh = calendar_builtin.build(ids, [s["name"] for s in ctl.shows_list()], teams, today=now.date())
+    ch = calendar_builtin.changes(fresh, sch, cfg.get("playlists") or {}, cfg.get("showtimes") or [], ids)
+    if not ch["outdated"]:
+        return []
+    after = Names({p["id"]: p["name"] for p in preset_list}, ch["playlists_after"])
+    tonight_bits, later = [], []
+    if prog:
+        for st in ch["showtimes"]:
+            ts = showtime_times(st, max(now, on), off) if st.get("only_when_on", True) else \
+                showtime_times(st, max(now, on - timedelta(hours=6)), off + timedelta(hours=6))
+            (tonight_bits if ts else later).append(
+                f"the {st['show']} show {describe_times(ts)}" if ts else str(st["show"]))
+        try:
+            new_prog = sched.program_for(d, ch["schedule"])[0]
+        except (KeyError, TypeError, ValueError):
+            new_prog = prog
+        if new_prog and new_prog != prog:
+            tonight_bits.append(f"tonight's program becomes {after.program(new_prog)}")
+    else:
+        later = [str(st["show"]) for st in ch["showtimes"]]
+    parts = []
+    if tonight_bits:
+        parts.append("New tonight: " + "; ".join(tonight_bits) + ".")
+    if later:
+        parts.append("Also new: " + ", ".join(later) + ".")
+    more = [n for n in ch["rules"] + ch["playlists"] if n]
+    if more and not tonight_bits:
+        parts.append("Updated: " + ", ".join(dict.fromkeys(more)) + ".")
+    parts.append("Your own rules, shows and playlists stay as they are.")
+    return [_check("calendar", WARN, "The holiday calendar has an update", " ".join(parts),
+                   "Tap, then 'Update the holiday calendar'", "calendar")]
 
 
 def _show_checks(ctl, cfg: dict, tonight_sts: list[dict], names: Names) -> list[dict]:

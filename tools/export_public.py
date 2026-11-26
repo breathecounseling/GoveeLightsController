@@ -6,7 +6,7 @@
 What it does:
   1. Extracts the git-tracked files at HEAD (uncommitted changes and untracked files,
      such as govee_config.json, are never included).
-  2. Drops the owner-only files (DROP below): docs/OWNER_NOTES.md, layouts/house.json.
+  2. Drops the owner-only files (DROP below): docs/OWNER_NOTES.md, docs/TONIGHT.md, layouts/house.json.
   3. Replaces goveelights/legacy_defaults.py with the neutral version (no earlier
      defaults to migrate), so a public install starts with no location and no team.
   4. Scrubs the denylist: each line of the (gitignored) denylist file is either
@@ -39,7 +39,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DENYLIST = ROOT / "tools" / "private_denylist.txt"
-DROP = ["docs/OWNER_NOTES.md", "layouts/house.json", "tools/private_denylist.txt"]
+DROP = ["docs/OWNER_NOTES.md", "docs/TONIGHT.md", "layouts/house.json", "tools/private_denylist.txt"]
 LEGACY_FILE = "goveelights/legacy_defaults.py"
 NEUTRAL_LEGACY = '''"""Defaults that older versions used without storing them in govee_config.json.
 

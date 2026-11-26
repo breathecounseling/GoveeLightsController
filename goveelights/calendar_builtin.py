@@ -299,6 +299,43 @@ def merge(cal: dict, sch: dict, playlists: dict, showtimes: list, preset_ids=(),
     return sch, playlists, showtimes
 
 
+# What the owner may change on the calendar's own entries without that being an update:
+# switching one off, and the season's dates (rewritten for each season).
+_OWNER_KEYS = {"enabled", "dates", TAG, OFF_TAG}
+
+
+def _sig(x) -> str:
+    import json
+    return json.dumps({k: v for k, v in x.items() if k not in _OWNER_KEYS} if isinstance(x, dict) else x,
+                      sort_keys=True, default=str)
+
+
+def changes(cal: dict, sch: dict, playlists: dict, showtimes: list, preset_ids=()) -> dict:
+    """What "Update the holiday calendar" would change in a copy installed earlier (e.g. by
+    an older version): {"outdated", "showtimes": [calendar showtimes for shows it doesn't
+    schedule yet], "rules": [names of rules that are new or play something else now],
+    "playlists": [names of rotations that are new or changed], "schedule", "playlists_after",
+    "showtimes_after" (the result of the update)}. Nothing installed: nothing outdated."""
+    out = {"outdated": False, "showtimes": [], "rules": [], "playlists": []}
+    if not installed(sch):
+        return out
+    m_sch, m_pls, m_sts = merge(cal, sch, playlists, showtimes, preset_ids)
+    mine = lambda xs: [x for x in xs or [] if isinstance(x, dict) and x.get(TAG)]       # noqa: E731
+    have_shows = {str(s.get("show")) for s in mine(showtimes)}
+    out["showtimes"] = [s for s in mine(m_sts) if str(s.get("show")) not in have_shows]
+    old_rules = {r.get("name"): r for r in mine((sch or {}).get("rules"))}
+    for r in mine(m_sch.get("rules")):
+        o = old_rules.get(r.get("name"))
+        if o is None or _sig(o.get("program")) != _sig(r.get("program")):
+            out["rules"].append(r.get("name"))
+    for name, pl in (m_pls or {}).items():
+        if isinstance(pl, dict) and pl.get(TAG) and _sig((playlists or {}).get(name)) != _sig(pl):
+            out["playlists"].append(name)
+    out["outdated"] = bool(out["showtimes"] or out["rules"] or out["playlists"])
+    out.update(schedule=m_sch, playlists_after=m_pls, showtimes_after=m_sts)
+    return out
+
+
 def _after_noon(hm) -> int | None:
     """Minutes after noon for 'HH:MM' (so 00:30 is later than 23:00)."""
     try:
