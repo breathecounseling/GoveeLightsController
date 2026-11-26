@@ -266,6 +266,7 @@ class Controller:
         self._last_td: dict = {}                    # "league:team" -> when its last touchdown was seen
         self._events_done: set = set()
         self._last_reminder = time.time()   # no "days to go" reminder the moment it starts
+        self._busy_at = float("-inf")               # when a show/celebration was last on (reminders keep clear)
         self._forced_weather: dict = {}             # test overlays {kind: until}
         self.health: dict[str, dict] = {}           # per-device self-healing state
         self.evolve: dict | None = None             # 'let it evolve' state
@@ -329,6 +330,7 @@ class Controller:
             e.dither = bool(self.ecfg.get("dither", True))
             if old:
                 e.audio = old.audio                # a listening phone keeps its beat across a rebuild
+                e.dim, e.blackout = old.dim, old.blackout   # late-night dim and Blackout stay as they were
             e.audio.offset = float(self.ecfg.get("audio_offset_ms", OFFSET_MS)) / 1000.0
             self._thumbs = {}
             if old and old.scene:
@@ -913,7 +915,18 @@ class Controller:
     def _showtime_late(self, stt: dict, lo: int, hi: int, mins: int) -> bool:
         """A loop show due earlier this evening (e.g. Santa's coming at 5:15 pm) that never
         started: the controller was restarted after its minute, or a long celebration
-        covered it. It plays for what is left of the evening rather than not at all."""
+        covered it. It plays for what is left of the evening rather than not at all.
+        Also a one-shot show whose countdown is pinned to a moment still ahead (New Year's
+        Eve at 11:55 pm, the PC restarted at 11:57): its build-up repeats until the
+        countdown, so midnight still gets the show."""
+        if lo == hi and mins > lo:
+            sh = self.show_def(str(stt.get("show", "")))
+            now = time.time()
+            anchor, _ = self._show_anchor(self._show_cues(sh), now)
+            slot = datetime.fromtimestamp(now).astimezone().replace(hour=lo // 60, minute=lo % 60, second=0,
+                                                                     microsecond=0).timestamp()
+            if anchor is not None and 0 < anchor - slot <= self.ANCHOR_WINDOW:
+                return True
         if not stt.get("only_when_on", True) or lo > hi or mins <= lo or not self.engine.live:
             return False
         if self.cfg.data.get("schedule", {}).get("enabled") and not (self.sched_status or {}).get("active"):
@@ -1280,10 +1293,14 @@ class Controller:
         ev = self.cfg.data.get("events")
         return shows.DEFAULT_EVENTS if ev is None else ev
 
+    REMINDER_GAP = 180.0             # a 'days to go' reminder waits this long after a show, celebration, ...
+
     def _events_tick(self):
         now = datetime.now().astimezone()
         if not self.engine.live:
             self._last_reminder = time.time()     # the first reminder comes one interval after lights-on
+        if self.interrupt is not None and not self.interrupt.get("reminder"):
+            self._busy_at = time.time()           # not straight after a show: the house gets a breather
         for ev in self.events:
             if not ev.get("enabled", True):
                 continue
@@ -1323,9 +1340,12 @@ class Controller:
             days = (at.date() - now.date()).days
             if (ev.get("reminders") and self.engine.live and not self.interrupt
                     and 0 < days <= int(ev.get("remind_from_days", 30))
-                    and time.time() - self._last_reminder > float(ev.get("remind_every_min", 15)) * 60):
+                    and time.time() - self._last_reminder > float(ev.get("remind_every_min", 15)) * 60
+                    and not 0 <= time.time() - self._busy_at < self.REMINDER_GAP):
                 self._last_reminder = time.time()
-                self.start_interrupt(shows.days_scene(days), 8, f"{days} {'day' if days == 1 else 'days'} to {ev.get('name')}")
+                if self.start_interrupt(shows.days_scene(days), 8,
+                                        f"{days} {'day' if days == 1 else 'days'} to {ev.get('name')}"):
+                    self.interrupt["reminder"] = True
 
     # ------------------------------------------------------- live data
     def _live_loop(self):
@@ -1335,7 +1355,7 @@ class Controller:
             try:
                 now = time.time()
                 w = self.cfg.data.get("weather", {})
-                if w.get("enabled") and now - last_weather > 600:
+                if w.get("enabled") and (now - last_weather > 600 or now < last_weather):
                     last_weather = now
                     sch = self.cfg.data.get("schedule", {})
                     try:
@@ -1350,7 +1370,8 @@ class Controller:
                 if g.get("enabled"):
                     for t in g.get("teams", []):
                         key = f"{t.get('league')}:{t.get('team')}"
-                        if now >= next_game.get(key, 0):
+                        # (a next poll further off than the longest wait: the clock was set back)
+                        if now >= next_game.get(key, 0) or next_game[key] - now > 1800:
                             next_game[key] = now + self._poll_game(t, key)
                             # for the scoreboard text effect, held back like the celebrations
                             livedata.update_game(key, self.games.get(key), g.get("delay", 30))
@@ -1723,10 +1744,10 @@ class Controller:
                     self._tick_once(now)
                 except Exception:  # noqa: BLE001
                     log.exception("controller tick failed")     # never let it starve the schedule
-                if now - last_sched >= 10:
+                if now - last_sched >= 10 or now < last_sched:      # (or the clock was set back)
                     last_sched = now
                     self._schedule_tick()
-                if now - last_scan >= 300:
+                if now - last_scan >= 300 or now < last_scan:
                     last_scan = now
                     self.diag.scan()          # pick up DHCP address changes
             except Exception:  # noqa: BLE001
@@ -1734,7 +1755,10 @@ class Controller:
 
     def _tick_once(self, now: float):
         """The once-a-second work (the tests drive this with a fake clock)."""
+        last, self._last_tick = getattr(self, "_last_tick", None), now
         with self.lock:
+            if last is not None and now < last - 5:
+                self._clock_back(last - now)
             self._show_tick(now)
             if self.interrupt and now >= self.interrupt["until"]:
                 self.end_interrupt()
@@ -1747,6 +1771,52 @@ class Controller:
             self._evolve_tick(now)
         self._events_tick()
         self._showtimes_tick()
+
+    def _clock_back(self, d: float):
+        """The PC's clock was set back d seconds (a time sync fixing a fast clock): the
+        'in N seconds' timers move back with it, or each would wait d seconds longer (a
+        celebration holding the house for an hour). Clock moments (a countdown pinned to
+        midnight, a loop show's stop time) stay. Call with self.lock held."""
+        log.warning("the PC clock went back %.0f s: timers follow it", d)
+        for st in (self.playlist, self.evolve):
+            if st and st.get("next_at"):
+                st["next_at"] -= d
+        if self.dusk_intro:
+            self.dusk_intro["until"] -= d
+        def shift_show(show):
+            # a countdown cue pinned to midnight ends on the clock moment, not in N seconds
+            if show.get("next_at") and not (show.get("anchor") and show.get("idx") == show.get("anchor_idx")):
+                show["next_at"] -= d
+
+        it = self.interrupt
+        if it:
+            show = it.get("show")
+            if show:
+                shift_show(show)
+                it["until"] = self._show_until(show, self._show_cues(self.show_def(show["name"])))
+            elif not it.get("event"):                # an event countdown or party is pinned to its moment
+                it["until"] -= d
+            rs = it.get("resume")
+            if rs:
+                rs["at"] -= d
+                if isinstance(rs.get("show"), dict):  # the paused show's only copy while a celebration plays
+                    shift_show(rs["show"])
+        self._pending = [(at - d,) + tuple(rest) for at, *rest in self._pending]
+        if self._scoreboard_at is not None:
+            self._scoreboard_at -= d
+        self._vhold_until -= d
+        self._last_reminder -= d
+        self._busy_at -= d
+        for r in self.vqueue:
+            if "expires" in r:
+                r["expires"] -= d
+        ov = self.engine.overlays
+        for k, o in list(ov.items()):          # a pad hit or a visitor's sparkle: (scene, blend, op, until, start, ...)
+            if len(o) > 4 and isinstance(o[3], (int, float)) and isinstance(o[4], (int, float)):
+                ov[k] = o[:3] + (o[3] - d, o[4] - d) + o[5:]
+        sweep = self.engine.hue_sweep
+        if sweep:
+            self.engine.hue_sweep = (sweep[0] - d, sweep[1])
 
     def _schedule_tick(self):
         sch = self.cfg.data.get("schedule", {})
