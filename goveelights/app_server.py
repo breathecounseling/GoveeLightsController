@@ -23,6 +23,7 @@ from .fx import FX
 from .modulation import SHAPES
 from .palettes import BUILTIN, all_palettes, categories
 from .scene import BLEND_INFO, BLENDS
+from . import schedule as sched
 from . import shows_builtin
 
 log = logging.getLogger("goveelights")
@@ -38,6 +39,80 @@ class Server(ThreadingHTTPServer):
 CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
        "img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 PUBLIC = {"/login", "/api/login", "/api/auth"}
+
+
+def _check_hm(v, what: str):
+    if not isinstance(v, str):
+        raise ValueError(f"{what} must be a time like 18:30")
+    try:
+        sched._hm(v)
+    except (ValueError, TypeError):
+        raise ValueError(f"{what} must be a time like 18:30") from None
+
+
+def _check_mmdd(v, what: str):
+    try:
+        ok = isinstance(v, str) and len(v) == 5 and v[2] == "-" and 1 <= int(v[:2]) <= 12 and 1 <= int(v[3:]) <= 31
+    except ValueError:
+        ok = False
+    if not ok:
+        raise ValueError(f"{what} must be a date like 12-31")
+
+
+def validate_showtimes(val) -> None:
+    """Reject anything the controller's showtime check couldn't digest (a bad entry would
+    otherwise raise every second inside the tick loop and starve the schedule)."""
+    if not isinstance(val, list):
+        raise ValueError("showtimes must be a list")
+    for k, st in enumerate(val, 1):
+        w = f"showtime {k}"
+        if not isinstance(st, dict):
+            raise ValueError(f"{w} must be an object")
+        if not isinstance(st.get("show"), str) or not st["show"]:
+            raise ValueError(f"{w}: pick a show")
+        for f in ("from", "to"):
+            if f in st:
+                _check_hm(st[f], f"{w}: '{f}'")
+        if "every" in st:
+            e = st["every"]
+            if isinstance(e, bool) or not isinstance(e, (int, float)) or not 5 <= e <= 1440 or int(e) != e:
+                raise ValueError(f"{w}: 'every' must be a whole number of minutes, 5 to 1440")
+        days = st.get("days")
+        if days is not None and (not isinstance(days, list) or
+                                 not all(isinstance(d, int) and not isinstance(d, bool) and 0 <= d <= 6 for d in days)):
+            raise ValueError(f"{w}: 'days' must be a list of weekdays 0 (Mon) to 6 (Sun)")
+        for f in ("date", "dates"):
+            d = st.get(f)
+            if d is None or d == "" or d == []:
+                continue
+            for x in ([d] if isinstance(d, str) else d if isinstance(d, list) else [None]):
+                _check_mmdd(x, f"{w}: '{f}'")
+
+
+def validate_shows(val) -> None:
+    if not isinstance(val, dict):
+        raise ValueError("shows must be an object")
+    for name, sh in val.items():
+        if not isinstance(sh, dict):
+            raise ValueError(f"show '{name}' must be an object")
+        cues = sh.get("cues", [])
+        if not isinstance(cues, list) or not all(isinstance(c, dict) for c in cues):
+            raise ValueError(f"show '{name}': cues must be a list of objects")
+
+
+def validate_schedule(sch) -> None:
+    """Evaluate a schedule over the coming year: a value it can't handle (an emptied time
+    box, a bad latitude, rules: null...) would otherwise fail on every schedule tick."""
+    from datetime import datetime, timedelta
+    if not isinstance(sch, dict):
+        raise ValueError("schedule must be an object")
+    start = datetime.now().astimezone().replace(hour=0, minute=30, second=0, microsecond=0)
+    try:
+        for day in range(367):
+            for hour in (0, 12, 20):
+                sched.evaluate(start + timedelta(days=day, hours=hour), sch)
+    except Exception as e:                  # noqa: BLE001 - any failure means the schedule is unusable
+        raise ValueError(f"schedule not saved, a value is invalid ({type(e).__name__}: {e})") from None
 
 
 def make_handler(ctl: Controller, on_quit, auth: Auth):
@@ -124,7 +199,17 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
             return False
 
         # ---------------------------------------------------------- GET
+        def _no_body_expected(self):
+            """GET carries no body here. If one is announced, close the connection after the
+            reply: otherwise its bytes would be parsed as a further request on the same
+            connection, arriving from the tunnel's loopback address without proxy headers."""
+            cl = (self.headers.get("Content-Length") or "").strip()
+            if self.headers.get("Transfer-Encoding") is not None or cl not in ("", "0"):
+                self.close_connection = True
+
         def do_GET(self):
+            self._no_body_expected()
+            auth.proxied(self)            # remember a tunnelled connection (see Auth.proxied)
             u = urlparse(self.path)
             path, q = u.path, parse_qs(u.query)
             vis = self._visitor(path)
@@ -133,7 +218,7 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                     return self._json({"error": "not found"}, 404)
                 try:
                     return self._visitor_get(vis[1], q)
-                except (KeyError, ValueError, OSError):
+                except Exception:                                      # noqa: BLE001
                     log.exception("visitor page request failed")      # details stay in the log
                     return self._json({"ok": False, "error": "unavailable"}, 400)
             if not self._guard(path):
@@ -198,6 +283,9 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                     return self._send(200, json.dumps(build_report(ctl.diag), indent=2).encode())
             except (KeyError, ValueError, OSError) as e:
                 return self._json({"ok": False, "error": str(e)}, 400)
+            except Exception:                      # noqa: BLE001 - always answer, never drop the connection
+                log.exception("GET %s failed", path)
+                return self._json({"ok": False, "error": "internal error (see the log)"}, 500)
             self._json({"error": "not found"}, 404)
 
         def _stream(self):
@@ -225,6 +313,7 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
         # --------------------------------------------------------- POST
         def do_POST(self):
             path = urlparse(self.path).path
+            auth.proxied(self)            # remember a tunnelled connection (see Auth.proxied)
             # Read (or refuse) the body first, so every response leaves the connection clean.
             try:
                 ln = int(self.headers.get("Content-Length") or 0)
@@ -232,6 +321,9 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                 ln = -1
             vis = self._visitor(path)
             limit = 10_000 if vis is not None else 1_000_000
+            if self.headers.get("Transfer-Encoding") is not None:      # chunked bodies aren't read
+                self.close_connection = True
+                return self._json({"ok": False, "error": "Content-Length required"}, 411)
             if ln < 0 or ln > limit:
                 self.close_connection = True
                 return self._json({"ok": False, "error": "bad request size"}, 413)
@@ -241,7 +333,7 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
             if vis is not None:
                 if not vis[0]:
                     return self._json({"error": "not found"}, 404)
-                client = auth.client_ip(self)
+                client = auth.rate_key(auth.client_ip(self))      # an IPv6 /64 is one client
                 try:
                     b = json.loads(raw or b"{}")
                     if not isinstance(b, dict):
@@ -253,7 +345,7 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                         return self._json({"ok": True})
                 except (ValueError, TypeError) as e:
                     return self._json({"ok": False, "error": str(e)}, 429 if "again" in str(e) or "seconds" in str(e) else 400)
-                except OSError:
+                except Exception:                                  # noqa: BLE001
                     log.exception("visitor request failed")
                     return self._json({"ok": False, "error": "unavailable"}, 503)
                 return self._json({"error": "not found"}, 404)
@@ -293,6 +385,9 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                 return self._json(self._api(path[len("/api/"):], b))
             except (KeyError, ValueError, OSError, TypeError) as e:
                 return self._json({"ok": False, "error": str(e)}, 400)
+            except Exception as e:                 # noqa: BLE001 - always answer, never drop the connection
+                log.exception("POST %s failed", path)
+                return self._json({"ok": False, "error": f"bad request ({type(e).__name__})"}, 400)
 
         def _json(self, obj, code=200, headers=None):
             self._send(code, json.dumps(obj).encode(), headers=headers)
@@ -391,6 +486,10 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                     cfg.save()
                 return {"ok": True}
             if a == "schedule":
+                if not isinstance(b["schedule"], dict):
+                    raise ValueError("schedule must be an object")
+                merged = {**cfg.data.get("schedule", {}), **b["schedule"]}
+                validate_schedule(merged)
                 with cfg.lock:
                     cfg.data["schedule"] = {**cfg.data.get("schedule", {}), **b["schedule"]}
                     cfg.save()
@@ -410,11 +509,10 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                         val["token"] = ctl.vcfg["token"]           # the link only changes when asked
                     val.pop("new_link", None)
                 elif a == "shows":
-                    if not isinstance(val, dict):
-                        raise ValueError("shows must be an object")
+                    validate_shows(val)
                     val = shows_builtin.without_builtin_copies(val)     # built-ins live in code
-                elif a == "showtimes" and not isinstance(val, list):
-                    raise ValueError("showtimes must be a list")
+                elif a == "showtimes":
+                    validate_showtimes(val)
                 if a == "events":
                     if not isinstance(val, list):
                         raise ValueError("events must be a list")

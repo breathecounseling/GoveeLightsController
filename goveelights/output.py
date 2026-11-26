@@ -6,6 +6,7 @@ To add WLED later, implement Output for DDP/E1.31 and select it in config.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from typing import Protocol, Sequence
 
@@ -37,6 +38,9 @@ class GoveeRazerOutput:
         self.streamers = streamers if streamers is not None else {}
         self._last: dict[str, tuple] = {}
         self._last_t: dict[str, float] = {}
+        self._retry_at: dict[str, float] = {}    # mac -> when to retry a failed enable
+        self._retrying: set[str] = set()
+        self.retry_s = 15.0
 
     def _streamer(self, mac: str) -> Streamer:
         s = self.streamers.get(mac)
@@ -48,17 +52,40 @@ class GoveeRazerOutput:
     def start(self, force: bool = False):
         """Put every box in realtime mode. force=True re-sends the enable even if we
         think a box is already in realtime: the Govee app may have taken it back."""
-        for mac in self.devices:
-            s = self._streamer(mac)
-            s.stop_anim()
-            s.set_keepalive(0)
-            if force or not s.realtime:
-                s.enable()
+        for mac in list(self.devices):
+            try:
+                s = self._streamer(mac)
+                s.stop_anim()
+                s.set_keepalive(0)
+                if force or not s.realtime:
+                    s.enable()
+                self._retry_at.pop(mac, None)
+            except OSError as e:
+                # One unreachable box (Wi-Fi drop, stale IP) must not keep the others dark,
+                # or make going live fail; send_frame retries its enable in the background.
+                log.warning("enable %s failed: %s (will retry)", self.devices.get(mac, {}).get("name", mac), e)
+                self._retry_at[mac] = time.monotonic() + self.retry_s
         self._last.clear()                       # resend every frame
+
+    def _retry_enable(self, mac: str):
+        try:
+            self._streamer(mac).enable()
+            self._retry_at.pop(mac, None)
+            self._last.pop(mac, None)            # resend the current frame
+            log.info("enable %s succeeded on retry", mac)
+        except OSError as e:
+            log.debug("enable %s retry failed: %s", mac, e)
+            self._retry_at[mac] = time.monotonic() + self.retry_s
+        finally:
+            self._retrying.discard(mac)
 
     def send_frame(self, run_id: str, pixels: Sequence[RGB]):
         key = tuple(pixels)
         now = time.monotonic()
+        due = self._retry_at.get(run_id)
+        if due is not None and now >= due and run_id not in self._retrying:
+            self._retrying.add(run_id)           # enable sleeps ~1.3 s: keep it off the render thread
+            threading.Thread(target=self._retry_enable, args=(run_id,), daemon=True).start()
         if self._last.get(run_id) == key and now - self._last_t.get(run_id, 0) < self.refresh_s:
             return
         self._last[run_id], self._last_t[run_id] = key, now
@@ -70,8 +97,12 @@ class GoveeRazerOutput:
             log.warning("send to %s failed: %s", run_id, e)
 
     def stop(self):
-        for mac in self.devices:
-            self._streamer(mac).disable()
+        self._retry_at.clear()
+        for mac in list(self.devices):
+            try:
+                self._streamer(mac).disable()
+            except OSError as e:
+                log.warning("disable %s failed: %s", mac, e)
         self._last.clear()
 
 
@@ -161,18 +192,24 @@ class MultiOutput:
                 yield o
 
     def start(self, force: bool = False):
-        for o in self._all():
+        for o in self._all():                  # one failing output must not stop the others
             try:
-                o.start(force=force)
-            except TypeError:
-                o.start()
+                try:
+                    o.start(force=force)
+                except TypeError:
+                    o.start()
+            except OSError as e:
+                log.warning("output start failed: %s", e)
 
     def send_frame(self, run_id, pixels):
         (self.others.get(run_id) or self.govee).send_frame(run_id, pixels)
 
     def stop(self):
         for o in self._all():
-            o.stop()
+            try:
+                o.stop()
+            except OSError as e:
+                log.warning("output stop failed: %s", e)
 
     def _streamer(self, mac):
         return self.govee._streamer(mac)
