@@ -86,7 +86,7 @@ class PresetStore:
 
     def _meta(self) -> dict:
         try:
-            m = json.loads((self.user / META).read_text(encoding="utf-8"))
+            m = json.loads((self.user / META).read_text(encoding="utf-8-sig"))
             return m if isinstance(m, dict) else {}
         except (OSError, ValueError):
             return {}
@@ -107,7 +107,7 @@ class PresetStore:
         meta, out, broken = self._meta(), [], []
         for pid, f in sorted(files.items()):
             try:
-                d = json.loads(f.read_text(encoding="utf-8"))
+                d = json.loads(f.read_text(encoding="utf-8-sig"))    # -sig: a hand edit in Notepad
                 if not isinstance(d, dict):
                     raise ValueError("not a preset")
             except (OSError, ValueError) as e:
@@ -142,7 +142,7 @@ class PresetStore:
 
     def get(self, pid: str) -> dict:
         path = self._path(pid)
-        d = json.loads(path.read_text(encoding="utf-8"))
+        d = json.loads(path.read_text(encoding="utf-8-sig"))
         if self.split and path.parent == self.dir and isinstance(d, dict):
             d = self._apply_meta(pid, d, self._meta())
         return d

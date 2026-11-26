@@ -103,7 +103,7 @@ class Auth:
             self._mtime = None
             return
         if m != self._mtime:
-            with open(self.path, encoding="utf-8") as f:
+            with open(self.path, encoding="utf-8-sig") as f:
                 self.data = json.load(f)
             self.data.setdefault("sessions", {})
             self.data.setdefault("lan_without_login", True)

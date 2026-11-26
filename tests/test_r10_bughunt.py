@@ -140,5 +140,66 @@ class FourthRunTests(unittest.TestCase):
         self.assertLess(diff, len(pa) * 0.05)
 
 
+BOM = b"\xef\xbb\xbf"
+
+
+class ByteOrderMarkTests(unittest.TestCase):
+    """Windows Notepad ('UTF-8 with BOM') and Windows PowerShell's Set-Content -Encoding
+    UTF8 start a file with a byte-order mark. A hand-edited govee_config.json saved that
+    way stopped the app starting ('Unexpected UTF-8 BOM'): no lights that night."""
+
+    def setUp(self):
+        self.td = Path(tempfile.mkdtemp())
+        self.addCleanup(__import__("shutil").rmtree, self.td, True)
+
+    def write(self, name, obj) -> Path:
+        p = self.td / name
+        p.write_bytes(BOM + __import__("json").dumps(obj).encode("utf-8"))
+        return p
+
+    def test_config_with_bom_loads(self):
+        from goveelights.config import Config
+        p = self.write("govee_config.json", {"schedule": {"enabled": True, "lat": 40.0, "lon": -105.0},
+                                             "game": {"teams": []}})
+        cfg = Config(p)
+        self.assertTrue(cfg.data["schedule"]["enabled"])
+        self.assertEqual(cfg.data["schedule"]["lat"], 40.0)
+
+    def test_legacy_config_with_bom_is_migrated(self):
+        from goveelights.config import Config
+        p = self.write("govee_config.json", {"schedule": {"enabled": True}})
+        cfg = Config(p)
+        self.assertIn("schedule.lat", cfg.migrated)
+        self.assertEqual(Config(p).data["schedule"]["enabled"], True)      # and the rewrite reads back
+
+    def test_layout_file_with_bom_imports(self):
+        from test_rack import LAYOUT_FILE
+
+        from goveelights.config import Config
+        lay = __import__("json").loads(Path(LAYOUT_FILE).read_text(encoding="utf-8"))
+        p = self.write("house.json", lay)
+        cfg = Config(self.td / "cfg.json")
+        self.assertTrue(cfg.import_layout(p, create_missing=True))
+        self.assertEqual(len(cfg.devices), len(lay["devices"]))
+        cfg.data["zones"] = []
+        self.assertTrue(cfg.merge_house_layout(p))                         # its zones come across
+
+    def test_preset_with_bom_is_listed_and_plays(self):
+        from goveelights.controller import PresetStore
+        from goveelights.scene import Scene
+        d = {"name": "Hand edited", "layers": [{"effect": "solid", "params": {"color": "#ff0000"}}]}
+        self.write("hand-edited.json", d)
+        store = PresetStore(self.td)
+        self.assertIn("hand-edited", [p["id"] for p in store.list()])
+        self.assertEqual(store.get("hand-edited")["name"], "Hand edited")
+        self.assertEqual(Scene.load(self.td / "hand-edited.json").name, "Hand edited")
+
+    def test_auth_file_with_bom_loads(self):
+        from goveelights.auth import Auth
+        p = self.write("govee_auth.json", {"password": None, "sessions": {}, "lan_without_login": False})
+        a = Auth(p)
+        self.assertFalse(a.data["lan_without_login"])
+
+
 if __name__ == "__main__":
     unittest.main()

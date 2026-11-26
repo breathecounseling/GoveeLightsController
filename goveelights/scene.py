@@ -194,7 +194,7 @@ class Scene:
 
     @classmethod
     def load(cls, path: str | Path, palettes: dict | None = None) -> "Scene":
-        with open(path, encoding="utf-8") as f:
+        with open(path, encoding="utf-8-sig") as f:
             return cls.from_dict(json.load(f), palettes)
 
     @classmethod

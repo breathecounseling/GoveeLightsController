@@ -137,7 +137,7 @@ class Config:
         self.data = copy.deepcopy(DEFAULTS)
         self.migrated: list[str] = []
         if self.path.exists():
-            with open(self.path, encoding="utf-8") as f:
+            with open(self.path, encoding="utf-8-sig") as f:      # -sig: Notepad's byte-order mark
                 loaded = json.load(f)
             self.migrated = migrate_legacy_defaults(loaded)
             if self.migrated:              # written once: the file now holds what it relied on
@@ -234,7 +234,7 @@ class Config:
         """Merge a layout file ({"devices": {id: {...}}, "zones": [...]}) into this config.
         Boxes are matched by id; a layout made for other boxes (layouts/examples/) is
         mapped onto yours by run name, then by order (see _match_layout)."""
-        with open(path, encoding="utf-8") as f:
+        with open(path, encoding="utf-8-sig") as f:
             data = json.load(f)
         lay = {m: e for m, e in (data.get("devices") or {}).items() if isinstance(e, dict)}
         changed = []
@@ -309,7 +309,7 @@ class Config:
         config doesn't have (never touching yours), and the layout's run names for boxes
         still carrying discovery's placeholder name. Only when the boxes match by MAC."""
         try:
-            with open(path, encoding="utf-8") as f:
+            with open(path, encoding="utf-8-sig") as f:
                 data = json.load(f)
         except (OSError, ValueError):
             return []

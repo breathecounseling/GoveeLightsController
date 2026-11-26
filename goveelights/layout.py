@@ -104,7 +104,7 @@ def _house_names(cfg) -> list[str]:
         if not HOUSE_LAYOUT.exists():
             return []
         import json
-        data = json.loads(HOUSE_LAYOUT.read_text(encoding="utf-8"))
+        data = json.loads(HOUSE_LAYOUT.read_text(encoding="utf-8-sig"))
         devs = data.get("devices") or {}
         if not isinstance(devs, dict) or not set(devs) & set(cfg.devices):
             return []
