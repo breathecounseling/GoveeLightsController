@@ -210,6 +210,10 @@ class MatrixLayout:
         self.serpentine = bool(serpentine)
         # render at least ~384 px across (and 96 tall), at most 16x (the box filter's limit)
         self.k = max(2, min(16, int(math.ceil(max(384 / self.w, 96 / self.h)))))
+        # ...but the render frame must stay within a frame's limits (8x256: 16x would be 4096 tall)
+        while self.k > 2 and (max(self.w, self.h) * self.k > FRAME_MAX
+                              or self.w * self.h * self.k * self.k > FRAME_MAX_PIXELS):
+            self.k -= 1
         self.frame = FrameLayout(max(FRAME_MIN, self.w * self.k), max(FRAME_MIN, self.h * self.k), background)
         if (self.frame.w, self.frame.h) != (self.w * self.k, self.h * self.k):     # tiny matrices: keep it exact
             self.k = max(math.ceil(FRAME_MIN / self.w), math.ceil(FRAME_MIN / self.h))
@@ -305,11 +309,9 @@ def led_view(tile: Canvas, scale: int = 10, gap: int = 2) -> Canvas:
 def ansi(tile: Canvas, max_cols: int = 96) -> str:
     """A frame as terminal text: two pixels per character cell (upper half block), 24-bit
     colour. Bigger frames are averaged down to fit max_cols."""
-    k = 1
-    while tile.w // k > max_cols:
-        k += 1
-    if k > 1:
-        tile = box_down(_crop(tile, tile.w // k * k, tile.h // k * k), min(k, 16))
+    while tile.w > max_cols:                   # in steps of at most 16 (the box filter's limit)
+        k = min(16, -(-tile.w // max_cols))
+        tile = box_down(_crop(tile, tile.w // k * k, tile.h // k * k), k)
     lines = []
     w = tile.w
     for y in range(0, tile.h - 1, 2):

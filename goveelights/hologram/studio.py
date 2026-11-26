@@ -37,6 +37,8 @@ DISPLAYS = ("fans", "frame", "matrix")
 FRAMES = ("1280x720", "1920x1080", "3840x2160", "1024x768", "1080x1920")     # the app's choices (any WxH works)
 MATRICES = ("16x16", "32x8", "32x16", "32x32", "64x32", "64x64", "128x64")
 JOB_TIMEOUT = 20 * 60
+PREVIEW_INLINE_FRAMES = 12 * PREVIEW_FPS    # up to a 12 s loop: made in the server (as before)
+PREVIEW_TIMEOUT = 120
 _HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 _PKG_ROOT = Path(__file__).resolve().parent.parent.parent
 RESULT = "result.json"      # the last finished job, so its files survive an app restart
@@ -221,10 +223,59 @@ def _kill_tree(proc):
         pass
 
 
+def _low_priority(argv: list) -> tuple:
+    """argv, env, creationflags and Popen extras for a low-priority helper process."""
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(_PKG_ROOT) + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+    flags, extra = 0, {}
+    if os.name == "nt":            # low priority, no console window
+        flags = getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    else:                          # its own process group, so cancel also stops its ffmpegs
+        extra["start_new_session"] = True
+        if shutil.which("nice"):
+            argv = [shutil.which("nice"), "-n", "10"] + argv
+    return argv, env, flags, extra
+
+
+def _layout_spec(lay) -> dict:
+    kind = getattr(lay, "kind", "fans")
+    if kind == "frame":
+        return {"kind": kind, "w": lay.w, "h": lay.h, "background": lay.background}
+    if kind == "matrix":
+        return {"kind": kind, "w": lay.w, "h": lay.h, "gamma": lay.gamma, "serpentine": lay.serpentine,
+                "background": lay.frame.background}
+    return {"kind": "fans", "name": lay.name, "size": lay.size, "diameter": lay.diameter_cm, "spacing": lay.spacing_cm}
+
+
+def _layout_from(d: dict):
+    if d["kind"] == "frame":
+        return targets.FrameLayout(d["w"], d["h"], d["background"])
+    if d["kind"] == "matrix":
+        return targets.MatrixLayout(d["w"], d["h"], d["gamma"], d["serpentine"], d["background"])
+    return FanLayout(d["name"], size=d["size"], diameter_cm=d["diameter"], spacing_cm=d["spacing"])
+
+
+def render_preview(spec: dict) -> dict:
+    """The preview GIFs (base64) for a spec made by Studio.preview."""
+    lay = _layout_from(spec["layout"])
+    clip = Clip(spec["scene"], lay, spec["seconds"], spec["fps"], spec["colors"], spec["team"], spec["year"])
+    led = max(2, min(10, 320 // max(lay.w, lay.h))) if spec["layout"]["kind"] == "matrix" else 0
+    gifs = export.preview_gifs(clip, led_scale=led)
+    return {"tiles": [base64.b64encode(g).decode() for g in gifs], "seconds": clip.seconds, "year": clip.ctx.year}
+
+
+def _preview_main():
+    """The preview helper process: a spec on stdin, the result as JSON on stdout."""
+    spec = json.loads(sys.stdin.buffer.read().decode("utf-8"))
+    sys.stdout.write(json.dumps(render_preview(spec)))
+    sys.stdout.flush()
+
+
 class Studio:
     def __init__(self, out_dir):
         self.out = Path(out_dir).resolve()       # the job runs from another folder
         self.lock = threading.Lock()
+        self._preview_slot = threading.Lock()   # one out-of-process preview at a time
         self._cache: OrderedDict = OrderedDict()
         self._job: dict = {"state": "idle"}
         self._proc = None
@@ -279,18 +330,44 @@ class Studio:
                 self._cache.move_to_end(key)
                 return hit
         t0 = time.time()
-        clip = Clip(args["scene"], lay, args["seconds"], args["fps"], args["colors"], args["team"], args["year"])
-        led = max(2, min(10, 320 // max(lay.w, lay.h))) if args["extra"]["display"] == "matrix" else 0
-        gifs = export.preview_gifs(clip, led_scale=led)
-        res = {"ok": True, "tiles": ["data:image/gif;base64," + base64.b64encode(g).decode() for g in gifs],
+        spec = {"scene": args["scene"], "layout": _layout_spec(lay), "seconds": args["seconds"], "fps": args["fps"],
+                "colors": args["colors"], "team": args["team"], "year": args["year"]}
+        if args["seconds"] * args["fps"] > PREVIEW_INLINE_FRAMES:
+            # a long story preview is several seconds of CPU: make it in a low-priority
+            # process (one at a time) so the lights' engine in this server never waits on it
+            with self._preview_slot:
+                out = self._preview_proc(spec)
+        else:
+            out = render_preview(spec)
+        res = {"ok": True, "tiles": ["data:image/gif;base64," + g for g in out["tiles"]],
                "display": args["extra"]["display"], "out": list(getattr(lay, "out_size", (lay.size, lay.size))),
-               "layout": lay.to_dict(), "seconds": clip.seconds, "colors": args["colors"] or [],
-               "team": args["team"] or [], "year": clip.ctx.year, "ms": int((time.time() - t0) * 1000)}
+               "layout": lay.to_dict(), "seconds": out["seconds"], "colors": args["colors"] or [],
+               "team": args["team"] or [], "year": out["year"], "ms": int((time.time() - t0) * 1000)}
         with self.lock:
             self._cache[key] = res
             while len(self._cache) > 12:
                 self._cache.popitem(last=False)
         return res
+
+    def _preview_proc(self, spec: dict) -> dict:
+        argv = [sys.executable, "-c", "from goveelights.hologram.studio import _preview_main; _preview_main()"]
+        argv, env, flags, extra = _low_priority(argv)
+        try:
+            proc = subprocess.Popen(argv, cwd=str(_PKG_ROOT), env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE, creationflags=flags, **extra)
+        except OSError as e:
+            log.warning("hologram preview: no helper process (%s); making it here", e)
+            return render_preview(spec)
+        try:
+            out, err = proc.communicate(json.dumps(spec).encode(), timeout=PREVIEW_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            _kill_tree(proc)
+            raise ValueError("the preview took too long") from None
+        if proc.returncode != 0:
+            msg = err.decode("utf-8", "replace").strip().splitlines()
+            log.warning("hologram preview failed: %s", " | ".join(msg[-3:]))
+            raise ValueError("the preview could not be made")
+        return json.loads(out.decode("utf-8"))
 
     # ------------------------------------------------------------ full-size files
     def _clean(self):
@@ -341,15 +418,7 @@ class Studio:
                 argv += ["--team", ",".join(args["team"])]
             if args["year"]:
                 argv += ["--year", str(args["year"])]
-            env = dict(os.environ)
-            env["PYTHONPATH"] = str(_PKG_ROOT) + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
-            flags, extra = 0, {}
-            if os.name == "nt":            # low priority, no console window
-                flags = getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0)
-            else:                          # its own process group, so cancel also stops its ffmpegs
-                extra["start_new_session"] = True
-                if shutil.which("nice"):
-                    argv = [shutil.which("nice"), "-n", "10"] + argv
+            argv, env, flags, extra = _low_priority(argv)
             self._proc = subprocess.Popen(argv, cwd=str(_PKG_ROOT), env=env, stdin=subprocess.DEVNULL,
                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=flags, **extra)
             self._job = {"state": "running", "scene": args["scene"], "layout": lay.name, "size": size,

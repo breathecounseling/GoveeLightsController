@@ -2243,7 +2243,7 @@ async function setupFinish(){
 let HOI = null, HO = null, hoTimer = null, hoPollT = null, hoSeq = 0, hoNoCols = '';
 const HO_DEF = {scene: 'sleigh', layout: '1', diameter: 42, gap: 4, colors: '', team: null, year: null, seconds: null, fps: null, size: 720,
                 display: 'fans', frame: '1280x720', background: 'black', matrix: '64x32', gamma: 1, serp: false};
-const HO_WH = /^\s*(\d{2,4})\s*[x×*]\s*(\d{1,4})\s*$/i;
+const HO_WH = /^\s*(\d{1,4})\s*[x×*]\s*(\d{1,4})\s*$/i;
 function hoSave(){ store.set('holo', JSON.stringify(HO)) }
 async function loadHolo(){
   if (!HO){ let s = {}; try { s = JSON.parse(store.get('holo', '{}')) || {} } catch(e) {} HO = Object.assign({}, HO_DEF, s) }
@@ -2313,15 +2313,16 @@ function hoForm(){
   $('hoBlurb').textContent = sc.blurb || '';
   hoInfo(sc);
 }
-function hoWH(v, lo, hi, what){
+function hoWH(v, lo, hi, what, most){
   const m = HO_WH.exec(v || '');
   if (!m || +m[1] < lo || +m[2] < lo || +m[1] > hi || +m[2] > hi) { toast(what + ' must be width x height, each ' + lo + ' to ' + hi); return null }
+  if (+m[1] * +m[2] > most[0]) { toast(what + ' can be at most ' + most[1]); return null }
   return (+m[1]) + 'x' + (+m[2]);
 }
 function hoFrameSel(v){ if (v !== 'custom') return hoSet('frame', v); $('hoFrameCRow').style.display = ''; $('hoFrameC').value = HO.frame; $('hoFrameC').focus() }
-function hoFrameC(v){ const f = hoWH(v, 64, 3840, 'The picture'); if (f) hoSet('frame', f); else $('hoFrameC').value = HO.frame }
+function hoFrameC(v){ const f = hoWH(v, 64, 3840, 'The picture', [3840 * 2160, '4K (3840 x 2160 pixels)']); if (f) hoSet('frame', f); else $('hoFrameC').value = HO.frame }
 function hoMatrixSel(v){ if (v !== 'custom') return hoSet('matrix', v); $('hoMatrixCRow').style.display = ''; $('hoMatrixC').value = HO.matrix; $('hoMatrixC').focus() }
-function hoMatrixC(v){ const f = hoWH(v, 8, 256, 'The matrix'); if (f) hoSet('matrix', f); else $('hoMatrixC').value = HO.matrix }
+function hoMatrixC(v){ const f = hoWH(v, 8, 256, 'The matrix', [16384, '16384 LEDs (128 x 128, or 256 x 64)']); if (f) hoSet('matrix', f); else $('hoMatrixC').value = HO.matrix }
 function hoSet(k, v){ HO[k] = v; hoSave(); hoForm(); if (!['size', 'fps'].includes(k)) hoPreview() }
 function hoDiaSel(v){
   if (v !== 'custom') return hoSet('diameter', +v);

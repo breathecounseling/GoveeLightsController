@@ -3,6 +3,7 @@ averaged downsampling, raw RGB for WLED), the CLI for them, live DDP streaming a
 studio / app page."""
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
 import json
@@ -216,6 +217,12 @@ class TargetTests(unittest.TestCase):
         for bad in ((4, 4), (300, 8), (200, 200)):
             with self.assertRaises(ValueError):
                 MatrixLayout(*bad)
+        for wh in ((8, 256), (256, 8), (256, 64), (8, 8)):                     # long strips fit a render frame
+            tall = MatrixLayout(*wh)
+            self.assertEqual((tall.frame.w, tall.frame.h), (wh[0] * tall.k, wh[1] * tall.k))
+            self.assertEqual((tall.tiles(Canvas(tall.frame.w, tall.frame.h))[0].w), wh[0])
+        self.assertLessEqual(max(len(ln.split("\x1b[0m")[0].split("▀")) - 1 for ln in
+                                 ansi(Canvas(3840, 640), 96).splitlines()), 96)    # a 4K frame fits the terminal
 
     def test_wire_order(self):
         m = MatrixLayout(8, 8, serpentine=True)
@@ -383,6 +390,37 @@ class StudioTests(unittest.TestCase):
             import base64
             g = gif.decode(base64.b64decode(r["tiles"][0].split(",", 1)[1]))
             self.assertEqual(g["w"], 320)
+
+    def test_long_story_preview_is_made_out_of_process(self):
+        """A 24 s story preview is seconds of CPU: it must not run in the server (the
+        lights' engine shares its GIL). Short scenes stay in the server, as before."""
+        from unittest import mock
+
+        from goveelights.hologram import studio as st
+
+        class Ctl:
+            presets = None
+        with tempfile.TemporaryDirectory() as td:
+            s = st.Studio(td)
+            spec_seen = []
+            real = s._preview_proc
+
+            def proc(spec):
+                spec_seen.append(spec)
+                return real(spec)
+            with mock.patch.object(s, "_preview_proc", side_effect=proc), \
+                    mock.patch.object(st, "render_preview", wraps=st.render_preview) as inline:
+                r = s.preview(Ctl(), {"scene": "santa-landing", "display": "matrix", "matrix": "16x8", "seconds": 16})
+                self.assertEqual(len(spec_seen), 1)
+                self.assertEqual(inline.call_count, 0)                        # not rendered in this process
+                self.assertEqual((r["display"], r["out"], r["seconds"]), ("matrix", [16, 8], 16.0))
+                g = gif.decode(base64.b64decode(r["tiles"][0].split(",", 1)[1]))
+                self.assertEqual(len(g["frames"]), 160)
+                s.preview(Ctl(), {"scene": "snowglobe", "layout": "1", "seconds": 2})
+                self.assertEqual((len(spec_seen), inline.call_count), (1, 1))  # short: in the server
+            for lay in (FanLayout("2x3", size=96, spacing_cm=50), FrameLayout(320, 180, "night"),
+                        MatrixLayout(32, 16, 2.2, True, "night")):
+                self.assertEqual(st._layout_from(st._layout_spec(lay)).to_dict(), lay.to_dict())
 
 
 class PageTests(unittest.TestCase):
