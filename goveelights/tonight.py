@@ -9,6 +9,7 @@ never an error.
 from __future__ import annotations
 
 import logging
+import math
 import shutil
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -513,6 +514,10 @@ def _build(ctl, now: datetime, password_set) -> dict:
             checks.append(_check("schedule", OK, "Schedule on", f"{plan['day']}: {fmt_time(on)} – {fmt_time(off)}"))
     if not failed:
         checks += _program_checks(sch, d, prog, names)
+    try:
+        checks += _target_checks(ctl, prog if not failed else None, names, cfg, preset_list)
+    except Exception:                         # noqa: BLE001 - a check must not break the plan
+        logging.getLogger(__name__).exception("target check failed")
     checks += _show_checks(ctl, cfg, st_out, names)
     if missed:
         checks.append(_check("showtimes", WARN, "A showtime won't play tonight", "; ".join(missed[:3]),
@@ -623,6 +628,110 @@ def _device_checks(ctl, now: datetime) -> list[dict]:
                           ": 2D effects (tree, text, ripples) won't line up", "Map the bulbs with your camera", "map"))
     elif runs:
         out.append(_check("layout", OK, "Layout mapped", f"{len(runs)} runs placed on the house"))
+    odd = []
+    for r in runs:
+        gap = _median_gap(r)
+        if gap is not None and not (GAP_OK[0] <= gap <= GAP_OK[1]):
+            odd.append(f"{r.name}: neighbouring bulbs {gap:.2g} apart (about 1 expected)")
+    if odd:
+        out.append(_check("geometry", WARN, "The map looks stretched or squashed", "; ".join(odd) +
+                          ": an older camera map can be off; shapes won't line up",
+                          "Map that run again, or re-import layouts/house.json", "map"))
+    return out
+
+
+GAP_OK = (0.5, 2.0)                       # median spacing between neighbouring bulbs, in bulb gaps
+
+
+def _median_gap(r) -> float | None:
+    """Median distance between neighbouring visible bulbs of a mapped run (1.0 when the
+    map's scale matches the bulb spacing), or None if it isn't mapped."""
+    if not getattr(r, "geometry", None):
+        return None
+    try:
+        pos = r.positions()
+    except Exception:                     # noqa: BLE001 - a bad map is reported elsewhere
+        return None
+    hid = set(r.hidden or [])
+    gaps = sorted(math.dist(pos[k], pos[k + 1]) for k in range(len(pos) - 1)
+                  if k not in hid and k + 1 not in hid)
+    return gaps[len(gaps) // 2] if gaps else None
+
+
+def _program_presets(prog, playlists: dict) -> set:
+    if not isinstance(prog, dict):
+        return set()
+    if prog.get("playlist"):
+        pl = (playlists or {}).get(prog["playlist"])
+        items = pl.get("items", []) if isinstance(pl, dict) else []
+        return {i.get("preset") for i in items if isinstance(i, dict) and i.get("preset")}
+    return {x for x in (prog.get("preset"), prog.get("evolve")) if x}
+
+
+def _dark_targets(ctl, layout, preset_list) -> dict[str, list[str]]:
+    """{preset id: [layer targets that light no bulbs]} for this layout (cached)."""
+    key = (id(layout), tuple((p["id"], p.get("mtime")) for p in preset_list))
+    hit = getattr(ctl, "_dark_cache", None)
+    if hit and hit[0] == key:
+        return hit[1]
+    out = {}
+    for p in preset_list:
+        try:
+            d = ctl.presets.get(p["id"])
+        except (OSError, ValueError):
+            continue
+        bad = []
+        for L in d.get("layers", []) if isinstance(d, dict) else []:
+            if not isinstance(L, dict) or L.get("enabled") is False:
+                continue
+            tg = L.get("target", "all")
+            if not layout.indices(tg):
+                bad += [t for t in (tg if isinstance(tg, list) else [tg]) if t not in bad]
+        if bad:
+            out[p["id"]] = [str(t) for t in bad]
+    try:
+        ctl._dark_cache = (key, out)
+    except AttributeError:
+        pass
+    return out
+
+
+def _target_checks(ctl, prog, names: Names, cfg: dict, preset_list) -> list[dict]:
+    """Presets whose layers aim at a run or zone this layout doesn't have light nothing there
+    (zones added to the house layout after it was imported, or a box renamed)."""
+    out = []
+    layout = getattr(getattr(ctl, "engine", None), "layout", None)
+    if not layout or not layout.n:
+        return out
+    runs = {r.name for r in layout.runs} | {r.mac for r in layout.runs}
+    lost = []
+    for z in layout.zone_specs:
+        if isinstance(z, dict):
+            miss = sorted({str(pt.get("run")) for pt in z.get("parts", []) if isinstance(pt, dict)
+                           and pt.get("run") not in runs})
+            if miss:
+                lost.append(f"{z.get('name')} (needs {', '.join(miss)})")
+    if lost:
+        out.append(_check("zones", WARN, f"{len(lost)} zone{'s' if len(lost) > 1 else ''} can't find their lights",
+                          "; ".join(lost[:4]) + ": no light box has that name",
+                          "Tap to re-apply the house layout's names and zones", "house"))
+    dark = _dark_targets(ctl, layout, preset_list)
+    if dark:
+        miss = sorted({t for ts in dark.values() for t in ts})
+        tn = sorted(_program_presets(prog, cfg.get("playlists") or {}) & set(dark))
+        lvl, head = (FAIL, f"Tonight's program lights nothing on part of the house: "
+                           f"{', '.join(names.preset(x) for x in tn[:3])}") if tn else (
+            WARN, f"{len(dark)} preset{'s' if len(dark) > 1 else ''} light nothing on part of the house")
+        out.append(_check("targets", lvl, head,
+                          f"They aim at {', '.join(miss[:6])}, which your layout doesn't have"
+                          + ("" if tn else f" ({', '.join(names.preset(x) for x in sorted(dark)[:4])}"
+                             + ("…" if len(dark) > 4 else "") + ")"),
+                          "Tap to re-add the house layout's zones", "house"))
+    broken = list(getattr(ctl.presets, "broken", []) or [])
+    if broken:
+        out.append(_check("presets", WARN, f"{len(broken)} preset file{'s' if len(broken) > 1 else ''} can't be read",
+                          ", ".join(broken[:4]) + " (damaged or not a preset); they don't show in the app",
+                          "Fix or delete the file in the presets folders"))
     return out
 
 

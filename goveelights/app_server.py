@@ -17,7 +17,7 @@ from urllib.parse import parse_qs, urlparse
 from .auth import COOKIE, Auth
 from .color import hex_to_rgb
 from .config import Config
-from .controller import Controller
+from .controller import Controller, PresetStore, migrate_presets
 from .diag_server import Server, build_report, lan_ips
 from .effects import EFFECTS, GROUP_ORDER
 from .fx import FX
@@ -485,6 +485,11 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                     cfg.data["palettes"] = pals
                     cfg.save()
                 return {"ok": True}
+            if a == "layout/house":                # Tonight: re-add the house layout's zones and names
+                changed = cfg.merge_house_layout()
+                if changed:
+                    ctl.build_engine()
+                return {"ok": True, "changed": changed}
             if a == "preset/meta":
                 ctl.presets.set_meta(b["id"], b.get("favorite"), b.get("tags"))
                 return {"ok": True}
@@ -623,7 +628,16 @@ def main(argv=None):
         msg = f"Port {port} is busy ({e}). Is the app already running? Open http://localhost:{port}/"
         log.error(msg)
         raise SystemExit(msg)
-    ctl = Controller(cfg, a.bind_ip or "")
+    store = PresetStore()
+    try:
+        migrate_presets(store)                 # older versions kept your presets in presets/
+    except Exception:                          # noqa: BLE001 - never stop the app starting
+        log.exception("preset migration failed")
+    try:
+        cfg.merge_house_layout()               # zones added to layouts/house.json since the import
+    except Exception:                          # noqa: BLE001
+        log.exception("house layout merge failed")
+    ctl = Controller(cfg, a.bind_ip or "", presets=store)
     auth = Auth(Path(os.environ.get("GOVEE_AUTH", Path(cfg.path).with_name("govee_auth.json"))))
     auth.hosts = list(cfg.data["server"].get("hosts", []))    # extra home names for this PC
     done = threading.Event()

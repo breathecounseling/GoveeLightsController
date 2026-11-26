@@ -17,7 +17,7 @@ from . import evolve as evo
 from . import live, livedata, shows, tonight
 from . import shows_builtin
 from . import schedule as sched
-from .config import Config
+from .config import Config, write_json
 from .diag_server import App as DiagApp
 from .engine import Engine
 from .layout import Layout
@@ -26,6 +26,10 @@ from .scene import Scene
 
 log = logging.getLogger(__name__)
 PRESETS_DIR = Path(os.environ.get("GOVEE_PRESETS", Path(__file__).resolve().parent.parent / "presets"))
+# Your own presets, and your favourites/tags for the built-ins, live here (gitignored), so
+# `git pull` never finds local changes in the tracked presets/ folder.
+USER_PRESETS_DIR = Path(os.environ.get("GOVEE_PRESETS_USER", Path(__file__).resolve().parent.parent / "user_presets"))
+META = "_meta.json"                                # favourites/tags for built-ins; "_" can't start an id
 _ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 
 # The only colours a visitor can send (the page shows these; anything else is refused).
@@ -47,25 +51,80 @@ def slug(name: str) -> str:
 
 
 class PresetStore:
-    def __init__(self, folder: Path = PRESETS_DIR):
-        self.dir = Path(folder)
-        self.dir.mkdir(parents=True, exist_ok=True)
+    """Built-in presets (the tracked presets/ folder) overlaid by your own (user_presets/).
+    A user preset with a built-in's id replaces it; favourites and tags for built-ins are
+    kept in user_presets/_meta.json. Nothing here ever writes into the built-in folder.
+    Given one folder that isn't the default presets/, it is used for both (tests, GOVEE_PRESETS)."""
 
-    def _path(self, pid: str) -> Path:
+    def __init__(self, folder: Path = PRESETS_DIR, user: Path | None = None):
+        self.dir = Path(folder)
+        if user is None:
+            user = USER_PRESETS_DIR if self.dir.resolve() == PRESETS_DIR.resolve() else self.dir
+        self.user = Path(user)
+        self.user.mkdir(parents=True, exist_ok=True)
+        self.broken: list[str] = []                # files list() couldn't read
+        self._warned: set = set()
+
+    @property
+    def split(self) -> bool:
+        return self.user.resolve() != self.dir.resolve()
+
+    def _check(self, pid: str):
         if not _ID.match(pid or "") or pid in RESERVED:
             raise ValueError(f"bad preset id {pid!r}")
-        return self.dir / f"{pid}.json"
+
+    def _path(self, pid: str) -> Path:
+        """Where a preset is read from: your copy if you have one, else the built-in."""
+        self._check(pid)
+        up = self.user / f"{pid}.json"
+        return up if up.exists() or not self.split else self.dir / f"{pid}.json"
+
+    def builtin(self, pid: str) -> bool:
+        return self.split and _ID.match(pid or "") is not None and (self.dir / f"{pid}.json").exists()
+
+    def _meta(self) -> dict:
+        try:
+            m = json.loads((self.user / META).read_text(encoding="utf-8"))
+            return m if isinstance(m, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    @staticmethod
+    def _apply_meta(pid: str, d: dict, meta: dict) -> dict:
+        m = meta.get(pid)
+        if isinstance(m, dict):
+            for k in ("favorite", "tags"):
+                if k in m:
+                    d[k] = m[k]
+        return d
 
     def list(self) -> list[dict]:
-        out = []
-        for f in sorted(self.dir.glob("*.json")):
+        files = {f.stem: f for f in sorted(self.dir.glob("*.json")) if not f.name.startswith("_")}
+        if self.split:
+            files.update({f.stem: f for f in sorted(self.user.glob("*.json")) if not f.name.startswith("_")})
+        meta, out, broken = self._meta(), [], []
+        for pid, f in sorted(files.items()):
             try:
                 d = json.loads(f.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
+                if not isinstance(d, dict):
+                    raise ValueError("not a preset")
+            except (OSError, ValueError) as e:
+                broken.append(f.name)
+                if str(f) not in self._warned:
+                    self._warned.add(str(f))
+                    log.warning("preset %s can't be read (%s); it is left out of the app", f, e)
                 continue
-            out.append({"id": f.stem, "name": d.get("name", f.stem), "tags": d.get("tags", []),
+            if self.split and f.parent == self.dir:
+                d = self._apply_meta(pid, d, meta)
+            out.append({"id": pid, "name": d.get("name", pid), "tags": d.get("tags", []),
                         "favorite": bool(d.get("favorite")), "mtime": f.stat().st_mtime})
+        self.broken = broken
         return sorted(out, key=lambda x: x["name"].lower())
+
+    def _set_meta(self, pid: str, **kw):
+        meta = self._meta()
+        meta.setdefault(pid, {}).update(kw)
+        write_json(self.user / META, meta, indent=2)
 
     def set_meta(self, pid: str, favorite=None, tags=None):
         d = self.get(pid)
@@ -73,19 +132,107 @@ class PresetStore:
             d["favorite"] = bool(favorite)
         if tags is not None:
             d["tags"] = [str(t).strip() for t in tags if str(t).strip()]
-        self._path(pid).write_text(json.dumps(d, indent=2) + "\n", encoding="utf-8")
+        up = self.user / f"{pid}.json"
+        if self.split and not up.exists():            # a built-in: never rewrite the tracked file
+            self._set_meta(pid, **{k: d[k] for k in ("favorite", "tags") if k in d})
+        else:
+            write_json(up, d, indent=2)
 
     def get(self, pid: str) -> dict:
-        return json.loads(self._path(pid).read_text(encoding="utf-8"))
+        path = self._path(pid)
+        d = json.loads(path.read_text(encoding="utf-8"))
+        if self.split and path.parent == self.dir and isinstance(d, dict):
+            d = self._apply_meta(pid, d, self._meta())
+        return d
 
     def save(self, scene: dict, pid: str | None = None) -> str:
         Scene.from_dict(scene)                    # validate
-        pid = pid or slug(scene.get("name", "preset"))
-        self._path(pid).write_text(json.dumps(scene, indent=2) + "\n", encoding="utf-8")
+        if not pid:
+            base = pid = slug(scene.get("name", "preset"))
+            k = 2
+            while self.builtin(pid):              # a new preset never takes a built-in's id
+                pid = f"{base[:60]}-{k}"
+                k += 1
+        self._check(pid)
+        write_json(self.user / f"{pid}.json", scene, indent=2)   # a built-in: your copy replaces it
         return pid
 
     def delete(self, pid: str):
-        self._path(pid).unlink(missing_ok=True)
+        self._check(pid)
+        up = self.user / f"{pid}.json"
+        if self.builtin(pid) and not up.exists():
+            raise ValueError("built-in presets can't be deleted")
+        up.unlink(missing_ok=True)
+
+
+MIGRATED = ".migrated"
+
+
+def migrate_presets(store: PresetStore, root: Path | None = None) -> list[str]:
+    """One-time move of your own presets and favourites out of the git-tracked presets/
+    folder (older versions saved them there), so `git pull` can update the built-ins.
+    Untracked files move to user_presets/; a changed built-in becomes your copy there (or
+    just a favourite/tags entry if that is all that changed) and the built-in is restored.
+    Needs git; does nothing outside a git checkout or with a custom presets folder."""
+    import shutil
+    import subprocess
+    if not store.split or (store.user / MIGRATED).exists():
+        return []
+    root = Path(root or store.dir.parent)
+    if not (root / ".git").exists() or store.dir.resolve().parent != root.resolve():
+        return []
+    rel = store.dir.name
+
+    def git(*args) -> str:
+        return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True,
+                              encoding="utf-8", check=True, timeout=30).stdout
+    moved = []
+    try:
+        untracked = [x for x in git("ls-files", "--others", "--exclude-standard", "-z", "--", rel + "/").split("\0") if x]
+        changed = [x for x in git("diff", "HEAD", "--name-only", "-z", "--", rel + "/").split("\0") if x]
+    except (OSError, subprocess.SubprocessError) as e:
+        log.info("preset migration skipped: %s", e)
+        return []
+    for name in untracked:
+        f = root / name
+        if f.suffix != ".json" or f.parent.resolve() != store.dir.resolve():
+            continue
+        dest = store.user / f.name
+        if dest.exists():
+            log.warning("preset migration: %s is already in %s; left in place", f.name, store.user)
+            continue
+        shutil.move(str(f), str(dest))
+        moved.append(f.stem)
+    for name in changed:
+        f = root / name
+        if f.suffix != ".json" or f.parent.resolve() != store.dir.resolve():
+            continue
+        try:
+            cur = json.loads(f.read_text(encoding="utf-8")) if f.exists() else None
+            orig = json.loads(git("show", f"HEAD:{name}"))
+        except (OSError, ValueError, subprocess.SubprocessError) as e:
+            log.warning("preset migration: %s skipped (%s)", f.name, e)
+            continue
+        if isinstance(cur, dict) and isinstance(orig, dict):
+            meta = {k: cur[k] for k in ("favorite", "tags") if cur.get(k) != orig.get(k) and k in cur}
+            strip = lambda d: {k: v for k, v in d.items() if k not in ("favorite", "tags")}
+            if strip(cur) != strip(orig):
+                if (store.user / f.name).exists():
+                    log.warning("preset migration: %s is already in %s; left in place", f.name, store.user)
+                    continue
+                write_json(store.user / f.name, cur, indent=2)       # your edit, kept as your copy
+            elif meta:
+                store._set_meta(f.stem, **meta)
+        try:
+            git("checkout", "HEAD", "--", name)                     # the built-in back as shipped
+        except (OSError, subprocess.SubprocessError) as e:
+            log.warning("preset migration: couldn't restore %s (%s)", name, e)
+            continue
+        moved.append(f.stem)
+    (store.user / MIGRATED).write_text("presets moved out of presets/ into this folder\n", encoding="utf-8")
+    if moved:
+        log.info("moved %d of your presets/favourites to %s: %s", len(moved), store.user, ", ".join(moved))
+    return moved
 
 
 class Controller:

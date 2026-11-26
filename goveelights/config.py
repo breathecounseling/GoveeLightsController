@@ -3,11 +3,15 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import os
 import tempfile
 import threading
 import time
 from pathlib import Path
+
+log = logging.getLogger(__name__)
+HOUSE_LAYOUT = Path(__file__).resolve().parent.parent / "layouts" / "house.json"
 
 DEFAULT_PATH = Path(os.environ.get("GOVEE_CONFIG", Path(__file__).resolve().parent.parent / "govee_config.json"))
 
@@ -117,6 +121,16 @@ class Config:
                     self.data[k] = v
         for mac, d in self.data["devices"].items():
             self.data["devices"][mac] = {**copy.deepcopy(DEVICE_DEFAULTS), **d}
+        v = self.data.get("visitor")
+        if isinstance(v, dict) and "only_when_on" in v:         # retired: picks only play while the lights are on
+            if v.pop("only_when_on") is False:
+                log.info("visitor 'only_when_on: false' is no longer supported: visitor picks "
+                         "only play while the lights are on")
+
+    @staticmethod
+    def auto_name(mac: str, d: dict) -> bool:
+        """True if a box still has the placeholder name discovery gave it ("H805A 2E80")."""
+        return d.get("name", "") == f"{d.get('sku') or 'Govee'} {mac.replace(':', '')[-4:]}"
 
     def save(self):
         with self.lock:
@@ -167,7 +181,7 @@ class Config:
             for mac, entry in data.get("devices", {}).items():
                 d = self.devices.setdefault(mac, copy.deepcopy(DEVICE_DEFAULTS))
                 for k in ("name", "order", "reversed", "hidden", "pixel_count", "geometry", "enabled"):
-                    if k in entry and not (k == "name" and d.get("name")):
+                    if k in entry and not (k == "name" and d.get("name") and not self.auto_name(mac, d)):
                         d[k] = entry[k]
                 changed.append(d.get("name") or mac)
             if data.get("zones"):
@@ -175,4 +189,43 @@ class Config:
                 self.data["zones"] = [z for z in self.data.get("zones", []) if z.get("name") not in new] + list(new.values())
                 changed.append(f"{len(new)} zones")
             self.save()
+        return changed
+
+    def merge_house_layout(self, path=HOUSE_LAYOUT) -> list[str]:
+        """Bring in what a layout file gained since it was imported: zones whose names this
+        config doesn't have (never touching yours), and the layout's run names for boxes
+        still carrying discovery's placeholder name. Only when the boxes match by MAC."""
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            return []
+        lay = {m: e for m, e in (data.get("devices") or {}).items() if isinstance(e, dict)}
+        changed = []
+        with self.lock:
+            if not lay or not set(lay) <= set(self.devices):
+                return []
+            for mac, e in lay.items():
+                d = self.devices[mac]
+                if e.get("name") and self.auto_name(mac, d):
+                    d["name"] = e["name"]
+                    changed.append(e["name"])
+            ren = {e.get("name"): self.devices[m].get("name") for m, e in lay.items() if e.get("name")}
+            zones = self.data.get("zones")
+            zones = zones if isinstance(zones, list) else []
+            have = {z.get("name") for z in zones if isinstance(z, dict)}
+            add = []
+            for z in data.get("zones") or []:
+                if not isinstance(z, dict) or not z.get("name") or z["name"] in have:
+                    continue
+                z = copy.deepcopy(z)
+                for part in z.get("parts", []):
+                    part["run"] = ren.get(part.get("run"), part.get("run"))   # your name for that box
+                add.append(z)
+            if add:
+                self.data["zones"] = zones + add
+                changed.append(f"{len(add)} zones")
+            if changed:
+                log.info("house layout: added %s", ", ".join(changed))
+                self.save()
         return changed
