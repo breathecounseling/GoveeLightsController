@@ -268,6 +268,10 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                     return self._json(ctl.shows_list())
                 if path == "/api/schedule":
                     return self._json(ctl.cfg.data.get("schedule", {}))
+                if path == "/api/tonight":         # the plan + checklist (cached state only, no network)
+                    return self._json(ctl.tonight(password_set=auth.password_set))
+                if path == "/api/calendar":        # preview of the one-tap holiday calendar
+                    return self._json(ctl.calendar_preview())
                 if path == "/api/extras":
                     from .live import LEAGUES
                     from .pictures import PICTURES
@@ -504,6 +508,13 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                     cfg.save()
                 ctl.resume_schedule()
                 return {"ok": True}
+            if a == "calendar/apply":
+                dis = b.get("disable") or []
+                if not isinstance(dis, list):
+                    raise ValueError("disable must be a list of rule numbers")
+                return {"ok": True, **ctl.calendar_apply(dis, bool(b.get("enable")))}
+            if a == "calendar/remove":
+                return {"ok": True, **ctl.calendar_remove()}
             if a == "schedule/resume":
                 ctl.resume_schedule()
                 return {"ok": True}
