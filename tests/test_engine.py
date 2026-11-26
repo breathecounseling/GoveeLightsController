@@ -19,7 +19,7 @@ def house():
 class LayoutTests(unittest.TestCase):
     def test_virtual_strip(self):
         L = house()
-        self.assertEqual(L.n, 93 + 108)
+        self.assertEqual(L.n, 93 + 108 + 60)       # Eaves, Peak, Accent (hidden bulbs excluded)
         self.assertEqual([p.local for p in L.runs[0].pixels][-1], 92)   # hidden tail skipped
         self.assertEqual(L.pixels[93].run, "Peak")
         self.assertEqual(L.pixels[93].local, 0)
@@ -77,8 +77,10 @@ class BlendTests(unittest.TestCase):
         L = house()
         sc = Scene([Layer("solid", {"color": "#ff0000"}), Layer("solid", {"color": "#0000ff"}, target="Peak")])
         cols = sc.render(0, L)
+        peak = L.run("Peak").pixels[0].i
         self.assertEqual(cols[0], (1.0, 0.0, 0.0))
-        self.assertEqual(cols[-1], (0.0, 0.0, 1.0))
+        self.assertEqual(cols[peak], (0.0, 0.0, 1.0))
+        self.assertEqual(cols[-1], (1.0, 0.0, 0.0))
 
 
 class EngineTests(unittest.TestCase):
