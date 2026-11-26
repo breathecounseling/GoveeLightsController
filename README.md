@@ -19,7 +19,7 @@ No cloud, no account, no API key, and no dependencies beyond Python 3.10+.
 | Model | Per-bulb effects | Notes |
 |---|---|---|
 | **H805A** (permanent outdoor lights 2) | yes, tested | realtime per-bulb frames at 10-25 fps; RGB only (no white diode in realtime) |
-| **H705E** | no (one unit tested) | Wi-Fi firmware 1.01.17 did not answer LAN commands at all; newer firmware may |
+| **H705E** | no (one unit tested) | Wi-Fi firmware 1.01.17 did not answer LAN commands at all; newer firmware may. More → *Fourth run* checks it and can add it through the Govee cloud (slow): [docs/FOURTH_RUN.md](docs/FOURTH_RUN.md) |
 | Other Govee lights with **LAN Control** | likely | anything that shows a *LAN Control* switch in the Govee app may work. Please [report your model](.github/ISSUE_TEMPLATE/model-report.md), working or not |
 
 WLED controllers (ESP32 with DIY pixels) can be added alongside Govee boxes.
@@ -147,7 +147,9 @@ firewall. With several network adapters (VPN, Hyper-V, Docker), start with
 **A box is found but nothing lights up.** Open diagnostics (More → *Open diagnostics*),
 tap *Check* on the box: "ignores commands" means it answers discovery but not control
 (seen on an H705E with older firmware). Power-cycle the box and try *Enable realtime*
-twice. Please report the model and firmware.
+twice. Please report the model and firmware. More → *Fourth run* has a phone checklist
+(LAN Control switch, firmware, Wi-Fi, power-cycle), a one-tap *Is it answering now?* and,
+as a last resort, a slow Govee-cloud output: [docs/FOURTH_RUN.md](docs/FOURTH_RUN.md).
 
 **The phone page never loads.** The computer is dropping the connection: on Windows the
 network is probably marked *Public*. See *Windows firewall* below. Some routers isolate
@@ -513,6 +515,8 @@ goveelights/modulation.py   LFOs
 goveelights/palettes.py     palette library
 goveelights/engine.py       render loop, crossfades
 goveelights/output.py       output interface + Govee razer output
+goveelights/cloud.py        opt-in Govee cloud output (slow, rate-limited) + API key file
+goveelights/addrun.py       add a run to an existing house; "Is it answering now?"
 goveelights/cli.py          command line
 goveelights/controller.py   app state: presets, playlists, schedule, live/preview
 goveelights/schedule.py     sunset maths + schedule rules

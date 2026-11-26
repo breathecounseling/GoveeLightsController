@@ -13,12 +13,13 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import calendar_builtin
+from . import addrun, calendar_builtin
 from . import evolve as evo
 from . import live, livedata, shows, tonight
 from . import shows_builtin
 from . import schedule as sched
 from .audio import OFFSET_MS
+from .cloud import CloudError, CloudKey, CloudRunOutput, GoveeCloud
 from .config import Config, write_json
 from .diag_server import App as DiagApp
 from .engine import Engine
@@ -238,8 +239,15 @@ def migrate_presets(store: PresetStore, root: Path | None = None) -> list[str]:
 
 
 class Controller:
+    CLOUD_THREAD = True                             # the cloud output's own thread (tests pump it by hand)
+
     def __init__(self, cfg: Config, bind_ip: str = "", presets: PresetStore | None = None):
         self.cfg = cfg
+        # Govee cloud fallback (opt-in): the API key in its own owner-only file, next to the
+        # config and never in it; the output exists only once a run is played through it
+        self.cloud_key = CloudKey(os.environ.get("GOVEE_CLOUD", Path(cfg.path).with_name("govee_cloud.json")))
+        self.cloud_api = GoveeCloud(lambda: self.cloud_key.key)
+        self.cloud_out: CloudRunOutput | None = None
         self.diag = DiagApp(cfg, bind_ip)          # owns the UDP socket and per-device streamers
         self.lan = self.diag.lan
         self.presets = presets or PresetStore()
@@ -293,14 +301,25 @@ class Controller:
             was_live = bool(old and old.live)
             layout = Layout.from_config(self.cfg)
             refresh = float(self.ecfg.get("refresh_s", 1.0))
+            cloud = {r.mac: self.cfg.devices[r.mac] for r in layout.runs
+                     if self.cfg.devices[r.mac].get("kind", "govee") == "govee"
+                     and (self.cfg.devices[r.mac].get("cloud") or {}).get("enabled")}
             govee = {r.mac: self.cfg.devices[r.mac] for r in layout.runs
-                     if self.cfg.devices[r.mac].get("kind", "govee") == "govee"}
+                     if self.cfg.devices[r.mac].get("kind", "govee") == "govee" and r.mac not in cloud}
             wled = {r.mac: self.cfg.devices[r.mac] for r in layout.runs
                     if self.cfg.devices[r.mac].get("kind") == "wled"}
             out = GoveeRazerOutput(self.lan, govee, refresh_s=refresh, streamers=self.diag.streamers)
+            others = {}
             if wled:
                 w = WledDdpOutput(wled, refresh_s=refresh)
-                out = MultiOutput(out, {k: w for k in wled})
+                others.update({k: w for k in wled})
+            if cloud and self.cloud_out is None:
+                self.cloud_out = CloudRunOutput(self.cloud_api, self.cloud_key, thread=self.CLOUD_THREAD)
+            if self.cloud_out is not None:
+                self.cloud_out.set_devices(cloud)          # one output for the app's lifetime
+                others.update({k: self.cloud_out for k in cloud})
+            if others:
+                out = MultiOutput(out, others)
             if old:
                 old.stop(release=False)
             e = Engine(layout, out, fps=float(self.ecfg.get("fps", 20)), gamma=float(self.ecfg.get("gamma", 1.0)),
@@ -329,7 +348,8 @@ class Controller:
             if not manual:
                 return            # the schedule never interrupts diagnostics
             self.exit_diag()
-        if on and not any(d.get("ip") for d in self.cfg.devices.values() if d.get("pixel_count")):
+        if on and not any(d.get("ip") or (d.get("cloud") or {}).get("enabled")
+                          for d in self.cfg.devices.values() if d.get("pixel_count")):
             raise ValueError("no devices with a known IP; scan first")
         if manual and self.interrupt is not None:
             with self.lock:
@@ -1493,6 +1513,8 @@ class Controller:
                 d = self.cfg.devices[mac]
                 d["geometry_prev"] = d.get("geometry", [])
                 d["geometry"] = knots
+                if d.pop("geometry_guess", None):          # measured now, not a placeholder
+                    d["geometry_guess_prev"] = True
             self.cfg.save()
         self.build_engine()
         return {"mapped": len(measured), "runs": [self.cfg.devices[m].get("name") for m in geo]}
@@ -1503,6 +1525,8 @@ class Controller:
             for d in self.cfg.devices.values():
                 if "geometry_prev" in d:
                     d["geometry"], n = d.pop("geometry_prev"), n + 1
+                    if d.pop("geometry_guess_prev", None):
+                        d["geometry_guess"] = True
             self.cfg.save()
         self.build_engine()
         return n
@@ -1533,6 +1557,110 @@ class Controller:
             self.cfg.save()
         self.build_engine()
         return {"id": dev_id, "name": d["name"], "count": count}
+
+    # ------------------------------------------------- the fourth run (add a run)
+    def fourth_state(self) -> dict:
+        """More -> Fourth run: the boxes not in the show yet, where a run can go, the
+        zones it can join, and the cloud fallback (never the key itself)."""
+        L = self.engine.layout
+        zones = [z.get("name") for z in self.cfg.data.get("zones") or [] if isinstance(z, dict) and z.get("name")]
+        return {"boxes": addrun.candidates(self.cfg, L), "locations": addrun.locations(),
+                "zones": zones, "suggest": {k: addrun.suggest_zone(zones, k) for k in addrun.LOCATIONS},
+                "cloud": self.cloud_state()}
+
+    def cloud_state(self) -> dict:
+        st = {"key_set": self.cloud_key.present, "key": self.cloud_key.masked()}
+        if self.cloud_out is not None:
+            st.update(self.cloud_out.status())
+        return st
+
+    def cloud_set_key(self, key: str) -> dict:
+        self.cloud_key.set(key)
+        if self.cloud_out is not None:
+            self.cloud_out.key_changed()
+        return self.cloud_state()
+
+    def cloud_clear_key(self) -> dict:
+        self.cloud_key.clear()
+        return self.cloud_state()
+
+    def cloud_devices(self) -> list[dict]:
+        """Your Govee account's lights (one cloud request), each matched to a box here."""
+        devs = self.cloud_api.devices()
+        for d in devs:
+            d["matches"] = d["device"] if d["device"] in self.cfg.devices else None
+        return devs
+
+    def cloud_check(self, mac: str) -> dict | None:
+        """The cloud part of "Is it answering now?" (only with a key saved)."""
+        if not self.cloud_key.present:
+            return None
+        d = self.cfg.device(mac)
+        c = d.get("cloud") or {}
+        sku, dev = c.get("sku"), c.get("device")
+        try:
+            if not dev:
+                hit = next((x for x in self.cloud_api.devices() if x["device"] == mac), None)
+                if not hit:
+                    return {"step": "Govee cloud", "ok": False,
+                            "say": "not found in your Govee account under this box's id (pick it by name when adding)"}
+                sku, dev = hit["sku"], hit["device"]
+            st = self.cloud_api.state(sku, dev)
+        except CloudError as e:
+            return {"step": "Govee cloud", "ok": False, "say": str(e)}
+        on = st.get("online")
+        return {"step": "Govee cloud", "ok": bool(on) if on is not None else None,
+                "say": "online in your Govee account" if on else
+                "Govee says it is offline" if on is False else "found in your Govee account"}
+
+    def answer_check(self, mac: str) -> dict:
+        return addrun.answer_check(self, mac)
+
+    def add_run(self, b: dict) -> dict:
+        res = addrun.add_run(self.cfg, self.engine.layout, str(b["mac"]), b.get("count"), str(b.get("where", "")),
+                             str(b.get("name") or ""), b.get("join") or None, str(b.get("output") or "lan"),
+                             b.get("cloud") if isinstance(b.get("cloud"), dict) else None)
+        self.build_engine()
+        return res
+
+    def remove_run(self, mac: str) -> str:
+        nm = addrun.remove_run(self.cfg, mac)
+        self.build_engine()
+        addrun.release(self, mac)
+        return nm
+
+    def blink_run(self, mac: str) -> str:
+        """Blink one run (and nothing else) so the owner can see which it is."""
+        e = self.engine
+        r = e.layout.run(mac)
+        d = self.cfg.device(mac)
+        if self.cloud_out is not None and r and (d.get("cloud") or {}).get("enabled"):
+            self.cloud_out.blink(mac)
+            return "flashing white through the Govee cloud (give it a few seconds)"
+        if e.live and r:
+            now = time.time()
+            e.overlays["pad:blink"] = (Scene.from_dict({"layers": [{"effect": "solid", "target": r.name,
+                                                                    "params": {"color": "#ffffff"},
+                                                                    "fx": [{"type": "strobe", "params": {"rate": 2, "duty": 0.5}}]}]}),
+                                       "add", 1.0, now + 4, now, 0)
+            return "blinking white for 4 seconds"
+        if not d.get("ip"):
+            raise ValueError("it has no address yet")
+        n = int(d.get("pixel_count") or d.get("estimated_count") or 1)
+
+        def run():
+            try:
+                s = self.diag.rt(mac)
+                for _ in range(4):
+                    s.show([(255, 255, 255)] * n)
+                    time.sleep(0.5)
+                    s.show([(0, 0, 0)] * n)
+                    time.sleep(0.5)
+                addrun.release(self, mac)
+            except (OSError, ValueError) as ex:
+                log.warning("blink %s failed: %s", mac, ex)
+        threading.Thread(target=run, daemon=True).start()
+        return "blinking white"
 
     def remove_device(self, dev_id: str):
         with self.cfg.lock:
@@ -1828,8 +1956,11 @@ class Controller:
                          "override_until": self.override_until.isoformat(timespec="minutes") if self.override_until else None},
             "runs": [{"name": r.name, "mac": r.mac, "count": r.count, "visible": len(r.pixels), "trim": r.trim,
                       "kind": self.cfg.devices.get(r.mac, {}).get("kind", "govee"),
+                      "cloud": bool((self.cfg.devices.get(r.mac, {}).get("cloud") or {}).get("enabled")),
+                      "added": bool(self.cfg.devices.get(r.mac, {}).get("added_run")),
                       "ip": self.cfg.devices[r.mac].get("ip")} for r in e.layout.runs],
             "devices_without_count": [d.get("name") for d in self.cfg.devices.values() if not d.get("pixel_count")],
+            "cloud": self.cloud_state() if self.cloud_out is not None else None,
         }
 
     def layout_info(self) -> dict:
@@ -1849,3 +1980,5 @@ class Controller:
             self.engine.stop(release=True)
         finally:
             self.diag.release_all()
+            if self.cloud_out is not None:
+                self.cloud_out.close()              # sends the cloud run's power-off

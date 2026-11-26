@@ -7,6 +7,7 @@ Linux answers on all of 127.0.0.0/8; on macOS only 127.0.0.1 exists until you ad
 alias per device, e.g. `sudo ifconfig lo0 alias 127.0.0.2 up` (and .3, ...).
 razer frames with n > bulb count are ignored (as observed on H805A), or with
 --oversize dark the string goes dark (H706B, govee-local-api issue #404).
+--deaf N makes device N answer the scan but ignore every command (an H705E on old firmware).
 Add the devices in the web UI with "Add by IP" (127.0.0.2, ...)."""
 from __future__ import annotations
 
@@ -24,8 +25,9 @@ from goveelights import protocol as p  # noqa: E402
 
 
 class FakeDevice:
-    def __init__(self, ip, count, timeout, sku, idx, quiet, oversize="ignore"):
+    def __init__(self, ip, count, timeout, sku, idx, quiet, oversize="ignore", deaf=False, wifi="1.02.03"):
         self.oversize = oversize
+        self.deaf, self.wifi = deaf, wifi        # deaf: answers the scan, ignores every command
         self.ip, self.count, self.timeout, self.sku, self.quiet = ip, count, timeout, sku, quiet
         self.mac = f"AA:BB:CC:DD:EE:FF:00:{idx:02X}"
         self.on, self.bright, self.color = 1, 100, (255, 160, 60)
@@ -60,10 +62,13 @@ class FakeDevice:
         if msg.get("cmd") == "scan":
             self._reply(s, addr, {"cmd": "scan", "data": {"ip": self.ip, "device": self.mac, "sku": self.sku,
                         "bleVersionHard": "3.01.01", "bleVersionSoft": "1.00.10",
-                        "wifiVersionHard": "1.00.10", "wifiVersionSoft": "1.02.03"}})
+                        "wifiVersionHard": "1.00.10", "wifiVersionSoft": self.wifi}})
 
     def _ctl(self, s, msg, addr):
         cmd, d = msg.get("cmd"), msg.get("data", {})
+        if self.deaf:
+            self._p(f"{cmd} ignored (deaf)")
+            return
         if cmd == "devStatus":
             r, g, b = self.color
             self._reply(s, addr, {"cmd": "devStatus", "data": {"onOff": self.on, "brightness": self.bright,
@@ -133,9 +138,13 @@ def main():
     ap.add_argument("--sku", default="H805A", help="model the fakes report (default H805A)")
     ap.add_argument("--oversize", choices=["ignore", "dark"], default="ignore",
                     help="frames with n > bulbs: ignore (seen on H805A) or go dark (H706B)")
+    ap.add_argument("--deaf", type=int, action="append", default=[], metavar="N",
+                    help="device N (1 = first) answers the scan but ignores commands, as an H705E "
+                         "on Wi-Fi firmware 1.01.17 did; it reports that model and firmware")
     a = ap.parse_args()
     counts = [int(x) for x in a.counts.split(",")] if a.counts else [a.count + i for i in range(a.devices)]
-    devs = [FakeDevice(f"127.0.0.{a.base + i}", counts[i], a.timeout, a.sku, i, a.quiet, a.oversize)
+    devs = [FakeDevice(f"127.0.0.{a.base + i}", counts[i], a.timeout, "H705E" if i + 1 in a.deaf else a.sku, i,
+                       a.quiet, a.oversize, deaf=i + 1 in a.deaf, wifi="1.01.17" if i + 1 in a.deaf else "1.02.03")
             for i in range(len(counts) if a.counts else a.devices)]
     print("fake devices:", ", ".join(f"{d.ip} ({d.sku}, {d.count} bulbs)" for d in devs), flush=True)
     while True:

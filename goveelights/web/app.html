@@ -53,6 +53,17 @@ section{display:none}section.on{display:block}
 .nav button svg{width:22px;height:22px}
 .nav button.on{color:var(--text)}
 .nav button.on svg{color:var(--blue)}
+/* fourth run: 44 px touch targets */
+.fr button{min-height:44px}
+.fr .chip,.fr summary{min-height:44px}
+.fr .ok{color:var(--acc)}.fr b.bad{color:var(--bad)}.fr .warn{color:var(--warn)}
+.frb{border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px;background:var(--p2)}
+.frb .row.wrap button{flex:1 1 140px}
+.frl{margin:4px 0 8px;padding-left:18px;font-size:13px}.frl li{margin:6px 0}.frl label{align-items:flex-start;min-height:44px}
+.frs{margin:6px 0;padding-left:0;list-style:none;font-size:13px}.frs li{margin:4px 0;overflow-wrap:anywhere}
+.frv{font-size:13.5px;margin:8px 0}
+.frr{align-items:flex-start;margin:8px 0;min-height:44px;font-size:13.5px}
+.fr input[type=radio]{width:22px;height:22px;flex:none;margin-top:1px;accent-color:var(--blue)}
 /* cards */
 .card{background:var(--p1);border:1px solid var(--line);border-radius:var(--r);padding:12px;margin-bottom:12px}
 h2{font-size:15px;margin:2px 0 10px;display:flex;align-items:center;gap:8px}
@@ -418,6 +429,34 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
     <p class="help">Bulb counts, landmarks, identify: diagnostics (pauses effects while open).</p>
     <a href="/diag"><button>Open diagnostics</button></a>
   </div>
+  <div class="card fr" id="fourthCard">
+    <h2>Fourth run</h2>
+    <p class="help">A box on the network that isn't in the show yet (no bulb count, or it ignores commands). Check it, fix it from the ladder, then add it as a new run. The other runs, zones and presets stay as they are.</p>
+    <div id="frBoxes"><p class="help">Loading…</p></div>
+    <details id="frLadder"><summary><b>Ladder checklist</b> <span class="dim">(tick as you go)</span></summary>
+      <div class="grp">Before you climb</div>
+      <ol class="frl">
+        <li><label class="row"><input type="checkbox" data-k="lan"> <span>Govee Home app → that light → ⚙ settings → <b>LAN Control</b>: switch it on. No switch there? It can take several minutes to appear; if it never does, the box needs a firmware update or a re-pair to Wi-Fi.</span></label></li>
+        <li><label class="row"><input type="checkbox" data-k="fw"> <span>Same settings page → <b>Firmware update</b> (or Profile → ⚙ → Firmware update). Install anything offered; keep the app open until it finishes.</span></label></li>
+        <li><label class="row"><input type="checkbox" data-k="wifi"> <span>The box must be on the <b>same router</b> as this PC, 2.4 GHz, no guest network or Wi-Fi extender in between. Weak signal at that corner of the house? That alone can make it ignore LAN commands.</span></label></li>
+        <li><label class="row"><input type="checkbox" data-k="check1"> <span>Tap <b>Is it answering now?</b> above. If it answers, you may not need the ladder at all.</span></label></li>
+      </ol>
+      <div class="grp">Up the ladder</div>
+      <ol class="frl">
+        <li><label class="row"><input type="checkbox" data-k="cycle"> <span><b>Power-cycle</b>: unplug the controller box (or switch its outlet off) for 30 seconds, plug it back in, wait a minute.</span></label></li>
+        <li><label class="row"><input type="checkbox" data-k="plug"> <span>Check every <b>connector</b> between the box and the first bulb, and between runs: pushed fully in, nut tight, no water inside.</span></label></li>
+        <li><label class="row"><input type="checkbox" data-k="place"> <span><b>Controller box placement</b>: not inside a metal gutter or behind a downspout; the antenna side facing the house, as high and open as the cable allows.</span></label></li>
+        <li><label class="row"><input type="checkbox" data-k="label"> <span>Take a <b>photo of the label</b> on the box (model/SKU, e.g. H705E, and the MAC). Useful if Govee support or a firmware question comes up.</span></label></li>
+      </ol>
+      <div class="grp">Back on the ground</div>
+      <ol class="frl">
+        <li><label class="row"><input type="checkbox" data-k="check2"> <span>Tap <b>Is it answering now?</b> again. Answers and turns green: add it with <b>Add it to the show</b>, then <b>Blink it</b> to make sure it's the right one.</span></label></li>
+        <li><label class="row"><input type="checkbox" data-k="cloud"> <span>Still ignores commands? Add it through the <b>Govee cloud</b> (below): slow, a few colour changes a minute, but it joins the show.</span></label></li>
+      </ol>
+    </details>
+    <div class="grp">Govee cloud (slow fallback)</div>
+    <div id="frCloud"></div>
+  </div>
   <div class="card" id="secCard">
     <h2>Security</h2>
     <div id="secStatus" class="help"></div>
@@ -618,6 +657,7 @@ function tabTo(t){
   if (t === 'create' && !draft) draftLoading = editCurrent(true);
   if (t === 'shows') loadTonight();
   if (t === 'holo') loadHolo();
+  if (t === 'more') loadFourth();
 }
 document.querySelectorAll('#nav button').forEach(b => b.onclick = () => tabTo(b.dataset.t));
 function openSheet(title, body){ $('sheetTitle').textContent = title; const sb=$('sheetBody'); sb.innerHTML=''; if (typeof body === 'string') sb.innerHTML = body; else sb.appendChild(body); $('sheet').scrollTop=0; $('sheet').classList.add('on'); $('scrim').classList.add('on') }
@@ -1822,7 +1862,7 @@ async function decodeMapVideo(blob, T, progress = () => {}){
   return {points: Object.values(best).map(b => [b.id, +b.x.toFixed(1), +b.y.toFixed(1), +b.conf.toFixed(2)]), blobs: shown, noise: blobs.length - shown.length, w: W, h: H, on: onImg};
 }
 async function reloadLayout(){ LAYOUT = await get('layout'); layoutPreview(); thumbs.data = {}; mini.data = {}; document.querySelectorAll('canvas').forEach(c => c._g = null); loadPresets() }
-async function mapWizard(){
+async function mapWizard(only){
   const el = h(`<div>
     <p class="help" style="margin-top:0"><b>1.</b> Stand where you can see the part of the house you want to map, e.g. across the street facing the front gable. Landscape, no zoom, at night. Lean the phone on something so it stays still.</p>
     <p class="help"><b>2.</b> Start the pattern. The lights blink a code that repeats every ${''}13½ seconds.</p>
@@ -1861,7 +1901,7 @@ async function mapWizard(){
       const c = out.querySelector('#mImg'); c.width = res.w; c.height = res.h; const x = c.getContext('2d');
       if (res.on) x.putImageData(res.on, 0, 0);
       res.blobs.forEach(b => { x.strokeStyle = b.ok ? '#4ade80' : '#f87171'; x.lineWidth = 2; x.beginPath(); x.arc(b.x, b.y, 5, 0, 7); x.stroke() });
-      let target = LAYOUT.zones['Whole front gable'] ? 'Whole front gable' : 'all';
+      let target = only && LAYOUT.targets.includes(only) ? only : LAYOUT.zones['Whole front gable'] ? 'Whole front gable' : 'all';
       const tg = out.querySelector('#mTgt');
       const drawT = () => { tg.innerHTML = ''; ['all', ...LAYOUT.targets].forEach(n => { const b = h(`<button class="chip ${n===target?'on':''}">${n==='all'?'Everything decoded':esc(n)}</button>`); b.onclick = () => { target = n; highlight(n); drawT() }; tg.appendChild(b) }) };
       drawT();
@@ -2105,6 +2145,145 @@ async function addWled(){ const ip = $('wledIp').value.trim(); if (!ip) return t
   const r = await post('wled/add', {address: ip, name: $('wledName').value.trim()});
   if (r){ toast(`Added ${r.name}: ${r.count} pixels`); $('wledIp').value = ''; $('wledName').value = ''; reloadLayout(); refresh() } }
 async function removeWled(id, name){ if (!confirm('Remove ' + name + '?')) return; if (await post('device/remove', {id})) { toast('Removed'); reloadLayout(); refresh() } }
+
+// ------------------------------------------------------------- fourth run (add a run)
+let FOURTH = null;
+async function loadFourth(){ const f = await get('fourth').catch(() => null); if (!f) return; FOURTH = f; drawFourth() }
+const frLoc = id => ((FOURTH && FOURTH.locations) || []).find(l => l.id === id);
+function drawFourth(){
+  const f = FOURTH, box = $('frBoxes'); if (!f || !box) return;
+  box.innerHTML = '';
+  if (!f.boxes.length) box.innerHTML = '<p class="help">Every box is in the show. A box shows up here once a discovery scan finds it but it has no bulb count yet.</p>';
+  f.boxes.forEach(b => box.appendChild(frBox(b)));
+  drawCloud();
+  document.querySelectorAll('#frLadder input[type=checkbox]').forEach(c => { c.checked = store.get('fr:' + c.dataset.k, '') === '1'; c.onchange = () => store.set('fr:' + c.dataset.k, c.checked ? '1' : '') });
+}
+function frBox(b){
+  const loc = frLoc(b.where);
+  const what = b.in_show ? `In the show: ${b.pixel_count} bulbs${loc ? ' · ' + esc(loc.label) : ''}${b.joined ? ' · part of ' + esc(b.joined) : ''}${b.cloud ? ' · <b class="warn">slow, Govee cloud</b>' : ''}`
+    : 'Not in the show yet' + (b.ip ? ' · ' + esc(b.ip) : ' · no address yet');
+  const el = h(`<div class="frb">
+    <div class="row"><b class="grow">${esc(b.name)}</b><span class="dim">${esc(b.sku)}${b.wifi_fw ? ' · Wi-Fi fw ' + esc(b.wifi_fw) : ''}</span></div>
+    <p class="help">${what}</p>
+    <div class="fr-out"></div>
+    <div class="row wrap">
+      <button class="pri grow" data-a="check">Is it answering now?</button>
+      <button class="grow" data-a="add">${b.in_show ? 'Change' : 'Add it to the show'}</button>
+      ${b.in_show ? '<button class="grow" data-a="blink">Blink it</button><button class="bad grow" data-a="remove">Take it out</button>' : ''}
+    </div></div>`);
+  const out = el.querySelector('.fr-out'), q = a => el.querySelector(`[data-a=${a}]`);
+  q('check').onclick = () => frCheck(b, out, q('check'));
+  q('add').onclick = () => frAdd(b);
+  if (b.in_show){
+    q('blink').onclick = async () => { const r = await post('run/blink', {mac: b.mac}); if (r) toast(r.message) };
+    q('remove').onclick = async () => { if (!confirm(`Take ${b.name} out of the show? The other runs are not changed.`)) return;
+      if (await post('run/remove', {mac: b.mac})) { toast('Taken out'); reloadLayout(); loadFourth(); refresh() } };
+  }
+  return el;
+}
+async function frCheck(b, out, btn){
+  btn.disabled = true; const t = btn.textContent; btn.textContent = 'Checking… (about 8 s)';
+  out.innerHTML = '<p class="help">Scanning the network and asking it for its status…</p>';
+  const r = await post('fourth/check', {mac: b.mac});
+  btn.disabled = false; btn.textContent = t;
+  if (!r){ out.innerHTML = ''; return }
+  const mark = ok => ok === true ? '<b class="ok">✓</b>' : ok === false ? '<b class="bad">✗</b>' : '<b class="dim">?</b>';
+  out.innerHTML = `<ul class="frs">${r.steps.map(s => `<li>${mark(s.ok)} <b>${esc(s.step)}</b>: ${esc(s.say)}</li>`).join('')}</ul>
+    <p class="frv">${esc(r.verdict)}</p>
+    ${r.status ? `<div class="row"><button class="pri grow" data-y="1">Yes, it turned green</button><button class="grow" data-y="0">No change</button></div>` : ''}`;
+  out.querySelectorAll('[data-y]').forEach(x => x.onclick = async () => {
+    const a = await post('fourth/answer', {mac: b.mac, saw: x.dataset.y === '1'});
+    if (a) out.querySelector('.frv').textContent = a.say;
+    out.querySelectorAll('[data-y]').forEach(y => y.remove());
+    post('fourth/release', {mac: b.mac});
+    if (x.dataset.y === '1') b.realtime = true;
+  });
+}
+function frAdd(b){
+  const f = FOURTH, C = f.cloud || {};
+  let where = b.where || 'porch', out = b.cloud ? 'cloud' : (b.realtime === false ? 'cloud' : 'lan'), cdev = null;
+  const el = h(`<div class="fr">
+    <p class="help" style="margin-top:0">Adds <b>${esc(b.name)}</b> as a new run at the end of the strip. The other runs keep their bulbs, zones and looks; it shows up in every "whole house" layer, in the zone you join it to, and in presets aimed at its kind of place.</p>
+    <div class="grp">Where is it?</div><div class="tgt" id="frWhere"></div>
+    <div class="grp">Name</div><input type="text" id="frName" maxlength="40">
+    <div class="grp">Bulbs</div>
+    <div class="row"><input type="number" id="frCount" min="1" max="255" inputmode="numeric" style="width:110px" value="${b.pixel_count || b.estimated_count || 50}"><button class="grow" id="frFind">Find the count</button></div>
+    <div id="frFindBox"></div>
+    <div class="grp">Join a zone (optional)</div>
+    <select id="frJoin"><option value="">Don't join a zone</option>${f.zones.map(z => `<option>${esc(z)}</option>`).join('')}</select>
+    <p class="help">e.g. a second roofline joined to "Lower roofline" makes roofline effects run along both.</p>
+    <div class="grp">How it's driven</div>
+    <label class="row frr"><input type="radio" name="frOut" value="lan"> <span><b>Realtime over Wi-Fi</b>: per bulb, smooth, like the other three. Needs it to answer the check.</span></label>
+    <label class="row frr"><input type="radio" name="frOut" value="cloud"> <span><b>Govee cloud (slow)</b>: follows the show's colours a few times a minute, with a coarse gradient if the box supports segments. Needs an API key (below the checklist).</span></label>
+    <div id="frCloudPick"></div>
+    <button class="pri" style="width:100%;margin-top:12px" id="frGo">${b.in_show ? 'Save and blink it' : 'Add and blink it'}</button>
+  </div>`);
+  const W = el.querySelector('#frWhere'), name = el.querySelector('#frName'), join = el.querySelector('#frJoin');
+  let named = !!(b.in_show && b.name);
+  if (named) name.value = b.name;
+  name.oninput = () => named = !!name.value.trim();
+  const drawW = () => { W.innerHTML = ''; f.locations.forEach(l => { const c = h(`<button class="chip ${l.id === where ? 'on' : ''}">${esc(l.label)}</button>`);
+    c.onclick = () => { where = l.id; drawW(); if (!named) name.value = l.name; if (!b.in_show) join.value = f.suggest[l.id] || '' }; W.appendChild(c) }) };
+  drawW(); if (!named) name.value = (frLoc(where) || {}).name || '';
+  join.value = b.in_show ? (b.joined || '') : (f.suggest[where] || '');
+  const radios = el.querySelectorAll('input[name=frOut]');
+  const drawOut = () => { radios.forEach(r => r.checked = r.value === out); const cp = el.querySelector('#frCloudPick'); cp.innerHTML = '';
+    el.querySelector('#frFind').disabled = out === 'cloud';
+    if (out !== 'cloud') return;
+    if (!C.key_set){ cp.innerHTML = '<p class="help" style="color:var(--warn)">Save a Govee API key first (Fourth run card → Govee cloud).</p>'; return }
+    const pick = h('<div><button style="width:100%" id="frLoadC">Pick the light in your Govee account</button><div id="frCList"></div></div>'); cp.appendChild(pick);
+    pick.querySelector('#frLoadC').onclick = async () => { const r = await post('cloud/devices'); if (!r) return;
+      const L = pick.querySelector('#frCList'); L.innerHTML = '';
+      if (!r.devices.length) L.innerHTML = '<p class="help">No lights in that Govee account.</p>';
+      r.devices.forEach(d => { const c = h(`<button class="chip ${d.matches === b.mac ? 'on' : ''}" style="margin:6px 6px 0 0">${esc(d.name)} · ${esc(d.sku)}${d.segments ? ' · ' + d.segments + ' segments' : ''}</button>`);
+        if (d.matches === b.mac) cdev = d;
+        c.onclick = () => { cdev = d; L.querySelectorAll('.chip').forEach(x => x.classList.remove('on')); c.classList.add('on') }; L.appendChild(c) }) } };
+  radios.forEach(r => r.onchange = () => { out = r.value; drawOut() }); drawOut();
+  el.querySelector('#frFind').onclick = () => frFindCount(b, el.querySelector('#frFindBox'), el.querySelector('#frCount'));
+  el.querySelector('#frGo').onclick = async () => {
+    const body = {mac: b.mac, count: +el.querySelector('#frCount').value, where, name: name.value.trim(), join: join.value || null, output: out};
+    if (out === 'cloud'){ if (!cdev) return toast('Pick the light in your Govee account'); body.cloud = {sku: cdev.sku, device: cdev.device, segments: cdev.segments} }
+    const r = await post('run/add', body); if (!r) return;
+    toast(`${r.name}: ${r.count} bulbs${r.joined ? ', joined ' + r.joined : ''}`);
+    post('run/blink', {mac: b.mac});
+    closeSheet(); await reloadLayout(); loadFourth(); refresh();
+    if (out === 'lan' && confirm(`Map ${r.name} with the camera now? Only that run is changed; until then it sits on a straight guessed line.`)) mapWizard(r.name);
+  };
+  openSheet(b.in_show ? 'Change ' + b.name : 'Add ' + b.name, el);
+}
+/* Bisection like diagnostics: a frame with more colours than bulbs is ignored, so
+   "did it change colour?" halves the range each time. Only this box is touched. */
+function frFindCount(b, box, input){
+  const cols = [['#ff0000','red'],['#0000ff','blue'],['#00ff00','green'],['#ff00ff','pink']];
+  let lo = 0, hi = 256, n = Math.min(255, +input.value || 50), k = 0;
+  const ask = async () => {
+    if (hi - lo <= 1){ input.value = Math.max(1, lo); box.innerHTML = `<p class="help">The run has <b>${lo}</b> bulbs (count saved when you add it).</p>`; post('fourth/release', {mac: b.mac}); return }
+    const [c, word] = cols[k++ % cols.length];
+    const r = await post('fourth/solid', {mac: b.mac, n, color: c}); if (!r){ box.innerHTML = ''; return }
+    box.innerHTML = `<p class="help">Sent ${n} × ${word}. Somewhere you can see part of the run: did it turn <b>${word}</b>? <span class="dim">(between ${Math.max(1, lo)} and ${hi - 1})</span></p>
+      <div class="row"><button class="pri grow" data-y="1">Yes, ${word}</button><button class="grow" data-y="0">No change / dark</button><button data-y="x">Stop</button></div>`;
+    box.querySelectorAll('[data-y]').forEach(x => x.onclick = () => { const y = x.dataset.y;
+      if (y === 'x'){ box.innerHTML = ''; post('fourth/release', {mac: b.mac}); return }
+      if (y === '1') lo = n; else hi = n;
+      n = hi >= 256 && y === '1' ? Math.min(255, n * 2) : Math.floor((lo + hi) / 2);
+      if (n <= lo) n = lo + 1;
+      ask() });
+  };
+  ask();
+}
+function drawCloud(){
+  const C = (FOURTH && FOURTH.cloud) || {}, box = $('frCloud'); if (!box) return;
+  const use = C.runs && C.runs.length ? `<p class="help">Playing through the cloud: <b>${esc(C.runs.join(', '))}</b> · ${C.sent_today} of ${C.daily_budget} requests today (Govee allows ${C.govee_daily_limit}) · at most ${C.per_minute} a minute${C.paused_for ? ` · <span class="warn">paused ${fmtS(C.paused_for)}</span>` : ''}${C.stopped || C.last_error ? `<br><span class="warn">${esc(C.stopped || C.last_error)}</span>` : ''}</p>` : '';
+  box.innerHTML = '';
+  const el = h(C.key_set ? `<div><p class="help">API key saved (<code>${esc(C.key)}</code>), kept in its own file next to the config, never in it.</p>${use}
+      <button class="bad" id="frKeyDel">Remove the key</button></div>`
+    : `<div><p class="help">Only if the box never answers on the LAN. Get a key in the Govee Home app: Profile → ⚙ Settings → <b>Apply for API Key</b> (it arrives by email). The run then follows the show's colours a few times a minute: slow, but part of it.</p>
+      <div class="row"><input type="password" id="frKey" placeholder="Paste the API key" autocomplete="off" class="grow"><button class="pri" id="frKeySave">Save</button></div></div>`);
+  box.appendChild(el);
+  const del = el.querySelector('#frKeyDel'), sv = el.querySelector('#frKeySave');
+  if (del) del.onclick = async () => { if (!confirm('Remove the Govee API key? Cloud runs stop changing.')) return; const r = await post('cloud/key/clear'); if (r){ FOURTH.cloud = r.cloud; drawCloud() } };
+  if (sv) sv.onclick = async () => { const k = el.querySelector('#frKey'); const r = await post('cloud/key', {key: k.value}); k.value = ''; if (r){ toast('Key saved'); FOURTH.cloud = r.cloud; drawCloud() } };
+}
 
 // ------------------------------------------------------------- colour match
 let whiteOn = false;

@@ -24,7 +24,8 @@ from .fx import FX
 from .modulation import SHAPES, SOURCES
 from .palettes import BUILTIN, all_palettes, categories
 from .scene import BLEND_INFO, BLENDS
-from . import calendar_builtin
+from . import addrun, calendar_builtin
+from .cloud import CloudError
 from . import firstrun
 from . import tonight
 from . import schedule as sched
@@ -278,6 +279,8 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                     return self._json(ctl.status())
                 if path == "/api/layout":
                     return self._json(ctl.layout_info())
+                if path == "/api/fourth":             # More -> Fourth run (never the API key itself)
+                    return self._json(ctl.fourth_state())
                 if path == "/api/effects":
                     return self._json({"effects": [e.to_dict() for e in EFFECTS.values()],
                                        "fx": [f.to_dict() for f in FX.values()], "blends": BLENDS,
@@ -517,6 +520,31 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                 ctl.play_scene(b["scene"], {"kind": "scene", "name": b["scene"].get("name", "untitled"),
                                             "id": b.get("id")}, fade=0, continuous=True)
                 return {"ok": True}
+            if a == "fourth/check":                 # "Is it answering now?"
+                return {"ok": True, **ctl.answer_check(str(b["mac"]))}
+            if a == "fourth/answer":                # did the test turn the run green?
+                return {"ok": True, "say": addrun.razer_answer(ctl, str(b["mac"]), bool(b.get("saw")))}
+            if a == "fourth/solid":                 # count finder on that box only
+                return {"ok": True, **addrun.solid(ctl, str(b["mac"]), int(b.get("n", 1)), str(b.get("color", "#00ff00")))}
+            if a == "fourth/release":
+                addrun.release(ctl, str(b["mac"]))
+                return {"ok": True}
+            if a == "run/add":
+                return {"ok": True, **ctl.add_run(b)}
+            if a == "run/remove":
+                return {"ok": True, "name": ctl.remove_run(str(b["mac"]))}
+            if a == "run/blink":
+                return {"ok": True, "message": ctl.blink_run(str(b["mac"]))}
+            if a == "cloud/key":                    # stored in its own owner-only file, answered masked
+                k = b.get("key")
+                return {"ok": True, "cloud": ctl.cloud_set_key(k if isinstance(k, str) else "")}
+            if a == "cloud/key/clear":
+                return {"ok": True, "cloud": ctl.cloud_clear_key()}
+            if a == "cloud/devices":
+                try:
+                    return {"ok": True, "devices": ctl.cloud_devices()}
+                except CloudError as e:
+                    raise ValueError(str(e)) from None
             if a == "wled/add":
                 return {"ok": True, **ctl.add_wled(str(b["address"]), str(b.get("name", "")))}
             if a == "device/remove":

@@ -30,6 +30,13 @@
 | realtime timeout | none seen in 45 s without frames | - | - |
 | white diode | not reachable: 4-byte frames are read as RGB triplets, so realtime is RGB only | same | - |
 
+## The fourth run (the H705E)
+
+More → *Fourth run* in the app (details in [FOURTH_RUN.md](FOURTH_RUN.md)): it lists the
+H705E, checks it in one tap, and adds it as a run without touching Eaves, Peak, Accent or
+their zones. If it never answers on the LAN, paste a Govee API key there and add it with
+*Govee cloud (slow)*. Nothing changes for the show until you add it.
+
 ## Project diary
 
 * Phase 1: diagnostics (`python -m goveelights diag`): discovery, bulb counts, walker and

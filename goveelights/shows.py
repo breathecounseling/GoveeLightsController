@@ -116,7 +116,7 @@ def fit_mapping(layout, points, only: list[int] | None = None) -> dict[int, tupl
     Bulbs of runs without a shape (placeholders below the house) are placed with the
     transform fitted on the shaped runs, not matched to their placeholder line."""
     px = layout.pixels
-    shaped = {r.mac for r in layout.runs if r.geometry}
+    shaped = {r.mac for r in layout.runs if r.geometry and not getattr(r, "guess", False)}   # not a placeholder guess
     allm = {}
     for p in points:                                  # [id, x, y, (conf)]
         i, x, y = int(p[0]), float(p[1]), float(p[2])
@@ -222,7 +222,7 @@ def merged_geometry(layout, measured: dict[int, tuple[float, float]], max_gap: i
         est = r.positions()
         pos = {p.local: measured[p.i] for p in r.pixels if p.i in measured}
         known = sorted(pos)
-        if not r.geometry and known:
+        if (not r.geometry or getattr(r, "guess", False)) and known:
             # no old shape (a new strip): its (i, 0) estimate is meaningless, so carry the
             # measured bulbs on past both ends, along the last few measured bulbs
             est = _extend(known, pos, r.count)
