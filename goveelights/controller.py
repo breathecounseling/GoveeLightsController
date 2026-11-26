@@ -12,8 +12,9 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from . import calendar_builtin
 from . import evolve as evo
-from . import live, livedata, shows
+from . import live, livedata, shows, tonight
 from . import shows_builtin
 from . import schedule as sched
 from .config import Config
@@ -118,6 +119,7 @@ class Controller:
         self._sched_key = "unset"
         self.sched_status: dict = {}
         self._stop = threading.Event()
+        self.started = time.time()
         self.build_engine()
         self.diag.scan()
         threading.Thread(target=self._tick_loop, name="controller", daemon=True).start()
@@ -1412,6 +1414,80 @@ class Controller:
             self.run_program(di["program"], manual=False, fade=8.0)
         except (OSError, ValueError) as e:
             log.warning("program after the dusk intro failed: %s", e)
+
+    # ------------------------------------------------- tonight + calendar
+    def tonight(self, password_set: bool | None = None) -> dict:
+        """The plan and readiness checks for the next (or current) evening. Cached state only."""
+        return tonight.build(self, datetime.now().astimezone(), password_set)
+
+    def _calendar(self) -> tuple[list[str], dict]:
+        ids = [p["id"] for p in self.presets.list()]
+        return ids, calendar_builtin.build(ids, [s["name"] for s in self.shows_list()])
+
+    def calendar_preview(self) -> dict:
+        """What "Use the holiday calendar" would add, in date order from today."""
+        ids, cal = self._calendar()
+        cfg = self.cfg.data
+        sch = cfg.get("schedule") or {}
+        today = datetime.now().astimezone().date()
+        names = tonight.Names({p["id"]: p["name"] for p in self.presets.list()},
+                              {**(cfg.get("playlists") or {}), **cal["playlists"]})
+        rules = []
+        for k, r in enumerate(cal["rules"]):
+            rng = calendar_builtin.next_range(r, today)
+            rules.append({"name": r["name"], "from": r["from"], "to": r["to"], "days": r.get("days"),
+                          "dates": calendar_builtin.fmt_range(rng, r.get("days")),
+                          "start": rng[0].isoformat() if rng else "", "now": bool(rng and rng[0] <= today),
+                          "program": r["program"], "program_name": names.program(r["program"]),
+                          "program_detail": names.program_detail(r["program"]),
+                          "about": cal["notes"].get(r["name"], ""), "off_time": r.get("off_time"), "priority": k})
+        rules.sort(key=lambda x: (x["start"] or "9999", x["priority"]))
+        sts = [{"show": st["show"], "date": st.get("date", ""), "time": tonight.fmt_time(
+                    datetime.combine(today, sched._hm(st["from"]))),
+                "dates": calendar_builtin.fmt_range(calendar_builtin.next_range(
+                    {"from": st["date"], "to": st["date"]}, today)) if st.get("date") else "every day",
+                "about": cal["notes"].get("show:" + st["show"], ""), "forced": not st.get("only_when_on", True)}
+               for st in cal["showtimes"]]
+        merged = calendar_builtin.merge(cal, sch, cfg.get("playlists") or {}, [], ids)[0]
+        return {"rules": rules, "showtimes": sts, "skipped": cal["skipped"],
+                "playlists": {n: names.program_detail({"playlist": n}) for n in cal["playlists"]},
+                "shadows": calendar_builtin.shadows(sch, cal, today),
+                "installed": calendar_builtin.installed(sch), "schedule_enabled": bool(sch.get("enabled")),
+                "default": names.program(sch.get("default")), "default_after": names.program(merged.get("default")),
+                "default_changes": merged.get("default") != sch.get("default")}
+
+    def calendar_apply(self, disable=None, enable: bool = False) -> dict:
+        """Merge the calendar into the schedule (replacing an earlier copy of it)."""
+        from .app_server import validate_schedule, validate_showtimes
+        ids, cal = self._calendar()
+        disable = [int(k) for k in (disable or []) if isinstance(k, (int, float)) and not isinstance(k, bool)]
+        with self.cfg.lock:
+            d = self.cfg.data
+            sch, pls, sts = calendar_builtin.merge(cal, d.get("schedule") or {}, d.get("playlists") or {},
+                                                  d.get("showtimes") or [], ids, disable)
+            if enable:
+                sch["enabled"] = True
+            validate_schedule(sch)
+            validate_showtimes(sts)
+            d["schedule"], d["playlists"], d["showtimes"] = sch, pls, sts
+            self.cfg.save()
+        self.resume_schedule()
+        log.info("holiday calendar: %d rules, %d showtimes, %d skipped", len(cal["rules"]),
+                 len(cal["showtimes"]), len(cal["skipped"]))
+        return {"rules": len(cal["rules"]), "showtimes": len(cal["showtimes"]), "playlists": len(cal["playlists"]),
+                "skipped": cal["skipped"]}
+
+    def calendar_remove(self) -> dict:
+        """Take the calendar out again; rules it switched off come back on."""
+        with self.cfg.lock:
+            d = self.cfg.data
+            sch, pls, sts = calendar_builtin.strip(d.get("schedule") or {}, d.get("playlists") or {},
+                                                   d.get("showtimes") or [])
+            back = calendar_builtin.reenable(sch)
+            d["schedule"], d["playlists"], d["showtimes"] = sch, pls, sts
+            self.cfg.save()
+        self.resume_schedule()
+        return {"reenabled": back}
 
     # ---------------------------------------------------------- status
     def status(self) -> dict:

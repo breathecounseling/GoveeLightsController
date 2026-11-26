@@ -176,6 +176,39 @@ h2 .sp{flex:1}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:13.5px}.kv b{color:var(--dim);font-weight:500}
 .stops{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .palbar{height:22px;border-radius:8px;border:1px solid var(--line);margin:6px 0}
+/* tonight */
+.card.flash{animation:flash 1.6s ease-out}
+@keyframes flash{0%,30%{box-shadow:0 0 0 2px var(--blue)}100%{box-shadow:0 0 0 0 transparent}}
+#tonight .tnday{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+#tonight .tnhead{font-size:17px;font-weight:700;line-height:1.3;margin:2px 0 8px}
+#tonight .tnhead.off{color:var(--warn)}
+.tnchips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px}
+.tnchips span{font-size:12px;padding:3px 9px;border-radius:99px;background:var(--p2);border:1px solid var(--line);color:var(--dim)}
+.tnchips span.on{color:var(--text);border-color:#2f6f4a}
+.tl{list-style:none;margin:0 0 6px;padding:0 0 0 2px}
+.tl li{display:grid;grid-template-columns:64px 14px 1fr;gap:6px;align-items:start;padding:4px 0;font-size:13.5px}
+.tl li .t{color:var(--dim);font-variant-numeric:tabular-nums;text-align:right;font-size:12.5px;padding-top:1px}
+.tl li i{width:10px;height:10px;border-radius:50%;margin-top:4px;background:var(--line);display:block;justify-self:center}
+.tl li.on i{background:var(--acc);box-shadow:0 0 6px var(--acc)}.tl li.program i{background:var(--blue)}.tl li.show i{background:var(--mod)}
+.tl li.event i{background:var(--warn)}.tl li.game i{background:#fb923c}.tl li.dim i{background:#64748b}.tl li.off i{background:#0b0e13;border:2px solid var(--dim)}
+.tl li small{display:block;color:var(--dim);font-size:11.5px}
+.ck{display:flex;gap:9px;align-items:flex-start;width:100%;text-align:left;background:none;border:none;border-radius:10px;padding:7px 4px;min-height:40px}
+button.ck:active{background:var(--p2)}
+.ck .dot{flex:none;width:11px;height:11px;border-radius:50%;margin-top:4px;background:var(--acc)}
+.ck.warn .dot{background:var(--warn)}.ck.fail .dot{background:var(--bad);box-shadow:0 0 6px var(--bad)}
+.ck b{display:block;font-size:13.5px;font-weight:600}.ck span{display:block;font-size:12px;color:var(--dim)}
+.ck em{display:block;font-style:normal;font-size:12px;color:var(--blue);margin-top:1px}
+.ck .go{margin-left:auto;color:var(--dim);flex:none;padding-top:2px}
+.cksum{font-size:13px;margin:4px 0}
+details.okl summary{font-size:12.5px;color:var(--dim);padding:6px 4px;cursor:pointer}
+.calr{display:grid;grid-template-columns:96px 1fr;gap:8px;padding:7px 0;border-bottom:1px solid #222a35;font-size:13.5px}
+.calr:last-child{border-bottom:none}
+.calr .d{color:var(--dim);font-size:12.5px;font-variant-numeric:tabular-nums}
+.calr b{display:block}.calr span{display:block;font-size:12px;color:var(--dim)}
+.calr.now .d{color:var(--acc);font-weight:600}
+.rbadge{font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#93c5fd;background:#132033;border:1px solid #1e3a5f;border-radius:99px;padding:2px 7px;align-self:center;justify-self:start}
+.rule.calrule{border-color:#1e3a5f}
+.rule.off{opacity:.55}
 </style>
 </head>
 <body>
@@ -238,6 +271,10 @@ h2 .sp{flex:1}
 
 <!-- SHOWS -->
 <section id="s-shows">
+  <div class="card" id="tonight">
+    <h2><span class="sp tnday" id="tnDay">Tonight</span><button class="sm ghost" onclick="loadTonight()" aria-label="Refresh the plan">↻</button></h2>
+    <div id="tnBody" class="dim">Loading…</div>
+  </div>
   <div class="seg" id="showSeg"><button data-v="lists" class="on">Playlists</button><button data-v="shows">Shows</button><button data-v="sched">Schedule</button><button data-v="live">Live</button></div>
   <div id="v-lists">
     <div class="card">
@@ -296,7 +333,7 @@ h2 .sp{flex:1}
   </div>
   <div id="v-sched" style="display:none">
     <div class="card" id="schedStatus"></div>
-    <div class="card">
+    <div class="card" id="schedCard">
       <label class="row"><input type="checkbox" id="scEn"> <b>Run on a schedule</b></label>
       <p class="help">Turns on in the evening and off at a set time. Playing something by hand pauses it until the next on/off time.</p>
       <div class="row"><span style="width:56px">On</span><select id="scOn" onchange="scUI()" style="width:auto"><option value="sunset">Sunset</option><option value="time">Fixed time</option></select>
@@ -306,7 +343,7 @@ h2 .sp{flex:1}
       <p class="help">…unless a date rule matches (first match wins; ranges can wrap the year).</p>
       <div id="rules"></div>
       <p class="help">Dates can be MM-DD or a holiday: <code>thanksgiving</code>, <code>easter</code>, <code>mothers-day</code>, <code>fathers-day</code>, <code>memorial-day</code>, <code>labor-day</code>, <code>mlk-day</code>, <code>presidents-day</code>, with an offset like <code>thanksgiving+1</code>. Leave the dates empty and pick days for a weekly rule (e.g. stay on later Fri/Sat).</p>
-      <button onclick="addRule()">+ Rule</button>
+      <div class="row wrap"><button onclick="addRule()">+ Rule</button><button class="grow" id="calBtn" onclick="calendarSheet()">📅 Use the holiday calendar</button></div>
       <div class="grp">Dusk intro</div>
       <div class="row"><span>Play Sky for</span><input id="scDusk" type="number" min="0" max="120" step="5" inputmode="numeric" style="width:80px"><span class="dim">min (0 = off)</span></div>
       <p class="help">Plays Sky at dusk when the lights come on, then your program.</p>
@@ -340,7 +377,7 @@ h2 .sp{flex:1}
     <div class="knob"><label>Re-enable every</label><select id="reEn" onchange="post('settings',{reenable_min:+this.value})"><option value="0">never</option><option value="5">5 min</option><option value="15">15 min</option><option value="60">hour</option></select><span></span></div>
     <p class="help">Only turn on "re-enable every" if re-sending realtime doesn't make your boxes blink (try Enable realtime twice in diagnostics).</p>
   </div>
-  <div class="card">
+  <div class="card" id="mapCard">
     <h2>Map the bulbs with your camera</h2>
     <p class="help">Makes 2D effects (ripples, sweeps, pictures, fire rising) line up with the real roofline. The lights blink a code, you film them for ~25 seconds, and your phone works out where every bulb is. Nothing is uploaded.</p>
     <div class="row"><button class="pri grow" onclick="mapWizard()">Start mapping</button><button onclick="post('map/undo').then(r=>r&&(toast(r.restored?'Previous layout restored':'Nothing to undo'), reloadLayout()))">Undo last</button></div>
@@ -409,14 +446,16 @@ function tabTo(t){
   document.querySelectorAll('main section').forEach(s => s.classList.toggle('on', s.id === 's-'+t));
   store.set('tab', t); window.scrollTo(0,0);
   if (t === 'create' && !draft) draftLoading = editCurrent(true);
+  if (t === 'shows') loadTonight();
 }
 document.querySelectorAll('#nav button').forEach(b => b.onclick = () => tabTo(b.dataset.t));
 function openSheet(title, body){ $('sheetTitle').textContent = title; const sb=$('sheetBody'); sb.innerHTML=''; if (typeof body === 'string') sb.innerHTML = body; else sb.appendChild(body); $('sheet').scrollTop=0; $('sheet').classList.add('on'); $('scrim').classList.add('on') }
 function closeSheet(){ $('sheet').classList.remove('on'); $('scrim').classList.remove('on') }
-document.querySelectorAll('#showSeg button').forEach(b => b.onclick = () => {
-  document.querySelectorAll('#showSeg button').forEach(x => x.classList.toggle('on', x===b));
-  ['lists','shows','sched','live'].forEach(v => $('v-'+v).style.display = b.dataset.v===v ? '' : 'none');
-});
+function segTo(v){
+  document.querySelectorAll('#showSeg button').forEach(x => x.classList.toggle('on', x.dataset.v===v));
+  ['lists','shows','sched','live'].forEach(k => $('v-'+k).style.display = v===k ? '' : 'none');
+}
+document.querySelectorAll('#showSeg button').forEach(b => b.onclick = () => segTo(b.dataset.v));
 
 // ------------------------------------------------------------- preview
 const cv = $('pv'), cx = cv.getContext('2d');
@@ -1054,10 +1093,11 @@ function mnUI(){ $('mnOffT').style.display = $('mnOff').value === 'time' ? '' : 
 function scUI(){ const sun = $('scOn').value==='sunset'; $('scOffW').style.display = sun?'':'none'; $('scOnTime').style.display = sun?'none':'' }
 function drawRules(){ const rs = SCH.rules = SCH.rules || [];
   const D = ['Mo','Tu','We','Th','Fr','Sa','Su'];
-  $('rules').innerHTML = rs.map((r,k) => `<div class="rule"><input type="text" class="full" placeholder="Name" value="${esc(r.name)}" data-r="${k}" data-f="name"><input type="text" placeholder="from (MM-DD / holiday)" value="${esc(r.from||'')}" data-r="${k}" data-f="from"><input type="text" placeholder="to" value="${esc(r.to||'')}" data-r="${k}" data-f="to">
+  $('rules').innerHTML = rs.map((r,k) => `<div class="rule ${r.calendar?'calrule':''} ${r.enabled===false?'off':''}">${r.calendar?'<span class="rbadge full">📅 holiday calendar</span>':''}<input type="text" class="full" placeholder="Name" value="${esc(r.name)}" data-r="${k}" data-f="name"><input type="text" placeholder="from (MM-DD / holiday)" value="${esc(r.from||'')}" data-r="${k}" data-f="from"><input type="text" placeholder="to" value="${esc(r.to||'')}" data-r="${k}" data-f="to">
      <div class="full days">${D.map((d,i) => `<button class="${(r.days||[]).includes(i)?'on':''}" data-r="${k}" data-day="${i}">${d}</button>`).join('')}<span class="dim" style="font-size:11px;align-self:center;margin-left:4px">days (none = every day)</span></div>
      <div><label class="dim" style="font-size:11px">On time (optional)</label><input type="time" value="${esc(r.on_time||'')}" data-r="${k}" data-f="on_time"></div><div><label class="dim" style="font-size:11px">Off time (optional)</label><input type="time" value="${esc(r.off_time||'')}" data-r="${k}" data-f="off_time"></div>
-     <select class="full" data-r="${k}" data-f="program"><option value="-">(keep the usual program)</option>${progOpts(r.program)}</select><button class="sm bad" data-del="${k}">Remove</button></div>`).join('');
+     <select class="full" data-r="${k}" data-f="program"><option value="-">(keep the usual program)</option>${progOpts(r.program)}</select><label class="row"><input type="checkbox" data-en="${k}" ${r.enabled!==false?'checked':''}> On</label><button class="sm bad" data-del="${k}">Remove</button></div>`).join('');
+  $('rules').querySelectorAll('[data-en]').forEach(c => c.onchange = () => { const r = rs[+c.dataset.en]; if (c.checked){ delete r.enabled; delete r.calendar_off } else r.enabled = false; c.closest('.rule').classList.toggle('off', !c.checked) });
   $('rules').querySelectorAll('[data-day]').forEach(b => b.onclick = () => { const r = rs[+b.dataset.r], d = +b.dataset.day; r.days = r.days||[]; r.days = r.days.includes(d) ? r.days.filter(x=>x!==d) : [...r.days, d].sort(); drawRules() });
   $('rules').querySelectorAll('select[data-f=program]').forEach(sel => { const r = rs[+sel.dataset.r]; if (r.program === undefined || r.program === null && r._keep) sel.value = '-' });
   $('rules').querySelectorAll('[data-f]').forEach(el => el.onchange = () => { const r = rs[+el.dataset.r], f = el.dataset.f;
@@ -1069,7 +1109,7 @@ async function saveSchedule(){ for (const r of SCH.rules){ if ((r.from || r.to) 
   SCH.dim = {enabled: $('dmEn').checked, from: $('dmFrom').value || '22:00', level: (+$('dmLvl').value || 50)/100, fade_min: (SCH.dim||{}).fade_min || 30};
   SCH.morning = {...(SCH.morning||{}), enabled: $('mnEn').checked, on_time: $('mnOn').value || '06:00', off: $('mnOff').value, off_time: $('mnOffT').value || '07:30'};
   Object.assign(SCH, {enabled:$('scEn').checked, on:$('scOn').value, on_offset_min:+$('scOffset').value, on_time:$('scOnTime').value, off_time:$('scOff').value, default:keepProg(SCH.default, $('scDefault').value), dusk_intro_minutes: Math.max(0, Math.min(120, Math.round(+$('scDusk').value || 0))), lat:+$('scLat').value, lon:+$('scLon').value});
-  if (await post('schedule',{schedule:SCH})){ toast('Schedule saved'); setTimeout(refresh,300) } }
+  if (await post('schedule',{schedule:SCH})){ toast('Schedule saved'); setTimeout(refresh,300); loadTonight() } }
 const tfmt = iso => iso ? new Date(iso).toLocaleString([], {weekday:'short', hour:'numeric', minute:'2-digit'}) : '';
 function progName(p){ if (!p) return 'lights off'; if (p.playlist) return 'playlist '+p.playlist; if (p.evolve){ const f = PRESETS.find(x=>x.id===p.evolve); return (f ? f.name : p.evolve) + ' (evolving)' } const f = PRESETS.find(x=>x.id===p.preset); return f ? f.name : p.preset }
 function schedStatus(){ const s = ST.schedule || {}; let x;
@@ -1078,6 +1118,82 @@ function schedStatus(){ const s = ST.schedule || {}; let x;
   else x = `<b>Off now</b><br><span class="dim">Next on ${tfmt(s.on)}: ${esc(progName(s.next_program))} (${esc(s.rule)})</span>`;
   if (s.enabled && s.override_until) x += `<div style="color:var(--warn);margin-top:6px">Paused by a manual change until ${tfmt(s.override_until)}. <button class="sm" onclick="post('schedule/resume').then(()=>setTimeout(refresh,300))">Resume</button></div>`;
   $('schedStatus').innerHTML = x }
+
+// ------------------------------------------------------------- tonight
+/* The plan for the next (or current) evening and a readiness checklist; tap a problem to go and fix it. */
+let TN = null, tnBusy = false;
+async function loadTonight(){
+  if (tnBusy) return; tnBusy = true;
+  try { TN = await get('tonight') } catch(e){ if ($('tnBody').dataset.ok !== '1') $('tnBody').textContent = "Couldn't work out tonight's plan."; return } finally { tnBusy = false }
+  drawTonight();
+}
+function drawTonight(){
+  const p = TN; if (!p) return; const box = $('tnBody'); box.dataset.ok = '1'; box.className = '';
+  $('tnDay').textContent = (p.current ? 'Tonight · on now' : p.day) + ' · ' + new Date(p.date + 'T12:00').toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'});
+  const chips = [];
+  (p.games||[]).forEach(g => chips.push(`<span class="${g.state==='pre'||g.state==='in'?'on':''}">🏈 ${esc(g.text)}</span>`));
+  if (p.weather?.enabled) chips.push(`<span class="on">☁ weather: ${esc(p.weather.kinds.join(', ') || 'none')} · ${esc(p.weather.text)}</span>`);
+  else chips.push('<span>☁ weather overlays off</span>');
+  chips.push(`<span class="${p.visitor?.enabled?'on':''}">📱 visitor page ${p.visitor?.enabled?'on':'off'}</span>`);
+  const tl = (p.timeline||[]).map(x => `<li class="${esc(x.kind)}"><span class="t">${esc(x.time)}</span><i></i><div>${esc(x.label)}${x.detail?`<small>${esc(x.detail)}</small>`:''}</div></li>`).join('');
+  const bad = p.checks.filter(c => c.level !== 'ok'), good = p.checks.filter(c => c.level === 'ok'), sm = p.summary || {};
+  const ck = c => `<button class="ck ${esc(c.level)}" ${c.jump?`data-jump="${esc(c.jump)}"`:'tabindex="-1"'}><i class="dot"></i><div><b>${esc(c.title)}</b>${c.detail?`<span>${esc(c.detail)}</span>`:''}${c.fix && c.level!=='ok'?`<em>${esc(c.fix)}</em>`:''}</div>${c.jump && c.level!=='ok'?'<span class="go">›</span>':''}</button>`;
+  const sum = !bad.length ? `<div class="cksum" style="color:var(--acc)">● All ${good.length} checks OK: ready for tonight</div>` :
+    `<div class="cksum">${sm.fail?`<b style="color:var(--bad)">${sm.fail} problem${sm.fail>1?'s':''}</b>`:''}${sm.fail&&sm.warn?' · ':''}${sm.warn?`<b style="color:var(--warn)">${sm.warn} warning${sm.warn>1?'s':''}</b>`:''} <span class="dim">· tap one to fix it</span></div>`;
+  const html = `<div class="tnhead ${p.enabled && p.program ? '' : 'off'}">${esc(p.headline)}</div>
+    ${p.program && p.program_why !== 'usual program' ? `<div class="help" style="margin-top:-4px">${p.program_why.startsWith('holiday') ? '📅 ' : ''}${esc(p.program_why.charAt(0).toUpperCase() + p.program_why.slice(1))}</div>` : ''}
+    <div class="tnchips">${chips.join('')}</div>
+    ${tl ? `${p.enabled ? '' : '<div class="help" style="margin:0 0 4px">If it were on:</div>'}<ul class="tl">${tl}</ul>` : ''}
+    <div class="grp" style="margin-top:6px">Checks</div>${sum}${bad.map(ck).join('')}
+    ${good.length ? `<details class="okl" ${bad.length?'':'open'}><summary>${good.length} OK</summary>${good.map(ck).join('')}</details>` : ''}`;
+  if (box._h !== html){
+    const open = box.querySelector('details.okl')?.open;
+    box.innerHTML = box._h = html;
+    if (open !== undefined && box.querySelector('details.okl')) box.querySelector('details.okl').open = open;
+    box.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => jumpTo(b.dataset.jump)) }
+}
+/* Where each check's fix lives: [tab, Shows segment, an element inside the card to show]. */
+const JUMPS = {sched:['shows','sched','scEn'], showtimes:['shows','shows','stList'], shows:['shows','shows','shSel'], lists:['shows','lists','plSel'],
+  visitor:['shows','live','vEn'], weather:['shows','live','wEn'], game:['shows','live','gEn'], map:['more','','mapCard'], security:['more','','secCard'], devices:['more','','devInfo']};
+function jumpTo(j){ const t = JUMPS[j]; if (!t) return;
+  tabTo(t[0]); if (t[1]) segTo(t[1]);
+  const card = $(t[2])?.closest('.card'); if (!card) return;
+  /* below the sticky header (house preview included), whatever its height */
+  setTimeout(() => { window.scrollTo({top: Math.max(0, card.getBoundingClientRect().top + window.scrollY - document.querySelector('header').offsetHeight - 10), behavior: 'smooth'});
+    card.classList.remove('flash'); void card.offsetWidth; card.classList.add('flash') }, 60) }
+setInterval(() => { if (document.visibilityState === 'visible' && $('s-shows').classList.contains('on')) loadTonight() }, 60000);
+
+// ------------------------------------------------------------- holiday calendar
+/* Preview the built-in calendar, then merge it into the schedule (after the user's own rules). */
+async function calendarSheet(){
+  const pv = await get('calendar').catch(() => null); if (!pv) return toast("Couldn't load the calendar");
+  const rows = pv.rules.map(r => `<div class="calr ${r.now?'now':''}"><div class="d">${esc(r.dates)}${r.now?'<br>now':''}</div><div><b>${esc(r.name)} · ${esc(r.program_name)}</b><span>${esc(r.about)}</span></div></div>`).join('');
+  const sts = pv.showtimes.map(s => `<div class="calr"><div class="d">${esc(s.dates)}<br>${esc(s.time)}</div><div><b>★ ${esc(s.show)}</b><span>${esc(s.about)}</span></div></div>`).join('');
+  const sh = pv.shadows.map(x => `<label class="row" style="align-items:flex-start;margin:6px 0"><input type="checkbox" data-dis="${x.index}" ${x.factory?'checked':''}><span>Switch off my rule <b>${esc(x.name)}</b>${x.from?` (${esc(x.from)} to ${esc(x.to)})`:''}<br><span class="dim" style="font-size:12px">It comes first and would hide ${x.nights} calendar night${x.nights>1?'s':''}. It stays in your list; tick it back on any time.</span></span></label>`).join('');
+  const el = h(`<div>
+    <p class="help" style="margin-top:0">A ready-made year of lights. These rules go <b>after</b> your own, so yours still win. Tapping this again later refreshes only the calendar's rules.</p>
+    <div class="grp" style="margin-top:4px">Date rules (${pv.rules.length})</div>${rows}
+    ${sts ? `<div class="grp">Shows</div>${sts}` : ''}
+    <div class="grp">Every other night</div><div class="help" style="margin:0">${esc(pv.default_after)}${pv.default_changes ? ` <span style="color:var(--warn)">(replaces your usual program, ${esc(pv.default)}, which can't play)</span>` : ' (your usual program)'}</div>
+    ${pv.skipped.length ? `<div class="grp">Left out</div><div class="help" style="margin:0">${pv.skipped.map(x => `${esc(x.name)}: ${esc(x.note)}`).join('<br>')}</div>` : ''}
+    ${sh ? `<div class="grp">Your rules come first</div>${sh}` : ''}
+    ${pv.schedule_enabled ? '' : `<label class="row" style="margin-top:8px"><input type="checkbox" id="calEn" checked> <b>Turn the schedule on</b></label>`}
+    <button class="pri" style="width:100%;margin-top:12px" id="calGo">${pv.installed ? 'Update the holiday calendar' : 'Add to my schedule'}</button>
+    ${pv.installed ? '<button class="bad sm" style="width:100%;margin-top:8px" id="calRm">Remove the holiday calendar</button>' : ''}</div>`);
+  el.querySelector('#calGo').onclick = async () => {
+    const disable = [...el.querySelectorAll('[data-dis]')].filter(c => c.checked).map(c => +c.dataset.dis);
+    const r = await post('calendar/apply', {disable, enable: !!el.querySelector('#calEn')?.checked});
+    if (!r) return;
+    closeSheet(); await afterCalendar(); toast(`Holiday calendar ${pv.installed ? 'updated' : 'added'}: ${r.rules} rules, ${r.showtimes} shows`) };
+  const rm = el.querySelector('#calRm');
+  if (rm) rm.onclick = async () => { if (!confirm('Take the holiday calendar out of the schedule?')) return;
+    const r = await post('calendar/remove'); if (!r) return; closeSheet(); await afterCalendar();
+    toast('Holiday calendar removed' + (r.reenabled?.length ? ` · back on: ${r.reenabled.join(', ')}` : '')) };
+  openSheet('📅 Holiday calendar', el);
+}
+async function afterCalendar(){
+  PL = await get('playlists'); plSelect(); SCH = await get('schedule'); schedForm();   // playlists first: the rule editor checks them
+  const x = await get('extras'); EXTRAS.showtimes = x.showtimes || []; drawShowtimes(); loadTonight(); setTimeout(refresh, 300) }
 
 // ------------------------------------------------------------- paint mode
 let painting = false, brush = '#ff2020', brushSize = 1, tool = 'brush';
@@ -1320,7 +1436,7 @@ function drawWeather(){
 async function saveExtras(which, msg = 'Saved'){
   const value = which === 'shows' ? userShows() : EXTRAS[which];
   if (which === 'shows') for (const [n, sh] of Object.entries(value)){ const k = cuesBad(sh); if (k >= 0){ toast(`"${n}" cue ${k+1}: pick a preset or a time`); return false } }
-  const r = await post(which, {value}); if (r && msg) toast(msg); return r }
+  const r = await post(which, {value}); if (r && msg) toast(msg); if (r) loadTonight(); return r }
 function liveStatus(){
   const g = Object.entries(ST.games || {}).map(([k, v]) => v.error ? `${esc(k)}: couldn't reach scores (${esc(v.error)})` :
     v.state === 'none' || !v.id ? `${esc(v.team||k)}: no game on the current scoreboard` :
