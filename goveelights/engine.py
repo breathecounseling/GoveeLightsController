@@ -101,9 +101,12 @@ class Engine:
             scene, prev = self.scene, self._prev
             fade_start, fade_s = self._fade_start, self._fade_s
         if scene is None:
-            return [(0.0, 0.0, 0.0)] * self.layout.n
-        cols = scene.render(t, self.layout, self.master)
-        if prev is not None:
+            if not self.overlays:
+                return [(0.0, 0.0, 0.0)] * self.layout.n
+            cols = [(0.0, 0.0, 0.0)] * self.layout.n   # overlays still play (and expire) over black
+        else:
+            cols = scene.render(t, self.layout, self.master)
+        if prev is not None and scene is not None:
             f = (t - fade_start) / fade_s
             if f >= 1:
                 with self._lock:

@@ -253,7 +253,7 @@ h2 .sp{flex:1}
     </div>
     <div class="card">
       <h2>Showtimes</h2>
-      <p class="help">Run a show automatically, e.g. every hour on the hour from 5 to 10 pm. Showtimes only play while the lights are on (schedule or Live).</p>
+      <p class="help">Run a show automatically, e.g. every hour on the hour from 5 to 10 pm, or only on one date (12-31). Normally a showtime only plays while the lights are on (schedule or Live); untick that and it switches them on for the show, then off again.</p>
       <div id="stList"></div><button class="sm" onclick="addShowtime()">+ Showtime</button>
       <button class="pri" style="width:100%;margin-top:8px" onclick="saveExtras('showtimes')">Save showtimes</button>
     </div>
@@ -285,7 +285,11 @@ h2 .sp{flex:1}
       <div class="grp">Presets visitors can pick</div><div class="tgt" id="vPresets"></div>
       <div class="prm"><div class="top"><span class="lbl">Each pick plays for</span><output id="vSecV"></output></div><input type="range" id="vSec" min="20" max="300" step="10"></div>
       <div class="prm"><div class="top"><span class="lbl">One pick per person every</span><output id="vCdV"></output></div><input type="range" id="vCd" min="30" max="600" step="30"></div>
-      <label class="row" style="margin:6px 0"><input type="checkbox" id="vSp"> <span>"Make it sparkle" button</span></label>
+      <div class="grp">What visitors can send (short moments over whatever is playing)</div>
+      <label class="row" style="margin:6px 0"><input type="checkbox" id="vSp"> <span>✨ "Make it sparkle" button</span></label>
+      <label class="row" style="margin:6px 0"><input type="checkbox" id="vSnow"> <span>❄️ Shake for snow: a short snow flurry</span></label>
+      <label class="row" style="margin:6px 0"><input type="checkbox" id="vCol"> <span>🎨 Send a colour: a ripple of one of 8 festive colours from the gable</span></label>
+      <p class="help" style="margin-top:2px">Each lasts a few seconds, is rate limited (per person and for everyone together) and only plays while the lights are on.</p>
       <div id="vLink" class="help"></div><div id="qr"></div>
       <div class="row wrap"><button class="pri" onclick="saveVisitor()">Save</button><button onclick="printSign()">Print sign</button><button class="sm" onclick="saveVisitor(true)">New link</button></div>
     </div>
@@ -1395,9 +1399,10 @@ function shEditor(){
     <p class="help">Total ${fmtDur(total)}</p>
     <div class="row"><button class="pri" id="shSave">Save</button><button id="shPlay">▶ Play now</button><button class="sm" id="shDup">Copy</button><button class="bad sm" id="shDel" style="margin-left:auto">Delete</button></div>`;
   const cb = box.querySelector('#cues');
-  sh.cues.forEach((c, k) => { const el = h(`<div class="cue">${c.countdown_to
-        ? `<div class="full row"><b class="grow">Countdown to</b><input type="time" data-f="countdown_to" value="${esc(c.countdown_to)}" style="width:auto"></div>`
-        : `<select class="full" data-f="preset">${optsWithMissing(PRESETS.map(p => [p.id, p.name]), c.preset)}</select>`}
+  sh.cues.forEach((c, k) => { const el = h(c.countdown_to ? `<div class="cue cdcue">
+      <div class="full row"><span class="badge">${k+1}</span><div class="grow"><b>Countdown to ${esc(c.countdown_to)} (${Math.round(cueSecs(c))} s)</b><span class="dim" style="display:block;font-size:12px">Counts down to that time; it can't be edited here.</span></div></div>
+      <div class="row full"><span class="grow"></span><button class="sm" data-a="up" ${k?'':'disabled'} aria-label="Move up">↑</button><button class="sm" data-a="down" ${k<sh.cues.length-1?'':'disabled'} aria-label="Move down">↓</button><button class="sm bad" data-a="del" aria-label="Remove cue">✕</button></div></div>`
+      : `<div class="cue"><select class="full" data-f="preset">${optsWithMissing(PRESETS.map(p => [p.id, p.name]), c.preset)}</select>
       <div class="full row"><div class="grow"><label class="dim" style="font-size:11px">${k+1}. Transition in</label><select data-f="transition">${(EXTRAS.transitions||[]).map(t => opt(t, TRANS_LABEL[t]||t, t===(c.transition||'crossfade'))).join('')}</select></div>
         <div style="width:70px"><label class="dim" style="font-size:11px">over (s)</label><input type="number" data-f="fade" min="0" max="10" step="0.5" value="${c.fade??1.5}"></div>
         <div style="width:70px"><label class="dim" style="font-size:11px">then hold (s)</label><input type="number" data-f="seconds" min="2" max="600" step="1" value="${c.seconds??20}"></div></div>
@@ -1422,20 +1427,32 @@ function drawShowtimes(){
       <div class="full"><label>Show</label><select data-f="show">${optsWithMissing(names, st.show)}</select></div>
       <div><label>From</label><input type="time" data-f="from" value="${esc(st.from||'17:00')}"></div><div><label>To</label><input type="time" data-f="to" value="${esc(st.to||'22:00')}"></div>
       <div class="full"><label>Every</label><select data-f="every">${[[15,'15 minutes'],[30,'30 minutes'],[60,'hour'],[120,'2 hours']].map(([v,l]) => opt(v,l,+st.every===v)).join('')}</select></div>
+      <div class="full"><label>Only on date (MM-DD, optional)</label><input type="text" data-f="date" inputmode="numeric" placeholder="e.g. 12-31 · empty = any day" value="${esc(stDates(st))}" autocomplete="off"></div>
+      <label class="row full"><input type="checkbox" data-f="only_when_on" ${st.only_when_on!==false?'checked':''}> <span>Only while the lights are on <span class="dim" style="font-size:11px">(off: switch them on for the show, then off again)</span></span></label>
       <div class="full days">${D.map((d,i) => `<button class="${(st.days||[]).includes(i)?'on':''}" data-day="${i}">${d}</button>`).join('')}<span class="dim" style="font-size:11px;align-self:center;margin-left:4px">(none = every day)</span></div>
       <label class="row"><input type="checkbox" data-f="enabled" ${st.enabled!==false?'checked':''}> On</label><button class="sm bad" data-del>Remove</button></div>`);
-    el.querySelectorAll('[data-f]').forEach(i => i.onchange = () => { const f = i.dataset.f; st[f] = i.type==='checkbox' ? i.checked : f==='every' ? +i.value : i.value });
+    el.querySelectorAll('[data-f]').forEach(i => i.onchange = () => { const f = i.dataset.f;
+      if (f === 'date'){ const d = parseStDates(i.value); if (d === null){ toast('Dates look like 12-31 (month-day), separated by commas'); i.value = stDates(st); return }
+        delete st.date; delete st.dates; if (d.length === 1) st.date = d[0]; else if (d.length) st.dates = d; i.value = stDates(st); return }
+      st[f] = i.type==='checkbox' ? i.checked : f==='every' ? +i.value : i.value });
     el.querySelectorAll('[data-day]').forEach(b => b.onclick = () => { const d = +b.dataset.day; st.days = st.days||[]; st.days = st.days.includes(d) ? st.days.filter(x=>x!==d) : [...st.days, d].sort(); drawShowtimes() });
     el.querySelector('[data-del]').onclick = () => { EXTRAS.showtimes.splice(k,1); drawShowtimes() };
     box.appendChild(el) });
 }
-function addShowtime(){ const first = Object.keys(userShows())[0] || allShowNames()[0]; if (!first) return toast('Make a show first'); EXTRAS.showtimes.push({show:first, from:'17:00', to:'22:00', every:60, enabled:true}); drawShowtimes() }
+const stDates = st => { const d = st.date || st.dates; return Array.isArray(d) ? d.join(', ') : (d || '') };
+function parseStDates(txt){       // "12-24, 12-31" -> ["12-24","12-31"]; "" -> []; anything else -> null
+  const out = []; for (const raw of String(txt).split(/[\s,]+/).filter(Boolean)){
+    const m = /^(\d{1,2})[-/.](\d{1,2})$/.exec(raw); if (!m) return null;
+    const mo = +m[1], da = +m[2]; if (mo < 1 || mo > 12 || da < 1 || da > [31,29,31,30,31,30,31,31,30,31,30,31][mo-1]) return null;
+    const v = String(mo).padStart(2,'0') + '-' + String(da).padStart(2,'0'); if (!out.includes(v)) out.push(v) }
+  return out }
+function addShowtime(){ const first = Object.keys(userShows())[0] || allShowNames()[0]; if (!first) return toast('Make a show first'); EXTRAS.showtimes.push({show:first, from:'17:00', to:'22:00', every:60, only_when_on:true, enabled:true}); drawShowtimes() }
 
 // ------------------------------------------------------------- visitor page
 function visitorUrl(){ const v = EXTRAS.visitor || {}; return v.token ? `${location.origin}/visit/${v.token}` : '' }
 function drawVisitor(){
   const v = EXTRAS.visitor ||= {}; $('vEn').checked = !!v.enabled; $('vTitle').value = v.title||''; $('vMsg').value = v.message||'';
-  $('vSec').value = v.seconds||60; $('vSecV').textContent = (v.seconds||60)+' s'; $('vCd').value = v.cooldown||90; $('vCdV').textContent = (v.cooldown||90)+' s'; $('vSp').checked = v.sparkle !== false;
+  $('vSec').value = v.seconds||60; $('vSecV').textContent = (v.seconds||60)+' s'; $('vCd').value = v.cooldown||90; $('vCdV').textContent = (v.cooldown||90)+' s'; $('vSp').checked = v.sparkle !== false; $('vSnow').checked = v.snow !== false; $('vCol').checked = v.colours !== false;
   $('vSec').oninput = e => { v.seconds = +e.target.value; $('vSecV').textContent = v.seconds+' s' }; $('vCd').oninput = e => { v.cooldown = +e.target.value; $('vCdV').textContent = v.cooldown+' s' };
   const box = $('vPresets'); box.innerHTML = ''; v.presets ||= [];
   PRESETS.forEach(p => { const b = h(`<button class="chip ${v.presets.includes(p.id)?'on':''}">${esc(p.name)}</button>`);
@@ -1445,7 +1462,7 @@ function drawVisitor(){
   $('qr').innerHTML = ''; if (url && v.enabled && window.qrcode){ const q = qrcode(0, 'M'); q.addData(url); q.make(); $('qr').innerHTML = q.createImgTag(6, 0) }
 }
 async function saveVisitor(newLink){
-  const v = EXTRAS.visitor; Object.assign(v, {enabled: $('vEn').checked, title: $('vTitle').value.trim(), message: $('vMsg').value.trim(), sparkle: $('vSp').checked});
+  const v = EXTRAS.visitor; Object.assign(v, {enabled: $('vEn').checked, title: $('vTitle').value.trim(), message: $('vMsg').value.trim(), sparkle: $('vSp').checked, snow: $('vSnow').checked, colours: $('vCol').checked});
   if (newLink && !confirm('Make a new link? Printed signs with the old QR code will stop working.')) return;
   if (await post('visitor', {value: {...v, new_link: !!newLink}})) { EXTRAS.visitor = (await get('extras')).visitor; drawVisitor(); toast('Saved') }
 }

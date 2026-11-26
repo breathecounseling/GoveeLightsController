@@ -27,6 +27,12 @@ log = logging.getLogger(__name__)
 PRESETS_DIR = Path(os.environ.get("GOVEE_PRESETS", Path(__file__).resolve().parent.parent / "presets"))
 _ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 
+# The only colours a visitor can send (the page shows these; anything else is refused).
+VISITOR_COLOURS = [("Red", "#ff1a1a"), ("Orange", "#ff6a00"), ("Gold", "#ffb000"), ("Green", "#00d040"),
+                   ("Ice blue", "#00d8ff"), ("Blue", "#1a4dff"), ("Purple", "#a030ff"), ("Pink", "#ff2fa8")]
+# Visitor moments: (seconds between two from one visitor, seconds between any two at all).
+VISITOR_LIMITS = {"sparkle": (15.0, 3.0), "snow": (20.0, 4.0), "colour": (8.0, 1.5)}
+
 
 def slug(name: str) -> str:
     s = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
@@ -100,6 +106,8 @@ class Controller:
         self.evolve: dict | None = None             # 'let it evolve' state
         self.vqueue: list[dict] = []                # visitor requests waiting
         self._vlast: dict[str, float] = {}          # visitor cooldowns by client
+        self._vframe: tuple = (0.0, "")             # cached live frame for the visitor page
+        self._vslot = 0                             # rotates the visitor overlay slots
         self._showtimes_done: set = set()
         self.dusk_intro: dict | None = None         # {"until", "program", "on"}: the dusk sky at lights-on
         self._dusk_done: str | None = None          # the evening window ("on" time) an intro already ran for
@@ -616,19 +624,63 @@ class Controller:
     def vcfg(self) -> dict:
         return self.cfg.data.setdefault("visitor", {})
 
-    def visitor_state(self) -> dict:
+    def _visitor_on(self) -> bool:
+        return bool(self.engine.live and not self.engine.blackout or not self.vcfg.get("only_when_on", True))
+
+    def visitor_state(self, client: str = "") -> dict:
         v = self.vcfg
         names = {p["id"]: p["name"] for p in self.presets.list()}
         it = self.interrupt or {}
+        cur = it.get("visitor") if it else None
+        you = None
+        if client:                      # only this visitor's own pick: nothing about anyone else
+            client = client[:64]
+            if cur and cur.get("client") == client:
+                you = {"playing": True, "name": cur.get("name")}
+            else:
+                pos = next((k for k, r in enumerate(self.vqueue) if r.get("client") == client), None)
+                if pos is not None:
+                    wait = pos * float(v.get("seconds", 60))
+                    if cur:
+                        wait += max(0.0, it["until"] - time.time())
+                    you = {"position": pos + 1, "wait": round(wait),
+                           "name": names.get(self.vqueue[pos]["id"], "")}
         return {"title": v.get("title") or "Pick the lights!", "message": v.get("message", ""),
-                "on": self.engine.live and not self.engine.blackout or not v.get("only_when_on", True),
+                "on": self._visitor_on(),
                 "presets": [{"id": i, "name": names[i]} for i in v.get("presets", []) if i in names],
                 "queue": len(self.vqueue), "sparkle": bool(v.get("sparkle", True)),
-                "now": (it.get("visitor") or {}).get("name") if it.get("visitor") else None}
+                "snow": bool(v.get("snow", True)),
+                "colours": [{"name": n, "hex": h} for n, h in VISITOR_COLOURS] if v.get("colours", True) else [],
+                "now": cur.get("name") if cur else None, "you": you, "playing": self._visitor_playing(names)}
+
+    def _visitor_playing(self, names: dict) -> str | None:
+        """What's on, for the visitor page, but only names the visitor may see anyway: a
+        preset on their list (also inside a playlist) or a built-in show."""
+        it = self.interrupt or {}
+        show = (it.get("show") or {}).get("name")
+        if show:
+            return show if show in shows_builtin.BUILTIN_SHOWS else None
+        if it:
+            return None
+        pl = self.playing or {}
+        listed = {names[i] for i in self.vcfg.get("presets", []) if i in names}
+        for n in (names.get(pl.get("item") or ""), pl.get("name")):
+            if n and n in listed:
+                return n
+        return None
+
+    def visitor_frame(self) -> str:
+        """The house's current colours for the visitor page's little live view (cached
+        briefly, so many phones polling cost one conversion; empty while it's off)."""
+        now = time.time()
+        c = self._vframe
+        if now - c[0] > 0.2 or now < c[0]:
+            c = self._vframe = (now, self.frame_hex() if self._visitor_on() else "")
+        return c[1]
 
     def _vprune(self, now: float):
         if len(self._vlast) > 2000:
-            keep = max(float(self.vcfg.get("cooldown", 60)), 15.0)
+            keep = max(float(self.vcfg.get("cooldown", 60)), 30.0)   # longer than any fx limit
             self._vlast = {k: t for k, t in self._vlast.items() if now - t < keep}
 
     def visitor_pick(self, pid: str, client: str) -> dict:
@@ -657,19 +709,56 @@ class Controller:
 
     def visitor_sparkle(self, client: str) -> str:
         with self.lock:
-            return self._visitor_sparkle(client[:64])
+            return self._visitor_fx("sparkle", client[:64])
 
-    def _visitor_sparkle(self, client: str) -> str:
+    def visitor_snow(self, client: str) -> str:
+        with self.lock:
+            return self._visitor_fx("snow", client[:64])
+
+    def visitor_colour(self, hexcol: str, client: str) -> str:
+        with self.lock:
+            return self._visitor_fx("colour", client[:64], hexcol)
+
+    def _visitor_fx(self, kind: str, client: str, hexcol: str = "") -> str:
+        """A visitor's moment on the house, as an overlay on whatever is playing. Rate
+        limited per visitor and for everyone together, and only fixed looks: the one
+        thing a visitor's request carries into a scene is a colour from VISITOR_COLOURS."""
         now = time.time()
         self._vprune(now)
-        if not self.vcfg.get("sparkle", True):
+        if not self.vcfg.get({"colour": "colours"}.get(kind, kind), True):
             raise ValueError("not available")
-        if now - self._vlast.get("sparkle:" + client, 0) < 15 or now - self._vlast.get("sparkle:*", 0) < 3:
+        if kind == "colour":
+            hexcol = str(hexcol or "").strip().lower()[:16]
+            if hexcol not in {h for _, h in VISITOR_COLOURS}:
+                raise ValueError("not available")
+        per, every = VISITOR_LIMITS[kind]
+        if now - self._vlast.get(f"{kind}:{client}", 0) < per or now - self._vlast.get(f"{kind}:*", 0) < every:
             raise ValueError("Give it a few seconds!")
-        if not self.engine.live:
+        if not self.engine.live or self.engine.blackout or self.map_state or self.diag_active:
             raise ValueError("The lights are off right now.")
-        self._vlast["sparkle:" + client] = self._vlast["sparkle:*"] = now
-        return self.pad("sparkle")
+        self._vlast[f"{kind}:{client}"] = self._vlast[f"{kind}:*"] = now
+        if kind == "sparkle":
+            return self.pad("sparkle")
+        seed = int(now * 10) % 9999
+        if kind == "snow":
+            secs, slots = 6.0, 2
+            d = {"layers": [{"effect": "flurry", "params": {"repeat": False, "seconds": secs, "seed": seed}}]}
+        else:
+            secs, slots = 4.0, 3
+            d = {"layers": [{"effect": "colour_ripple",
+                             "params": {"repeat": False, "seconds": secs, "color": hexcol, "seed": seed}}]}
+        # A few can overlap (a new one never cuts off the last one); the newest is on top.
+        self._vslot = (self._vslot + 1) % 6
+        key = f"visit:{kind}{self._vslot % slots}"
+        ov = self.engine.overlays
+        ov.pop(key, None)
+        if kind == "snow":          # the scene dims a little so white flakes show over white lights
+            vk = key + ":veil"
+            ov.pop(vk, None)
+            ov[vk] = (Scene.from_dict({"layers": [{"effect": "veil", "params": {"seconds": secs, "depth": 0.5}}]}),
+                      "multiply", 1.0, now + secs + 0.2, now, 0)
+        ov[key] = (Scene.from_dict(d), "over", 1.0, now + secs + 0.2, now, 0)
+        return kind
 
     def _visitor_tick(self):
         if not self.vqueue or not self.engine.live or self.map_state or self.diag_active:
@@ -687,7 +776,7 @@ class Controller:
             return
         if self.start_interrupt(d, float(self.vcfg.get("seconds", 60)), f"Visitor pick: {d.get('name')}", fade=1.5):
             self.vqueue.pop(0)
-            self.interrupt["visitor"] = {"name": d.get("name"), "id": req["id"]}
+            self.interrupt["visitor"] = {"name": d.get("name"), "id": req["id"], "client": req.get("client")}
 
     # ------------------------------------------------------ self-healing
     def _health_loop(self):
