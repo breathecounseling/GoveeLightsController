@@ -161,7 +161,7 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
             if action == "page":
                 return self._send(200, (WEB / "visit.html").read_bytes(), "text/html; charset=utf-8")
             if action == "state":
-                return self._json(ctl.visitor_state(auth.client_ip(self)))
+                return self._json(ctl.visitor_state(auth.rate_key(auth.client_ip(self))))
             if action == "frame":                     # the little live view of the house
                 return self._json({"hex": ctl.visitor_frame()})
             if action == "layout":

@@ -110,6 +110,7 @@ class Controller:
         self._vlast: dict[str, float] = {}          # visitor cooldowns by client
         self._vframe: tuple = (0.0, "")             # cached live frame for the visitor page
         self._vmoments: list[float] = []            # recent visitor moment times (all kinds, capped)
+        self._vhold_until = 0.0                     # no new visitor pick before this: an owner feature's turn
         self._showtimes_done: set = set()
         self.dusk_intro: dict | None = None         # {"until", "program", "on"}: the dusk sky at lights-on
         self._dusk_done: str | None = None          # the evening window ("on" time) an intro already ran for
@@ -175,6 +176,9 @@ class Controller:
                         self.interrupt["live"] = True     # don't switch off again when it ends
                     else:
                         self.interrupt = None             # Live off ends a show/celebration
+        if not on:
+            with self.lock:
+                self.vqueue.clear()                   # lights off: waiting picks would play unseen later
         # a tap on Live always re-takes every box, in case the Govee app grabbed one
         self.engine.set_live(on, release=True, force=on and manual)
 
@@ -353,6 +357,7 @@ class Controller:
                 self._manual()
             self.playlist, self.playing, self.evolve = None, None, None
             self.interrupt = None                     # Stop really stops shows and celebrations too
+            self.vqueue.clear()                       # the visitors who asked are long gone by next time
             self.engine.set_scene(None)
             self.engine.set_live(False, release=release)
 
@@ -365,13 +370,14 @@ class Controller:
                 return False
             if not self.engine.live and not force_live:
                 return False
+            sc = Scene.from_dict(d, self.user_palettes)     # a bad scene leaves no state behind
             if self.interrupt is None:
                 self.interrupt = {"scene": self.scene_dict, "playing": self.playing, "live": self.engine.live}
             self.interrupt["until"] = time.time() + seconds
             self.interrupt["label"] = label
             for k in ("show", "visitor", "scoreboard", "event"):
                 self.interrupt.pop(k, None)
-            self.engine.set_scene(Scene.from_dict(d, self.user_palettes), fade, transition=transition)
+            self.engine.set_scene(sc, fade, transition=transition)
             self.playing = {"kind": "event", "name": label}
             if force_live:
                 self.set_live(True, manual=False)
@@ -663,7 +669,7 @@ class Controller:
                 pos = next((k for k, r in enumerate(self.vqueue) if r.get("client") == client), None)
                 if pos is not None:
                     wait = pos * float(v.get("seconds", 60))
-                    if cur:
+                    if it.get("until"):         # any interrupt (a show too): the pick waits for it
                         wait += max(0.0, it["until"] - time.time())
                     you = {"position": pos + 1, "wait": round(wait),
                            "name": names.get(self.vqueue[pos]["id"], "")}
@@ -715,7 +721,7 @@ class Controller:
         self._vprune(now)
         if pid not in v.get("presets", []):
             raise ValueError("that one isn't available")
-        if v.get("only_when_on", True) and not self.engine.live:
+        if v.get("only_when_on", True) and not self.engine.live or self.engine.blackout:
             raise ValueError("The lights are off right now. Come back this evening!")
         cd = float(v.get("cooldown", 60))
         if now - self._vlast.get(client, 0) < cd:
@@ -727,11 +733,12 @@ class Controller:
         if busy and it["until"] - now > 6 * 3600:        # a looping show never ends on its own
             raise ValueError("A light show is on right now. Try again after it!")
         self._vlast[client] = now
-        self.vqueue.append({"id": pid, "client": client})
-        pos = len(self.vqueue)
+        pos = len(self.vqueue) + 1
         wait = (pos - 1) * float(v.get("seconds", 60))
         if it:
             wait += max(0.0, it["until"] - now)
+        # A pick still waiting well past its expected turn is stale (its visitor has left).
+        self.vqueue.append({"id": pid, "client": client, "expires": now + wait + self.VISITOR_STALE})
         return {"position": pos, "wait": round(wait), "busy": busy}
 
     def visitor_sparkle(self, client: str) -> str:
@@ -811,13 +818,26 @@ class Controller:
         ov.pop(vk, None)
         ov[vk] = (sc, "multiply", 1.0, now + secs + 0.2, now, 0)
 
+    VISITOR_STALE = 10 * 60.0       # a queued pick this long past its expected turn is dropped
+    VISITOR_HOLD = 15.0             # an owner feature blocked by a visitor pick gets this long a turn
+
+    def _visitor_hold(self):
+        """An owner feature (schedule, scoreboard, dusk handoff) is waiting only for a
+        visitor pick to end: don't start the next pick until it has had its turn."""
+        if (self.interrupt or {}).get("visitor"):
+            self._vhold_until = time.time() + self.VISITOR_HOLD
+
     def _visitor_tick(self):
-        if not self.vqueue or not self.engine.live or self.map_state or self.diag_active:
+        now = time.time()
+        self.vqueue[:] = [r for r in self.vqueue if r.get("expires", now + 1) > now]
+        if not self.vqueue or not self.engine.live or self.engine.blackout or self.map_state or self.diag_active:
             return
         it = self.interrupt
         if it and not it.get("visitor"):            # a show, countdown or celebration is on: wait
             return
-        if it and time.time() < it["until"]:
+        if it and now < it["until"]:
+            return
+        if not it and now < self._vhold_until:      # the owner's schedule/scoreboard goes first
             return
         req = self.vqueue[0]
         try:
@@ -825,7 +845,14 @@ class Controller:
         except (OSError, ValueError):
             self.vqueue.pop(0)                         # preset deleted: drop the request
             return
-        if self.start_interrupt(d, float(self.vcfg.get("seconds", 60)), f"Visitor pick: {d.get('name')}", fade=1.5):
+        try:
+            ok = self.start_interrupt(d, float(self.vcfg.get("seconds", 60)), f"Visitor pick: {d.get('name')}",
+                                      fade=1.5)
+        except (ValueError, KeyError, TypeError) as e:
+            log.warning("visitor pick %s can't play: %s", req["id"], e)
+            self.vqueue.pop(0)                         # e.g. an effect since removed: drop it
+            return
+        if ok:
             self.vqueue.pop(0)
             self.interrupt["visitor"] = {"name": d.get("name"), "id": req["id"], "client": req.get("client")}
 
@@ -1035,6 +1062,7 @@ class Controller:
         e = self.engine
         if (not e.live or e.blackout or self.interrupt is not None or self.map_state or self.diag_active
                 or self._pending):
+            self._visitor_hold()
             return                                    # busy: try again in a moment
         if self.start_interrupt(shows.scoreboard_scene(game), secs, f"Scoreboard: {game.get('team', '')}".strip(),
                                 fade=1.0):
@@ -1186,6 +1214,8 @@ class Controller:
     def enter_diag(self):
         if not self.diag_active:
             self.diag_active = True
+            with self.lock:
+                self.vqueue.clear()
             self._diag_was_live = self.engine.live
             self.engine.set_live(False, release=False)
 
@@ -1255,6 +1285,7 @@ class Controller:
             return
         if self.interrupt is not None:
             if key is not None:
+                self._visitor_hold()
                 return            # let the show/celebration finish; switch programs afterwards
             if ((self.interrupt or {}).get("show") or {}).get("owns") or self.interrupt.get("event"):
                 return            # a show or event pinned to a moment (New Year's) finishes even after lights-off
@@ -1344,6 +1375,7 @@ class Controller:
         if not di or now < di["until"]:
             return
         if self.interrupt is not None or self.map_state or self.diag_active:
+            self._visitor_hold()
             return                                # let the show/celebration finish first
         self.dusk_intro = None
         try:
