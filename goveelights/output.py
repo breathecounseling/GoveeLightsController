@@ -41,6 +41,11 @@ class GoveeRazerOutput:
         self._retry_at: dict[str, float] = {}    # mac -> when to retry a failed enable
         self._retrying: set[str] = set()
         self.retry_s = 15.0
+        # Bumped by stop(): an enable already running (retry thread) from an earlier
+        # session must not put a released box back in realtime.
+        self.gen = 0
+        self.release_retry_s = 3.0               # 0 = no second disable pass
+        self._bad: set[str] = set()              # boxes whose frames the protocol rejects
 
     def _streamer(self, mac: str) -> Streamer:
         s = self.streamers.get(mac)
@@ -52,6 +57,7 @@ class GoveeRazerOutput:
     def start(self, force: bool = False):
         """Put every box in realtime mode. force=True re-sends the enable even if we
         think a box is already in realtime: the Govee app may have taken it back."""
+        self.gen += 1                            # cancels a pending second release pass
         for mac in list(self.devices):
             try:
                 s = self._streamer(mac)
@@ -67,15 +73,21 @@ class GoveeRazerOutput:
                 self._retry_at[mac] = time.monotonic() + self.retry_s
         self._last.clear()                       # resend every frame
 
-    def _retry_enable(self, mac: str):
+    def active(self, gen: int) -> bool:
+        return self.gen == gen
+
+    def _retry_enable(self, mac: str, gen: int | None = None):
+        gen = self.gen if gen is None else gen
         try:
-            self._streamer(mac).enable()
+            if not self._streamer(mac).enable(wanted=lambda: self.gen == gen):
+                return                           # lights released meanwhile
             self._retry_at.pop(mac, None)
             self._last.pop(mac, None)            # resend the current frame
             log.info("enable %s succeeded on retry", mac)
         except OSError as e:
             log.debug("enable %s retry failed: %s", mac, e)
-            self._retry_at[mac] = time.monotonic() + self.retry_s
+            if self.gen == gen:
+                self._retry_at[mac] = time.monotonic() + self.retry_s
         finally:
             self._retrying.discard(mac)
 
@@ -85,7 +97,7 @@ class GoveeRazerOutput:
         due = self._retry_at.get(run_id)
         if due is not None and now >= due and run_id not in self._retrying:
             self._retrying.add(run_id)           # enable sleeps ~1.3 s: keep it off the render thread
-            threading.Thread(target=self._retry_enable, args=(run_id,), daemon=True).start()
+            threading.Thread(target=self._retry_enable, args=(run_id, self.gen), daemon=True).start()
         if self._last.get(run_id) == key and now - self._last_t.get(run_id, 0) < self.refresh_s:
             return
         self._last[run_id], self._last_t[run_id] = key, now
@@ -93,17 +105,37 @@ class GoveeRazerOutput:
         try:
             # RGB only: tested on H805A, 4-byte RGBW frames are read as RGB triplets
             s.send_frame(pixels, gradient=False)
+            self._bad.discard(run_id)
         except OSError as e:
             log.warning("send to %s failed: %s", run_id, e)
+        except ValueError as e:
+            # e.g. a pixel_count the razer frame cannot carry: keep the other boxes going
+            if run_id not in self._bad:
+                self._bad.add(run_id)
+                log.error("frame for %s rejected: %s", self.devices.get(run_id, {}).get("name", run_id), e)
 
     def stop(self):
+        self.gen += 1
         self._retry_at.clear()
+        self._release()
+        self._last.clear()
+        if self.release_retry_s > 0:
+            # Release is fire-and-forget UDP: send it again shortly in case those
+            # packets were lost, unless the lights were taken again meanwhile.
+            gen = self.gen
+            t = threading.Timer(self.release_retry_s, lambda: self.gen == gen and self._release(again=True))
+            t.daemon = True
+            t.start()
+
+    def _release(self, again: bool = False):
         for mac in list(self.devices):
             try:
-                self._streamer(mac).disable()
+                s = self._streamer(mac)
+                if again and (s.realtime or getattr(s, "anim", None) is not None):
+                    continue                     # someone (diagnostics) has taken it since
+                s.disable()
             except OSError as e:
                 log.warning("disable %s failed: %s", mac, e)
-        self._last.clear()
 
 
 class MemoryOutput:

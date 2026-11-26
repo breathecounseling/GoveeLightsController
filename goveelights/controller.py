@@ -934,7 +934,9 @@ class Controller:
                     h["seen"] = now
                     sig = (st.get("onOff"), st.get("brightness"), json.dumps(st.get("color"), sort_keys=True),
                            st.get("colorTemInKelvin"))
-                    back = h["miss"] >= 2
+                    # Any missed poll then a reply counts: a box that reboots between two
+                    # polls comes back in its own mode with the same status signature.
+                    back = h["miss"] >= 1
                     h["miss"] = 0
                     if h["base"] is None and not back:
                         h["base"] = sig
@@ -960,13 +962,19 @@ class Controller:
             return
         h["paused"] = False
         log.info("self-heal: re-enabling realtime on %s (%s)", self.cfg.devices.get(mac, {}).get("name", mac), why)
-        out = self.engine.output
-        try:
-            out._streamer(mac).enable()
-            out._last.pop(mac, None)                # force the current frame to be resent
-        except OSError as e:
-            log.warning("self-heal failed for %s: %s", mac, e)
-            return
+        e = self.engine
+        out = e.output
+        # The status poll took a while: the lights may have been released since. Hold
+        # the live lock so set_live(False) can't release the box mid-enable either.
+        with getattr(e, "_live_lock", None) or threading.Lock():
+            if not e.live or self.diag_active or self.map_state:
+                return
+            try:
+                out._streamer(mac).enable()
+                out._last.pop(mac, None)            # force the current frame to be resent
+            except OSError as ex:
+                log.warning("self-heal failed for %s: %s", mac, ex)
+                return
         h["reasserts"].append(now)
         h["last_enable"] = now
         h["base"], h["pending"] = None, 0

@@ -166,9 +166,12 @@ class _Streamer:
     def set_keepalive(self, s):
         pass
 
-    def enable(self):
+    def enable(self, wanted=None):
+        if wanted and not wanted():
+            return False
         self.lan.send(self.ip, b"on")
         self.realtime = True
+        return True
 
     def disable(self):
         self.lan.send(self.ip, b"off")

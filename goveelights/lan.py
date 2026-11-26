@@ -23,7 +23,7 @@ class GoveeLan:
         self.bind_ip = bind_ip or ""
         self.on_device = on_device
         self._status: dict[str, dict] = {}
-        self._status_ev: dict[str, threading.Event] = {}
+        self._status_ev: dict[str, set[threading.Event]] = {}   # ip -> waiting status() calls
         self._lock = threading.Lock()
         self.sock = self._open()
         self._closed = False
@@ -95,8 +95,8 @@ class GoveeLan:
         elif cmd == "devStatus":
             with self._lock:
                 self._status[ip] = {"t": time.time(), **d}
-                ev = self._status_ev.get(ip)
-            if ev:
+                evs = list(self._status_ev.get(ip, ()))
+            for ev in evs:
                 ev.set()
 
     # -------------------------------------------------------------- send
@@ -121,12 +121,16 @@ class GoveeLan:
     def status(self, ip: str, timeout: float = 1.5) -> dict | None:
         ev = threading.Event()
         with self._lock:
-            self._status_ev[ip] = ev
+            self._status_ev.setdefault(ip, set()).add(ev)
         t0 = time.time()
         self.send(ip, p.status_msg())
         ok = ev.wait(timeout)
         with self._lock:
-            self._status_ev.pop(ip, None)
+            waiters = self._status_ev.get(ip)
+            if waiters is not None:
+                waiters.discard(ev)
+                if not waiters:
+                    del self._status_ev[ip]
             st = self._status.get(ip)
         if ok and st and st["t"] >= t0:
             return {**st, "latency_ms": round((st["t"] - t0) * 1000)}

@@ -38,18 +38,33 @@ class Streamer:
         return {"frames": 0, "started": 0.0, "max_gap_ms": 0.0, "late": 0, "target_fps": 0, "actual_fps": 0.0}
 
     # --------------------------------------------------------- realtime
-    def enable(self, repeats: int = 3, spacing: float = 0.5):
+    def enable(self, repeats: int = 3, spacing: float = 0.5,
+               wanted: Callable[[], bool] | None = None) -> bool:
         """Issue #404: a single enable right after power-on is sometimes
         ignored, so it is repeated a few times. A box that is switched off
-        ignores realtime frames, so it is switched on first."""
+        ignores realtime frames, so it is switched on first.
+
+        `wanted` is checked before every send: the lights can be released while
+        this ~1.3 s sequence runs (a retry thread, a self-heal pass), and then it
+        must not leave the box in realtime. Returns False if it was called off."""
+        ok = wanted or (lambda: True)
+        if not ok():
+            return False
         self.lan.send(self.ip, p.turn_msg(True))
         time.sleep(0.3)
         for i in range(repeats):
+            if not ok():
+                self.disable()
+                return False
             self.lan.send_razer(self.ip, p.razer_enable_packet(True))
             if i < repeats - 1:
                 time.sleep(spacing)
+        if not ok():                     # released while the last enable was in flight
+            self.disable()
+            return False
         self.realtime = True
         self.last_enable = time.time()
+        return True
 
     def disable(self, repeats: int = 3):
         self.stop_anim()
@@ -130,8 +145,11 @@ class Streamer:
             if anim is None:
                 try:
                     self.send_frame(frame)
-                except OSError as e:
+                except Exception as e:  # noqa: BLE001 - a bad frame must not kill this thread
                     log.warning("keepalive send failed: %s", e)
+                    if not isinstance(e, OSError):
+                        with self._cv:
+                            self.keepalive_s = 0.0     # it would fail the same way every time
                 continue
 
             now = time.perf_counter()

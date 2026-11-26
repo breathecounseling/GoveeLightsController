@@ -44,13 +44,17 @@ class App:
     # ------------------------------------------------------- devices
     def _on_device(self, info: dict):
         new = self.cfg.upsert_discovered(info)
-        self.seen[info["device"]] = time.time()
+        mac = info["device"]
+        self.seen[mac] = time.time()
+        # Use the address the config settled on (the reply's source), not the "ip" the
+        # device reports, which can be stale after a DHCP change.
+        ip = (self.cfg.devices.get(mac) or {}).get("ip") or info.get("source_ip") or info.get("ip")
         with self.lock:
-            s = self.streamers.get(info["device"])
-            if s and s.ip != info["ip"]:
-                s.ip = info["ip"]
+            s = self.streamers.get(mac)
+            if s and ip and s.ip != ip:
+                s.ip = ip
         if new:
-            log.info("discovered %s %s at %s", info.get("sku"), info["device"], info["ip"])
+            log.info("discovered %s %s at %s", info.get("sku"), mac, ip)
 
     def scan(self, extra=None):
         ips = list(self.cfg.data.get("manual_ips", [])) + list(extra or [])
@@ -155,11 +159,16 @@ class App:
             self.scan([ip])
             return {"ok": True}
         if path == "device":                      # rename / edit fields
+            upd = {k: b[k] for k in ("name", "estimated_count", "pixel_count", "reversed", "order") if k in b}
+            for k in ("estimated_count", "pixel_count"):
+                v = upd.get(k)
+                if v not in (None, ""):
+                    v = int(v)                    # ValueError -> 400
+                    if not 1 <= v <= 255:         # one razer frame carries 1..255 bulbs
+                        raise ValueError(f"{k} must be 1..255, got {v}")
+                    upd[k] = v
             with self.cfg.lock:
-                d = self.cfg.device(mac)
-                for k in ("name", "estimated_count", "pixel_count", "reversed", "order"):
-                    if k in b:
-                        d[k] = b[k]
+                self.cfg.device(mac).update(upd)
                 self.cfg.save()
             return {"ok": True}
         if path == "identify":
