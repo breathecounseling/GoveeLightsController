@@ -1,0 +1,28 @@
+{
+  "name": "Snowy evening",
+  "tags": [
+    "Holiday",
+    "Ambient"
+  ],
+  "layers": [
+    {
+      "effect": "solid",
+      "params": {
+        "color": "#ff9a40"
+      },
+      "opacity": 0.55
+    },
+    {
+      "effect": "snowdrift",
+      "params": {
+        "rate": 7,
+        "sway": 0.9,
+        "wind": -0.2,
+        "max_snow": 0.9,
+        "melt": 0.08,
+        "glisten": 0.5
+      },
+      "blend": "screen"
+    }
+  ]
+}

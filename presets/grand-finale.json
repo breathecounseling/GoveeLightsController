@@ -1,0 +1,21 @@
+{
+  "name": "Grand finale",
+  "tags": [
+    "Party",
+    "Holiday"
+  ],
+  "layers": [
+    {
+      "effect": "fireworks",
+      "params": {
+        "rate": 26,
+        "burst_size": 44,
+        "crackle": 0.55,
+        "finale": 30,
+        "finale_shells": 18,
+        "launch_zone": "Lower roofline"
+      },
+      "target": "all"
+    }
+  ]
+}

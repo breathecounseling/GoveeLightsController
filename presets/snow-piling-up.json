@@ -1,0 +1,29 @@
+{
+  "name": "Snow piling up",
+  "tags": [
+    "Holiday",
+    "Ambient"
+  ],
+  "layers": [
+    {
+      "effect": "gradient",
+      "params": {
+        "colors": [
+          "#001060",
+          "#000a40",
+          "#00186e"
+        ],
+        "length": 80,
+        "speed": 1
+      }
+    },
+    {
+      "effect": "snowdrift",
+      "params": {
+        "rate": 10,
+        "accumulate": 1.2
+      },
+      "blend": "screen"
+    }
+  ]
+}
