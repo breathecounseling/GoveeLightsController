@@ -39,8 +39,8 @@
         ],
         "today_color": "#fff4d0",
         "sparkle": 1.6,
-        "closed_color": "#00a828",
-        "closed_level": 0.35,
+        "closed_color": "#20d040",
+        "closed_level": 0.5,
         "frame_color": "#00b020",
         "frame_level": 0.6,
         "intro": 4

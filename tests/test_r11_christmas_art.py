@@ -78,5 +78,53 @@ class PolishedPresets(unittest.TestCase):
                 self.assertGreater(sum(1 for i in four if max(cols[i]) > 0.02), 70)
 
 
+def _brown_share(cols_frames, idx):
+    import colorsys
+    n = b = 0
+    for cols in cols_frames:
+        for i in idx:
+            h, s, v = colorsys.rgb_to_hsv(*cols[i])
+            n += 1
+            if 0.03 <= v < 0.45 and 15 / 360 <= h <= 50 / 360 and s > 0.35:
+                b += 1
+    return b / n
+
+
+class ReviewFixes(unittest.TestCase):
+    def test_champagne_fizz_reads_pale_gold_not_brown(self):
+        L = layout(HOUSE if HOUSE.exists() else EXAMPLE)
+        fr = render(preset("champagne-fizz"), L, 300)
+        frames = [fr[k] for k in range(60, 300, 6)]
+        runs = {}
+        for p in L.pixels:
+            runs.setdefault(p.run, []).append(p.i)
+        for run, idx in runs.items():
+            with self.subTest(run=run):
+                self.assertLess(_brown_share(frames, idx), 0.15)
+
+    def test_grand_finale_roofline_is_white_gold_red(self):
+        allowed = {"#ffffff", "#ff0010", "#ffc040", "#ffb020", "#ff1020", "#fff0c0"}
+        for l in preset("grand-finale")["layers"]:
+            t = l.get("target")
+            t = t if isinstance(t, list) else [t]
+            if l["effect"] in ("fireworks", "bursts") and "Whole front gable" not in t:
+                with self.subTest(target=t):
+                    cols = {c.lower() for c in l["params"]["colors"]}
+                    self.assertLessEqual(len(cols - allowed), 1, cols - allowed)
+
+    def test_advent_closed_doors_are_not_read_as_off(self):
+        # early December (few doors open) the closed-door tree must still read as lit
+        d = preset("advent-calendar")
+        L = layout(HOUSE if HOUSE.exists() else EXAMPLE)
+        for l in d["layers"]:
+            if l["effect"] == "advent":
+                l["params"]["day"] = 3
+        cols = render(d, L, 200)[-1]
+        peak = [p.i for p in L.pixels if p.run == "Peak"] or list(range(L.n))
+        mean = sum(max(cols[i]) for i in peak) / len(peak)
+        self.assertGreaterEqual(mean, 0.22)
+        self.assertGreaterEqual(d["layers"][1]["params"]["closed_level"], 0.45)
+
+
 if __name__ == "__main__":
     unittest.main()

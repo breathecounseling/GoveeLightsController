@@ -42,10 +42,8 @@
         "colors": [
           "#ff0010",
           "#ffffff",
-          "#1838ff",
-          "#ff00c0",
-          "#00e0ff",
-          "#20ff40"
+          "#ffc040",
+          "#1838ff"
         ],
         "rate": 50,
         "burst_size": 40,
@@ -69,10 +67,8 @@
         "colors": [
           "#ff0010",
           "#ffffff",
-          "#1838ff",
-          "#ff00c0",
-          "#00e0ff",
-          "#20ff40"
+          "#ffc040",
+          "#1838ff"
         ],
         "rate": 46,
         "burst_size": 36,
@@ -93,9 +89,8 @@
         "colors": [
           "#ff0010",
           "#ffffff",
-          "#1838ff",
-          "#ff00c0",
-          "#00e0ff"
+          "#ffc040",
+          "#1838ff"
         ],
         "interval": 0.45,
         "life": 1.3,
