@@ -20,6 +20,7 @@ from . import schedule as sched
 
 TAG = "calendar"
 OFF_TAG = "calendar_off"                 # a user rule the calendar switched off
+STAMP = "calendar_installed"             # schedule key: what the last install put in (see changes())
 DEFAULT_PROGRAM = {"preset": "warm-white"}
 
 # Playlists the calendar brings along: name -> (minutes per item, crossfade s, [candidate lists]).
@@ -258,6 +259,7 @@ def installed(sch: dict) -> bool:
 def strip(sch: dict, playlists: dict, showtimes: list) -> tuple[dict, dict, list]:
     """Copies without anything the calendar added."""
     sch = copy.deepcopy(sch or {})
+    sch.pop(STAMP, None)
     sch["rules"] = [r for r in sch.get("rules") or [] if not (isinstance(r, dict) and r.get(TAG))]
     playlists = {n: copy.deepcopy(p) for n, p in (playlists or {}).items() if not (isinstance(p, dict) and p.get(TAG))}
     showtimes = [copy.deepcopy(s) for s in showtimes or [] if not (isinstance(s, dict) and s.get(TAG))]
@@ -296,6 +298,7 @@ def merge(cal: dict, sch: dict, playlists: dict, showtimes: list, preset_ids=(),
     ids = set(preset_ids)
     if not program_ok(sch.get("default"), ids, playlists) and ("warm-white" in ids or not ids):
         sch["default"] = dict(DEFAULT_PROGRAM)
+    sch[STAMP] = _stamp(sch.get("rules"), playlists, showtimes)
     return sch, playlists, showtimes
 
 
@@ -310,26 +313,42 @@ def _sig(x) -> str:
                       sort_keys=True, default=str)
 
 
+def _mine(xs) -> list:
+    return [x for x in xs or [] if isinstance(x, dict) and x.get(TAG)]
+
+
+def _stamp(rules, playlists: dict, showtimes: list) -> dict:
+    """A record of what an install put in, so later edits by the owner (deleting one of the
+    calendar's showtimes or rules, trimming a rotation, another look for a holiday) aren't
+    mistaken for an update: {"shows": [...], "rules": {name: sig}, "playlists": {name: sig}}."""
+    return {"shows": sorted({str(s.get("show")) for s in _mine(showtimes)}),
+            "rules": {str(r.get("name")): _sig(r.get("program")) for r in _mine(rules)},
+            "playlists": {str(n): _sig(p) for n, p in (playlists or {}).items() if isinstance(p, dict) and p.get(TAG)}}
+
+
 def changes(cal: dict, sch: dict, playlists: dict, showtimes: list, preset_ids=()) -> dict:
     """What "Update the holiday calendar" would change in a copy installed earlier (e.g. by
     an older version): {"outdated", "showtimes": [calendar showtimes for shows it doesn't
     schedule yet], "rules": [names of rules that are new or play something else now],
     "playlists": [names of rotations that are new or changed], "schedule", "playlists_after",
-    "showtimes_after" (the result of the update)}. Nothing installed: nothing outdated."""
+    "showtimes_after" (the result of the update)}. Nothing installed: nothing outdated.
+    A copy installed by this version is compared with what it put in then (its STAMP), so
+    the owner's edits since don't count; an older copy has no stamp and is compared with
+    what is in the schedule now."""
     out = {"outdated": False, "showtimes": [], "rules": [], "playlists": []}
     if not installed(sch):
         return out
     m_sch, m_pls, m_sts = merge(cal, sch, playlists, showtimes, preset_ids)
-    mine = lambda xs: [x for x in xs or [] if isinstance(x, dict) and x.get(TAG)]       # noqa: E731
-    have_shows = {str(s.get("show")) for s in mine(showtimes)}
-    out["showtimes"] = [s for s in mine(m_sts) if str(s.get("show")) not in have_shows]
-    old_rules = {r.get("name"): r for r in mine((sch or {}).get("rules"))}
-    for r in mine(m_sch.get("rules")):
-        o = old_rules.get(r.get("name"))
-        if o is None or _sig(o.get("program")) != _sig(r.get("program")):
+    st = (sch or {}).get(STAMP)
+    if not (isinstance(st, dict) and isinstance(st.get("rules"), dict) and isinstance(st.get("playlists"), dict)):
+        st = _stamp((sch or {}).get("rules"), playlists, showtimes)
+    have_shows = set(st.get("shows") or [])
+    out["showtimes"] = [s for s in _mine(m_sts) if str(s.get("show")) not in have_shows]
+    for r in _mine(m_sch.get("rules")):
+        if st["rules"].get(str(r.get("name"))) != _sig(r.get("program")):
             out["rules"].append(r.get("name"))
     for name, pl in (m_pls or {}).items():
-        if isinstance(pl, dict) and pl.get(TAG) and _sig((playlists or {}).get(name)) != _sig(pl):
+        if isinstance(pl, dict) and pl.get(TAG) and st["playlists"].get(str(name)) != _sig(pl):
             out["playlists"].append(name)
     out["outdated"] = bool(out["showtimes"] or out["rules"] or out["playlists"])
     out.update(schedule=m_sch, playlists_after=m_pls, showtimes_after=m_sts)

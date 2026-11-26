@@ -41,6 +41,7 @@ def old_install(today=date(2026, 11, 20)):
     sch = {**SCH, "dusk_intro_minutes": 10, "on_offset_min": -10, "rules": rules}
     sch, pls, sts = cal.merge(c, sch, copy.deepcopy(DEFAULTS["playlists"]),
                               [{"show": "Family show", "from": "19:30", "to": "19:30", "every": 60}], IDS, [0, 1])
+    sch.pop(cal.STAMP, None)              # older versions kept no record of what they installed
     return sch, pls, sts
 
 
@@ -87,6 +88,28 @@ class CalendarChanges(_Denver, unittest.TestCase):
             if r.get("name") == "Advent":
                 r["enabled"] = False
         self.assertFalse(cal.changes(fresh, sch, pls, sts, IDS)["outdated"])
+
+    def test_the_owners_edits_after_an_update_are_not_an_update(self):
+        """Once this version has installed the calendar, deleting one of its showtimes or
+        rules, trimming a rotation or giving a holiday another look is the owner's choice:
+        only what a newer calendar adds or changes since then counts."""
+        fresh = cal.build(IDS, SHOWS, TEAMS, today=date(2026, 11, 26))
+        sch, pls, sts = old_install()
+        sch, pls, sts = cal.merge(fresh, sch, pls, sts, IDS)          # Update tapped
+        sts = [s for s in sts if s.get("show") != "Christmas on the roofline"]
+        sch["rules"] = [r for r in sch["rules"] if r.get("name") != "Valentine's week"]
+        for r in sch["rules"]:
+            if r.get("name") == "Thanksgiving":
+                r["program"] = {"preset": "warm-white"}
+        pls["Holiday: Christmas"]["items"] = pls["Holiday: Christmas"]["items"][1:]
+        ch = cal.changes(fresh, sch, pls, sts, IDS)
+        self.assertFalse(ch["outdated"], ch)
+        # a calendar that really changed since then is still offered
+        newer = copy.deepcopy(fresh)
+        newer["showtimes"].append({**newer["showtimes"][0], "show": "Brand new show"})
+        ch = cal.changes(newer, sch, pls, sts, IDS)
+        self.assertEqual([s["show"] for s in ch["showtimes"]], ["Brand new show"])
+        self.assertEqual(ch["rules"], [])
 
     def test_no_calendar_no_changes(self):
         fresh = cal.build(IDS, SHOWS, TEAMS, today=date(2026, 11, 26))
@@ -145,6 +168,18 @@ class AFourthBoxOnTheNetwork(_Denver, unittest.TestCase):
         self.assertIn("H705E 0033", ck[0]["detail"])
         self.assertIn("Eaves", ck[0]["detail"])                  # the runs that do light up
         self.assertEqual(ck[0]["jump"], "fourth")
+
+    def test_a_placed_run_losing_its_count_is_still_a_failure(self):
+        """Peak (mapped, a house-layout run) with no bulb count is not a new box: pointing
+        at Fourth run would offer to overwrite its gable map with a guessed line."""
+        r = TonightAfterTheUpgrade.rig(self)
+        peak = next(d for d in r.ctl.cfg.devices.values() if d.get("name") == "Peak")
+        peak["pixel_count"] = None
+        r.ctl.build_engine()
+        ck = next(c for c in r.ctl.tonight(password_set=True)["checks"] if c["id"] == "counts")
+        self.assertEqual(ck["level"], tonight.FAIL, ck)
+        self.assertIn("Peak", ck["detail"])
+        self.assertEqual(ck["jump"], "devices")
 
     def test_no_counted_box_at_all_is_still_a_failure(self):
         r = TonightAfterTheUpgrade.rig(self)

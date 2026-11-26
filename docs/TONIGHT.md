@@ -17,14 +17,20 @@ Write that number down. It's the version you have now, and you need it if you ro
 
 1. Stop the app:
    * If it runs in a window (`start.bat`): close the window, or press Ctrl+C in it.
-   * If it runs at boot (install-service): `schtasks /End /TN GoveeLightsController`
+   * If it runs at boot (install-service): in an **administrator** PowerShell (right-click
+     PowerShell, *Run as administrator*): `schtasks /End /TN GoveeLightsController`.
+     A normal window answers "Access is denied".
+   * If it starts hidden when you sign in (install-startup, no window): open Task Manager,
+     end **pythonw.exe**, or sign out and back in after the pull. If you skip this, the new
+     copy stops with "Port … is busy", the old version keeps running, and the calendar
+     update in step 3 never shows up.
 2. `git pull`
 3. If the pull stops with **"untracked working tree files would be overwritten"** and lists
    `presets\something.json`: that file is a preset of yours with the same name as a new
    built-in one. Move each file it lists into `user_presets\`, then run `git pull` again.
    Your copy still wins over the built-in one. (If a file with that name is already in
    `user_presets\`, move it to the desktop instead.)
-4. Start the app again: double-click `start.bat`, or
+4. Start the app again: double-click `start.bat`, or (administrator PowerShell)
    `schtasks /Run /TN GoveeLightsController`.
 
 Your settings (`govee_config.json`), password and visitor link (`govee_auth.json`,
@@ -36,7 +42,8 @@ update. The setup screen shouldn't appear. If it does, close it: **don't** run s
 1. You should see **"The holiday calendar has an update"** (yellow). Tap it, check that
    *Thanksgiving tonight* is listed under Shows, then tap **Update the holiday calendar**.
    This is the step that schedules tonight's show. It only changes the calendar's own
-   rules; your own rules, shows and playlists stay as they are.
+   rules; your own rules, shows and playlists stay as they are. (Changes you made to the
+   calendar's own entries are replaced.)
 2. The Tonight card should now read:
    * **4:26 pm** lights on: the dusk sky (10 minutes before sunset)
    * **4:36 pm** Thanksgiving rotation (turkey fan, harvest glow, harvest sunset,
@@ -44,11 +51,14 @@ update. The setup screen shouldn't appear. If it does, close it: **don't** run s
    * **6:00 pm** Show: Thanksgiving tonight, every hour, 6:00 pm to 9:00 pm (4 times,
      about 5 minutes each). After each one it goes back to the rotation.
    * **11:00 pm** lights off
-3. Checks: "All 3 boxes responding", "PC clock time zone: right for Mountain time",
+3. Checks: "All 3 boxes responding" (or "All 4", with the H705E on the network), "PC clock time zone: right for Mountain time",
    "Schedule on". A weather warning ("couldn't reach the forecast") is harmless.
 4. If the H705E is on the network, you'll see "A box isn't in the show yet" (yellow). The
    show still plays on Eaves, Peak and Accent. Only try **More → Fourth run** today if you
    have time before 5 pm. Nothing about the show changes until you tap *Add it to the show*.
+   If instead you see a red "Peak won't light up" (or Eaves, Accent): that run lost its bulb
+   count. **Don't** use Fourth run for it; open Diagnostics, or re-import your layout file
+   (`python -m goveelights layout import layouts/house.json`).
 
 ## 4. What happens when
 

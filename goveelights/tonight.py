@@ -642,7 +642,22 @@ def _device_checks(ctl, now: datetime) -> list[dict]:
     nocount = [dv.get("name") or m for m, dv in devs.items() if not dv.get("pixel_count")]
     runs = list(getattr(ctl.engine.layout, "runs", []) or [])
     lit = " · ".join(f"{r.name} {r.count - len([k for k in r.hidden if 0 <= k < r.count])}" for r in runs)
-    if nocount and runs:
+    try:
+        from .layout import _house_names
+        house = set(_house_names(ctl.cfg))
+    except Exception:                         # noqa: BLE001 - only narrows the warning below
+        house = set()
+    # a run that was placed (mapped, given a role, or one of the house layout's runs) and
+    # lost its count is a run that won't light up, not a new box for More -> Fourth run
+    placed = [dv.get("name") or m for m, dv in devs.items() if not dv.get("pixel_count")
+              and (dv.get("geometry") or dv.get("role") or (dv.get("name") or m) in house)]
+    if placed:
+        out.append(_check("counts", FAIL, f"{placed[0]} won't light up" if len(placed) == 1
+                          else "Bulb count unknown", ", ".join(placed) + ": bulb count missing, so "
+                          + ("it stays" if len(placed) == 1 else "they stay") + " dark tonight"
+                          + (f". The show plays on {lit} bulbs." if runs else ""),
+                          "Count the bulbs in diagnostics (or re-import your layout file)", "devices"))
+    elif nocount and runs:
         # a box found on the network that isn't in the show yet (e.g. a fourth one that
         # ignores commands): the counted runs still light up, so it is not a failure
         out.append(_check("counts", WARN, "A box isn't in the show yet",
@@ -866,7 +881,8 @@ def _calendar_checks(ctl, cfg: dict, sch: dict, preset_list, d: date, on: dateti
     more = [n for n in ch["rules"] + ch["playlists"] if n]
     if more and not tonight_bits:
         parts.append("Updated: " + ", ".join(dict.fromkeys(more)) + ".")
-    parts.append("Your own rules, shows and playlists stay as they are.")
+    parts.append("Your own rules, shows and playlists stay as they are; changes you made to the "
+                 "calendar's own entries are replaced.")
     return [_check("calendar", WARN, "The holiday calendar has an update", " ".join(parts),
                    "Tap, then 'Update the holiday calendar'", "calendar")]
 
