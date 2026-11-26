@@ -1857,7 +1857,9 @@ class Controller:
         return {"runs": [r.name for r in L.runs], "targets": L.target_names(), "zones": L.zones,
                 "runs_idx": {r.name: [p.i for p in r.pixels] for r in L.runs},
                 "pixels": [[round(p.x, 2), round(p.y, 2), L.runs.index(L.run(p.mac))] for p in L.pixels],
-                "bounds": [L.minx, L.miny, L.maxx, L.maxy]}
+                # what the preview draws: every bulb, an unmapped run's line below the house too
+                "bounds": [min([p.x for p in L.pixels] or [L.minx]), min([p.y for p in L.pixels] or [L.miny]),
+                           max([p.x for p in L.pixels] or [L.maxx]), max([p.y for p in L.pixels] or [L.maxy])]}
 
     def frame_hex(self) -> str:
         return "".join(f"{int(c[0] * 255 + .5):02x}{int(c[1] * 255 + .5):02x}{int(c[2] * 255 + .5):02x}"

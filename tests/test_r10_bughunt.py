@@ -72,5 +72,73 @@ class PreviewQueueTests(unittest.TestCase):
         self.assertIn("superseded", body)
 
 
+class FourthRunTests(unittest.TestCase):
+    """The fourth box gets a bulb count (the ladder trip) before it is camera-mapped: it
+    sits on a line below the house in the preview, but it must not squash the mapped
+    house's 2D effects (tree, text, dusk sky) into the top of their range."""
+
+    def layouts(self):
+        from test_rack import LAYOUT_FILE
+
+        from goveelights.config import Config
+        from goveelights.layout import Layout
+        td = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, td, True)
+        cfg = Config(Path(td) / "cfg.json")
+        cfg.import_layout(LAYOUT_FILE, create_missing=True)
+        three = Layout.from_config(cfg)
+        cfg.devices["AA:BB:CC:DD:EE:FF:00:09"] = {**cfg.devices[next(iter(cfg.devices))], "name": "Run 4",
+                                                  "pixel_count": 72, "hidden": [], "geometry": [], "order": 9}
+        return three, Layout.from_config(cfg)
+
+    def test_mapped_runs_keep_their_coordinates(self):
+        three, four = self.layouts()
+        self.assertEqual(four.n, three.n + 72)
+        a = {(p.run, p.local): p for p in three.pixels}
+        for p in four.pixels:
+            if p.run == "Run 4":
+                continue
+            q = a[(p.run, p.local)]
+            self.assertEqual((p.nx, p.ny, p.sx, p.sy, p.spanx, p.spany), (q.nx, q.ny, q.sx, q.sy, q.spanx, q.spany))
+            self.assertEqual((p.rnx, p.rny), (q.rnx, q.rny))
+
+    def test_unmapped_run_stays_in_range(self):
+        _, four = self.layouts()
+        for p in four.pixels:
+            self.assertTrue(0.0 <= p.nx <= 1.0 and 0.0 <= p.ny <= 1.0, (p.run, p.nx, p.ny))
+            self.assertTrue(0.0 <= p.sx <= p.spanx and 0.0 <= p.sy <= p.spany, (p.run, p.sx, p.sy))
+
+    def test_long_unmapped_strip_spreads_under_the_house(self):
+        from goveelights.layout import Layout, Run
+        three, _ = self.layouts()
+        runs = [Run(mac=r.mac, name=r.name, count=r.count, reverse=r.reverse, hidden=set(r.hidden),
+                    geometry=r.geometry) for r in three.runs]
+        L = Layout(runs + [Run(mac="W", name="WLED", count=300, geometry=[])])
+        xs = [p.nx for p in L.pixels if p.run == "WLED"]
+        self.assertEqual(len(set(xs)), 300)                                # no bulbs piled on the edge
+        self.assertTrue(xs[0] == 0.0 and 0.99 <= xs[-1] <= 1.0)
+
+    def test_preview_bounds_still_show_the_placeholder_line(self):
+        from types import SimpleNamespace
+
+        from goveelights.controller import Controller
+        _, four = self.layouts()
+        info = Controller.layout_info(SimpleNamespace(engine=SimpleNamespace(layout=four)))
+        ys = [y for _, y, _ in info["pixels"]]
+        self.assertLessEqual(info["bounds"][1], min(ys))
+        self.assertGreaterEqual(info["bounds"][3], max(ys))
+
+    def test_tree_on_the_peak_renders_the_same(self):
+        from goveelights.scene import Scene
+        three, four = self.layouts()
+        d = __import__("json").loads((ROOT / "presets" / "christmas-tree.json").read_text(encoding="utf-8"))
+        a, b = Scene.from_dict(d), Scene.from_dict(d)
+        ca, cb = a.render(3.0, three), b.render(3.0, four)
+        pa = {(p.run, p.local): ca[p.i] for p in three.pixels if p.run == "Peak"}
+        pb = {(p.run, p.local): cb[p.i] for p in four.pixels if p.run == "Peak"}
+        diff = sum(1 for k in pa if max(abs(x - y) for x, y in zip(pa[k], pb[k])) > 0.02)
+        self.assertLess(diff, len(pa) * 0.05)
+
+
 if __name__ == "__main__":
     unittest.main()

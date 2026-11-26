@@ -141,11 +141,13 @@ class Layout:
         if shaped:
             bx = min(x for x, _ in shaped)
             by = min(y for _, y in shaped)
+            wide = max(x for x, _ in shaped) - bx
             k = 0
             for r in runs:
                 if not r.geometry:
                     k += 1
-                    pos_all[r.mac] = [(bx + i * 0.5, by - 3.0 * k) for i in range(r.count)]
+                    step = min(0.5, wide / max(1, r.count - 1)) if wide > 0 else 0.5   # no wider than the house
+                    pos_all[r.mac] = [(bx + i * step, by - 3.0 * k) for i in range(r.count)]
         for r in runs:
             order = range(r.count - 1, -1, -1) if r.reverse else range(r.count)
             vis = [k for k in order if k not in r.hidden]
@@ -157,13 +159,19 @@ class Layout:
                 r.pixels.append(p)
                 self.pixels.append(p)
         n = len(self.pixels)
-        xs = [p.x for p in self.pixels] or [0.0]
-        ys = [p.y for p in self.pixels] or [0.0]
+        # the house's frame for 2D effects: the mapped runs only, so an unmapped run on its
+        # placeholder line below the house doesn't squash the house's effects (its bulbs
+        # are clamped onto the frame's edge instead)
+        framed = [p for r in runs if r.geometry or not shaped for p in r.pixels] or self.pixels
+        xs = [p.x for p in framed] or [0.0]
+        ys = [p.y for p in framed] or [0.0]
         self.minx, self.maxx, self.miny, self.maxy = min(xs), max(xs), min(ys), max(ys)
         spanx, spany = max(1e-6, self.maxx - self.minx), max(1e-6, self.maxy - self.miny)
         for i, p in enumerate(self.pixels):
             p.i, p.n, p.u = i, n, i / max(1, n - 1)
-            p.sx, p.sy, p.spanx, p.spany = p.x - self.minx, p.y - self.miny, spanx, spany
+            p.sx = min(max(p.x - self.minx, 0.0), spanx)
+            p.sy = min(max(p.y - self.miny, 0.0), spany)
+            p.spanx, p.spany = spanx, spany
             p.nx, p.ny = p.sx / spanx, p.sy / spany
         for r in runs:
             ys = [p.y for p in r.pixels] or [0.0]
