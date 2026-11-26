@@ -14,7 +14,8 @@ HOME = (40.0, -104.5)
 
 
 def house():
-    data = json.load(open("layouts/examples/gable-house.json"))
+    with open(LAYOUT_FILE, encoding="utf-8") as f:
+        data = json.load(f)
     devs = data["devices"]
     runs = [Run(mac=m, name=d["name"], count=d["pixel_count"], reverse=d["reversed"],
                 hidden=set(d["hidden"]), geometry=d["geometry"]) for m, d in devs.items()]

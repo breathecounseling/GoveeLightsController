@@ -157,6 +157,12 @@ def run_tests(target: Path) -> int:
     r = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests"], cwd=target, env=env)
     for cache in target.rglob("__pycache__"):          # compiled files are not part of the release
         shutil.rmtree(cache, ignore_errors=True)
+    for left in ("user_presets", "govee_config.json", "govee_auth.json", "goveelights.log"):
+        p = target / left                              # anything the test run created
+        if p.is_dir():
+            shutil.rmtree(p, ignore_errors=True)
+        elif p.exists():
+            p.unlink()
     return r.returncode
 
 
