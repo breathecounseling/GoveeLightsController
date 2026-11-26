@@ -1,7 +1,7 @@
 """Round 10: showpieces for a three-run house (a fourth run joins in when it is there).
 The fan (turkey, harvest sunset, sunburst) on the zigzag, the falling star across all
 runs, the sleigh's grand tour via the lower roofline, candlelight, their presets, the
-Thanksgiving / Christmas / Touchdown! shows and their holiday-calendar showtimes."""
+Thanksgiving / Christmas / Broncos touchdown shows and their holiday-calendar showtimes."""
 from __future__ import annotations
 
 import hashlib
@@ -25,7 +25,7 @@ from goveelights.scene import Scene  # noqa: E402
 
 NEW_PRESETS = ["turkey-fan", "harvest-sunset", "gratitude-candlelight", "text-give-thanks", "sleigh-grand-tour",
                "falling-star", "candy-cane-chase", "text-touchdown", "orange-crush", "hail-mary"]
-NEW_SHOWS = ["Thanksgiving tonight", "Christmas on the roofline", "Touchdown!"]
+NEW_SHOWS = ["Thanksgiving tonight", "Christmas on the roofline", "Broncos touchdown"]
 HOUSE = ROOT / "layouts" / "house.json"
 EXAMPLE = ROOT / "layouts" / "examples" / "gable-house.json"
 
@@ -136,6 +136,11 @@ class Pictures(unittest.TestCase):
         self.assertTrue(red, "the wattle")
         pale = [i for i in self.peak if min(cols[i]) > 0.2 and cols[i][1] > 0.5]
         self.assertTrue(pale, "the head and the feather tips")
+        head = [i for i, (u, v) in cv["uv"].items() if abs(u) < 0.2 and v > 0.5 and min(cols[i]) > 0.2]
+        self.assertGreaterEqual(len(head), 4, "a head big enough to read on six rows")
+        body = [max(cols[i]) for i, (u, v) in cv["uv"].items() if abs(u) < 0.15 and v < 0.2]
+        fan = [max(cols[i]) for i, (u, v) in cv["uv"].items() if abs(u) > 0.5 and v < 0.2]
+        self.assertLess(sum(body) / len(body), 0.6 * sum(fan) / len(fan), "a dark body against bright feathers")
         # mirrored: a feather's colour on the left matches the right (same row, same distance out)
         rows = {}
         for i, (u, v) in cv["uv"].items():
@@ -190,6 +195,46 @@ class Pictures(unittest.TestCase):
                     runs.add(p.run)
         self.assertEqual(runs, {"Eaves", "Peak", "Accent"})
 
+    def test_falling_star_keeps_its_pace_when_slow(self):
+        """A long 'every' must not collapse into back-to-back stars."""
+        L = layout(HOUSE if HOUSE.exists() else EXAMPLE)
+        for every in (4.5, 30, 60):
+            with self.subTest(every=every):
+                sc = Scene.from_dict({"layers": [{"effect": "falling_star", "params": {"every": every}}]})
+                starts, prev = [], 0
+                for f in range(20 * 400):
+                    sc.render(f / 20, L)
+                    cnt = sc.layers[0].state.get("count", 0)
+                    if cnt != prev:
+                        starts.append(f / 20)
+                        prev = cnt
+                gaps = [b - a for a, b in zip(starts, starts[1:])]
+                self.assertGreater(len(gaps), 2)
+                self.assertGreater(min(gaps), every * 0.6, gaps)
+
+    def test_hail_mary_is_orange_and_busy(self):
+        """Broncos orange on a dark sky (not pink from orange added onto navy), with a star
+        in flight most of the time."""
+        L = layout(HOUSE if HOUSE.exists() else EXAMPLE)
+        sc = Scene.from_dict(preset("hail-mary"))
+        orange = pink = lit = 0
+        dark = longest = 0
+        for f in range(500):
+            cols = sc.render(f / 20, L)
+            hot = [c for c in cols if c[0] > 0.6]
+            warm = [c for c in hot if c[0] - c[1] > 0.4]              # saturated reds and oranges
+            orange += sum(1 for c in warm if c[1] > 0.2 and c[2] < 0.15)
+            pink += sum(1 for c in warm if c[2] >= 0.15 and c[2] > 0.7 * c[1])
+            if hot:
+                lit += 1
+                dark = 0
+            else:
+                dark += 1
+                longest = max(longest, dark)
+        self.assertGreater(orange, 4 * pink)
+        self.assertGreater(lit, 250)                                  # was 195 of 500
+        self.assertLess(longest / 20, 2.5)
+
     def test_the_sleigh_tours_every_roofline_run(self):
         for extra in (0, 100):
             L = layout(EXAMPLE, extra)
@@ -228,6 +273,17 @@ class Shows(unittest.TestCase):
                 self.assertIn(c["preset"], ids)
                 self.assertTrue(shows_builtin.cue_ok(c))
 
+    def test_a_team_show_says_whose_it_is(self):
+        """Every install gets the built-in shows, whichever team it follows: one built on a
+        team's looks carries the team's name, and none borrows the name of the generic
+        score celebration ("Touchdown!")."""
+        for name, sh in shows_builtin.BUILTIN_SHOWS.items():
+            with self.subTest(show=name):
+                self.assertNotEqual(name, "Touchdown!")
+                if any("broncos" in c.get("preset", "") for c in sh["cues"]):
+                    self.assertIn("Broncos", name)
+                    self.assertIn("Broncos", sh["description"])
+
     def test_every_cue_renders_on_the_house_with_a_fourth_run(self):
         L = layout(HOUSE if HOUSE.exists() else EXAMPLE, 100)
         for name in NEW_SHOWS:
@@ -261,6 +317,26 @@ class Shows(unittest.TestCase):
         rule = next(r for r in c["rules"] if r["name"] == "Thanksgiving")
         self.assertEqual(rule["program"], {"playlist": "Holiday: Thanksgiving"})
         self.assertIn("turkey-fan", [i["preset"] for i in c["playlists"]["Holiday: Thanksgiving"]["items"]])
+
+    def test_calendar_showtimes_follow_the_holiday_every_year(self):
+        """Installed on Thanksgiving 2026, the shows still land on the right nights in later
+        years (Thanksgiving moves: 25 Nov 2027, 23 Nov 2028), with no re-tap."""
+        ids = [p.stem for p in (ROOT / "presets").glob("*.json")]
+        c = cal.build(ids, list(shows_builtin.BUILTIN_SHOWS), [], today=date(2026, 11, 26))
+        by = {s["show"]: s for s in c["showtimes"]}
+        tg, xm = by["Thanksgiving tonight"], by["Christmas on the roofline"]
+        for d, tg_on, xm_on in ((date(2027, 11, 25), True, False), (date(2027, 11, 26), False, True),
+                                (date(2028, 11, 23), True, False), (date(2028, 11, 24), False, True),
+                                (date(2027, 12, 24), False, False), (date(2027, 12, 30), False, True)):
+            with self.subTest(night=d):
+                self.assertEqual(sched.showtime_on_night(tg, d), tg_on)
+                self.assertEqual(sched.showtime_on_night(xm, d), xm_on)
+        # survives a round trip through the saved config and the API's checks
+        validate_showtimes(json.loads(json.dumps(c["showtimes"])))
+        with self.assertRaises(ValueError):
+            validate_showtimes([{"show": "x", "season": [["thanksgiving", "nope"]]}])
+        with self.assertRaises(ValueError):
+            validate_showtimes([{"show": "x", "season": ["thanksgiving"]}])
 
     def test_tonight_plan_lists_the_thanksgiving_show(self):
         from datetime import datetime

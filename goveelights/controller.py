@@ -1724,7 +1724,8 @@ class Controller:
     def _calendar(self) -> tuple[list[str], dict]:
         ids = [p["id"] for p in self.presets.list()]
         teams = (self.cfg.data.get("game") or {}).get("teams") or []
-        return ids, calendar_builtin.build(ids, [s["name"] for s in self.shows_list()], teams)
+        return ids, calendar_builtin.build(ids, [s["name"] for s in self.shows_list()], teams,
+                                           today=datetime.now().astimezone().date())
 
     def calendar_preview(self) -> dict:
         """What "Use the holiday calendar" would add, in date order from today."""
@@ -1757,8 +1758,9 @@ class Controller:
             if st.get("date"):
                 dates = calendar_builtin.fmt_range(calendar_builtin.next_range(
                     {"from": st["date"], "to": st["date"]}, today))
-            elif st.get("dates"):
-                dates = calendar_builtin.fmt_dates(st["dates"], today)
+            elif st.get("dates") or st.get("season"):
+                dates = calendar_builtin.fmt_dates(calendar_builtin.season_dates(st["season"], today)
+                                                   if st.get("season") else st["dates"], today)
                 if st.get("from") != st.get("to"):
                     when += "–" + tonight.fmt_time(datetime.combine(today, sched._hm(st["to"])))
             else:

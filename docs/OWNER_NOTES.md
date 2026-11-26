@@ -40,7 +40,8 @@
 * Showpieces (Nov 2026): the zigzag as a picture (turkey fan, harvest sunset, peppermint /
   orange-and-blue sunbursts), a falling star across all runs, the sleigh's grand tour via
   the Accent, candlelight; shows *Thanksgiving tonight*, *Christmas on the roofline* and
-  *Touchdown!*. Re-tap "Use the holiday calendar" to get them at the top of the hour.
+  *Broncos touchdown*. Re-tap "Use the holiday calendar" once to get the first two at the
+  top of the hour; they follow Thanksgiving's date by themselves in later years.
   A fourth run joins the whole-house looks once it has a bulb count.
 * Open-source prep: neutral defaults for new installs with the one-time migration above,
   target aliases, first-run setup, example layout, docs and `tools/export_public.py`.

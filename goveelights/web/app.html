@@ -2055,12 +2055,12 @@ function drawShowtimes(){
       <div><label>From</label><input type="time" data-f="from" value="${esc(st.from||'17:00')}"></div><div><label>To</label><input type="time" data-f="to" value="${esc(st.to||'22:00')}"></div>
       <div class="full"><label>Every</label><select data-f="every">${[[15,'15 minutes'],[30,'30 minutes'],[60,'hour'],[120,'2 hours']].map(([v,l]) => opt(v,l,+st.every===v)).join('')}</select></div>
       <div class="full"><label>Date (MM-DD, optional; e.g. 12-31)</label><input type="text" data-f="date" inputmode="text" autocapitalize="off" autocomplete="off" placeholder="every day" value="${esc(stDates(st).join(', '))}"></div>
-      ${stDates(st).length ? `<div class="full dim" style="font-size:11px">Only on ${esc(stDates(st).join(', '))}</div>` : `<div class="full days">${D.map((d,i) => `<button class="${(st.days||[]).includes(i)?'on':''}" data-day="${i}">${d}</button>`).join('')}<span class="dim" style="font-size:11px;align-self:center;margin-left:4px">(none = every day)</span></div>`}
+      ${stDates(st).length ? `<div class="full dim" style="font-size:11px">Only on ${esc(stDates(st).join(', '))}${st.season ? ' this year (the calendar moves it with the holiday each year; type dates to fix them)' : ''}</div>` : `<div class="full days">${D.map((d,i) => `<button class="${(st.days||[]).includes(i)?'on':''}" data-day="${i}">${d}</button>`).join('')}<span class="dim" style="font-size:11px;align-self:center;margin-left:4px">(none = every day)</span></div>`}
       <label class="row full"><input type="checkbox" data-f="only_when_on" ${st.only_when_on!==false?'checked':''}> Only when the lights are on <span class="dim" style="font-size:11px">(untick to switch them on for it)</span></label>
       <label class="row"><input type="checkbox" data-f="enabled" ${st.enabled!==false?'checked':''}> On</label><button class="sm bad" data-del>Remove</button></div>`);
     el.querySelectorAll('[data-f]').forEach(i => i.onchange = () => { const f = i.dataset.f;
       if (f === 'date'){ const ds = parseStDates(i.value); if (!ds){ i.value = stDates(st).join(', '); return toast('Date: MM-DD, e.g. 12-31') }
-        delete st.date; delete st.dates; if (ds.length === 1) st.date = ds[0]; else if (ds.length) st.dates = ds;
+        delete st.date; delete st.dates; delete st.season; if (ds.length === 1) st.date = ds[0]; else if (ds.length) st.dates = ds;
         if (ds.length) delete st.days;                 // a date replaces the weekday buttons: don't keep hidden days
         return drawShowtimes() }
       st[f] = i.type==='checkbox' ? i.checked : f==='every' ? +i.value : i.value });

@@ -126,9 +126,9 @@ BUILTIN_SHOWS: dict[str, dict] = {
             {"preset": "christmas-tree", "seconds": 60, "transition": "rise", "fade": 3},
         ],
     },
-    "Touchdown!": {
+    "Broncos touchdown": {
         "builtin": True,
-        "description": "Three minutes of game-day hype in orange and blue: the game-day look, "
+        "description": "For Broncos fans, three minutes of game-day hype in orange and blue: the game-day look, "
                        "an orange-and-blue sunburst on the gable, a Hail Mary that lands on the "
                        "porch, TOUCHDOWN! and GO BRONCOS!. Play it before kick-off or after a win.",
         "end": "resume",

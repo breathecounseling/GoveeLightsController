@@ -392,6 +392,23 @@ class TonightTests(_Denver, unittest.TestCase):
 
 # ------------------------------------------------------------------ the API
 class ApiTests(_Denver, unittest.TestCase):
+    def test_calendar_preview_uses_the_controllers_clock(self):
+        """The preview (and what "Add" installs) follows the controller's clock, not the
+        machine's date: the season shown on 26 Nov 2026 must not depend on the real date."""
+        from unittest import mock
+
+        class Later(date):
+            @classmethod
+            def today(cls):
+                return cls(2027, 1, 5)
+
+        r = Rig(self, datetime(2026, 11, 26, 12, 0).astimezone(),
+                {"schedule": {**SCH, "enabled": False, "rules": []}})
+        with mock.patch.object(cal, "date", Later):
+            pv = r.ctl.calendar_preview()
+        xm = next(s for s in pv["showtimes"] if s["show"] == "Christmas on the roofline")
+        self.assertEqual(xm["dates"], "Nov 27 – Dec 23, Dec 25 – Dec 30")
+
     def test_tonight_and_calendar_endpoints(self):
         r = Rig(self, datetime(2026, 11, 26, 12, 0).astimezone(),
                 {"schedule": {**SCH, "enabled": False, "rules": copy.deepcopy(DEFAULTS["schedule"]["rules"])},

@@ -62,7 +62,7 @@ _RULES = [
     {"name": "Advent", "from": "12-01", "to": "12-23", "program": {"playlist": "Holiday: Advent"},
      "about": "the Christmas rotation with the advent calendar"},
     {"name": "Christmas season", "from": "thanksgiving", "to": "12-30", "program": {"playlist": "Holiday: Christmas"},
-     "about": "tree, gift wrap, sleigh ride, snowy evening"},
+     "about": "tree, sleigh tour, gift wrap, candy-cane chase, snowy evening and a falling star"},
     {"name": "Winter", "from": "01-02", "to": "01-31", "program": {"playlist": "Holiday: Winter"},
      "about": "icicles, snow and winter sparkle"},
     {"name": "Valentine's week", "from": "02-08", "to": "02-14", "program": {"playlist": "Holiday: Valentine's", "or": ["valentines-hearts", "valentines-glow", "valentines"]},
@@ -239,6 +239,9 @@ def build(preset_ids, show_names, teams=(), today: date | None = None) -> dict:
             continue
         st = {k: v for k, v in spec.items() if k not in ("about", "season")}
         if spec.get("season"):
+            # "season" is what the controller follows (re-resolved every year); "dates" is
+            # this season's days, for the showtime editor and older copies of the app
+            st["season"] = [list(sp) for sp in spec["season"]]
             st["dates"] = season_dates(spec["season"], today)
             if not st["dates"]:
                 continue

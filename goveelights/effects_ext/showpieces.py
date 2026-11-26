@@ -75,6 +75,15 @@ def _add(frame, i, c, w=1.0):
     frame[i] = (a[0] + c[0] * w, a[1] + c[1] * w, a[2] + c[2] * w)
 
 
+def _over(frame, i, c, w=1.0):
+    """Light over a coloured sky: the sky shows through only as much as the light leaves
+    room for (added onto a blue sky, orange turns pink)."""
+    a = frame[i]
+    r, g, b = c[0] * w, c[1] * w, c[2] * w
+    k = 1.0 - min(1.0, max(r, g, b))
+    frame[i] = (a[0] * k + r, a[1] * k + g, a[2] * k + b)
+
+
 def _sig(ctx) -> tuple:
     L, idx = ctx.layout, ctx.idx
     return (id(L), len(L.pixels), len(idx), hash(tuple(idx)))
@@ -160,7 +169,7 @@ def _polar(u: float, v: float, k: float = 1.0) -> tuple[float, float]:
           help="from the outside in, mirrored on both sides; deep autumn colours read best on bulbs"),
     Param("feathers", "int", 7, "Feathers / rays", 3, 16, 1),
     Param("tip", "color", "#ffe0a0", "Feather tips", help="the pale edge at the end of every feather"),
-    Param("body", "color", "#8a2000", "Turkey body", help="a dark chestnut; bulbs show brown as deep orange"),
+    Param("body", "color", "#5a1400", "Turkey body", help="a dark chestnut; bulbs show brown as deep orange"),
     Param("wattle", "color", "#ff0000", "Wattle"),
     Param("level", "number", 0.9, "Brightness", 0.2, 1, 0.01),
     Param("intro", "number", 4, "Opening (s)", 0, 20, 0.5,
@@ -237,17 +246,21 @@ def _turkey(frame, cv, polar, P, clock, age, opened, cols, nf, lvl, seed):
         # the turkey in front: a dark chestnut body low in the middle, a pale head on a
         # neck above it with the red wattle hanging beside the beak
         bx, by = u / 0.27, (v + 0.05) / 0.55
-        hx, hy = u / 0.11, (v - 0.66) / 0.22
-        wx, wy = (u - 0.1) / 0.09, (v - 0.48) / 0.16
+        hx, hy = u / 0.15, (v - 0.68) / 0.24
+        wx, wy = (u - 0.12) / 0.1, (v - 0.47) / 0.17
         if wx * wx + wy * wy <= 1.0:
             frame[i] = _scale(wattle, lvl)
             continue
-        if hx * hx + hy * hy <= 1.0:
-            frame[i] = _scale((1.0, 0.68, 0.36), lvl)
+        hd = hx * hx + hy * hy
+        if hd <= 1.0:
+            frame[i] = _scale((1.0, 0.72, 0.42), lvl)
             continue
-        if bx * bx + by * by <= 1.0 or (abs(u) < 0.07 and v < 0.6):
-            sh = 0.8 + 0.2 * wobble(i, clock, 0.4, seed)
+        if bx * bx + by * by <= 1.0 or (abs(u) < 0.08 and v < 0.6):
+            sh = 0.75 + 0.25 * wobble(i, clock, 0.4, seed)
             frame[i] = _scale(body, lvl * sh)
+            continue
+        if hd <= 2.2:                                          # a dark ring sets the head off the fan
+            frame[i] = _scale(body, lvl * 0.25)
             continue
         # feathers: sectors fanning out from the pivot, opening from the middle outwards
         spread = abs(a - 0.5) * 2                              # 0 straight up, 1 flat
@@ -393,7 +406,7 @@ def falling_star(t, ctx, P, st):
 
     every = max(1.0, P["every"])
     nxt = st.get("next")
-    if nxt is None or nxt > clock + every + 1 or nxt < clock - 3 * every:
+    if nxt is None or nxt > clock + every * 1.2 + 1 or nxt < clock - 3 * every:
         nxt = st["next"] = clock + 0.8
     if st["fall"] is None and clock >= nxt:
         k = st.get("count", 0)
@@ -442,10 +455,10 @@ def falling_star(t, ctx, P, st):
             c = lerp(hc, tc, min(1.0, u * 1.4))
             geo.splat(glow, L, x, y, _scale(c, w * (1.0 if s == 0 else 0.85)), 1.3 if s == 0 else 1.1,
                       allowed, mode="max")
-        for i in idx:                                # ...added onto the sky
+        for i in idx:                                # ...over the sky
             g = glow[i]
             if g[0] or g[1] or g[2]:
-                _add(frame, i, g)
+                _over(frame, i, g)
         if q <= 1:
             head = at(q)
             # shed sparks on the bulbs it passes
@@ -471,7 +484,7 @@ def falling_star(t, ctx, P, st):
     bc = P["burst_colors"] or [GOLD]
     for i, a, life, key in st["sparks"]:
         b = envelope(a, 0.05, life * 0.4) * (0.5 + 0.5 * hash01(key, tw))
-        _add(frame, i, bc[key % len(bc)], 0.7 * b)
+        _over(frame, i, bc[key % len(bc)], 0.7 * b)
     bs = st["burst"]
     if bs is not None:
         bs["age"] += dt
@@ -487,9 +500,10 @@ def falling_star(t, ctx, P, st):
                 ring = math.exp(-((d - R * 0.8) / 1.4) ** 2)
                 h = hash01(i, tw, seed, 7)
                 g = max(ring, (h - 0.55) / 0.45 if d < R and h > 0.55 else 0.0)
-                _add(frame, i, bc[int(hash01(i, seed, 9) * len(bc)) % len(bc)], fade * g)
+                _over(frame, i, bc[int(hash01(i, seed, 9) * len(bc)) % len(bc)], fade * g)
     if head is not None:
-        geo.splat(frame, L, head[0], head[1], (1.0, 1.0, 1.0), 0.9, allowed)
+        # a white-hot core in the star's own colour (white added onto an orange tail is pink)
+        geo.splat(frame, L, head[0], head[1], lerp(P["head"], (1.0, 1.0, 1.0), 0.4), 0.9, allowed, mode="max")
     return _clamp(frame, idx)
 
 

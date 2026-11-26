@@ -174,7 +174,14 @@ def rule_matches(r: dict, d: date) -> bool:
 def showtime_on_night(st: dict, night: date) -> bool:
     """Does a showtime run on the evening that began on `night`? Its date (an "MM-DD"
     or a list) wins over its weekdays (the UI hides the weekdays once a date is set).
-    The after-midnight part of a window that crosses midnight belongs to that evening."""
+    The after-midnight part of a window that crosses midnight belongs to that evening.
+    A "season" (a list of [from, to] spans, holiday names allowed, as in a rule) is
+    resolved for each year and wins over both: the calendar's Thanksgiving show follows
+    Thanksgiving every year instead of staying on the date it was installed for."""
+    season = st.get("season")
+    if isinstance(season, list) and season:
+        return any(isinstance(sp, (list, tuple)) and len(sp) == 2
+                   and all(isinstance(x, str) and x for x in sp) and rule_matches({"from": sp[0], "to": sp[1]}, night) for sp in season)
     dates = st.get("date") or st.get("dates")
     dates = [dates] if isinstance(dates, str) else dates if isinstance(dates, list) else None
     if dates:

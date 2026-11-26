@@ -9,8 +9,8 @@
     {
       "effect": "text",
       "target": "Peak",
-      "params": {"text": "GIVE THANKS", "colors": ["#ffb000", "#ff4a00"], "color_mode": "words",
-                 "background": "#1a0400", "speed": 4.0, "size": 1.4, "sparkle": 0.15, "border": "glow", "border_color": "#ff7a10"}
+      "params": {"text": "GIVE THANKS", "colors": ["#ffb000", "#ffe2a8"], "color_mode": "words",
+                 "background": "#0a0200", "speed": 4.0, "size": 1.4, "sparkle": 0.06, "border": "glow", "border_color": "#ff7a10"}
     }
   ]
 }
