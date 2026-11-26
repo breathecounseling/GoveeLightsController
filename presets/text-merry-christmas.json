@@ -3,21 +3,23 @@
   "tags": ["Holiday", "Text"],
   "layers": [
     {
-      "effect": "glitter",
+      "effect": "candy_cane",
       "target": ["North wall", "Front eave", "South wall", "South gable", "Lower roofline"],
-      "params": {"colors": ["#ffb000", "#ff1a1a", "#00c030"], "level": 0.1, "length": 30, "speed": 1.5}
+      "params": {"colors": ["#ff0a0a", "#00d030"], "width": 4, "blend": 0.15, "speed": 1},
+      "fx": [{"type": "glitter", "params": {"density": 0.35, "base": 0.6, "decay": 0.25}}]
     },
     {
       "effect": "text",
       "target": "Peak",
-      "params": {"text": "MERRY CHRISTMAS <3", "colors": ["#ff1a1a", "#00d040", "#ffc000"],
-                 "color_mode": "letters", "speed": 5.5, "sparkle": 0.3, "border": "twinkle",
+      "params": {"text": "MERRY CHRISTMAS <3", "colors": ["#ff1a1a", "#00d040"],
+                 "color_mode": "words", "speed": 5.5, "sparkle": 0.3, "border": "twinkle",
                  "border_color": "#ffb000"}
     },
     {
       "effect": "glitter",
       "target": "Front gable outline",
-      "params": {"colors": ["#ffd890", "#ffb030"], "level": 0.35, "shimmer": 0.6, "length": 12, "speed": 0}
+      "params": {"colors": ["#ffa800", "#ffb820"], "level": 0.8, "shimmer": 0.2, "density": 0.25,
+                 "length": 12, "speed": 0}
     }
   ]
 }

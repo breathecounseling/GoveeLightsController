@@ -5,7 +5,16 @@
     {
       "effect": "starry_night",
       "target": "all",
-      "params": {}
+      "params": {"sky": "#0010ff", "sky2": "#2400c8", "sky_level": 0.48, "stars": 0.05,
+                 "star_colors": ["#ffffff", "#ffe6a8"], "star_level": 1.0, "twinkle": 0.85,
+                 "twinkle_speed": 1.6, "shooting_every": 6.5, "shooting_speed": 26, "tail": 13,
+                 "tail_color": "#d8e4ff", "doubles": 0.3, "zigzag": 0.4}
+    },
+    {
+      "effect": "twinkle",
+      "target": "all",
+      "blend": "lighten",
+      "params": {"colors": ["#ffffff", "#fff0c0", "#ffd890"], "density": 0.09, "duration": 2.2, "seed": 31}
     }
   ]
 }

@@ -322,7 +322,10 @@ def sleigh(t, ctx, P, st):
             m = max(c)
             if m > 0:
                 k = SL_SPARK_MAX / m if m > SL_SPARK_MAX else 1.0
-                _add(frame, i, c, k)
+                # the sparkle covers the sky behind it (no change on a black sky), so a gold
+                # trail over a blue sky stays gold instead of mixing to grey-beige
+                a, cov = frame[i], 1.0 - min(1.0, m * k / SL_SPARK_MAX)
+                frame[i] = (a[0] * cov + c[0] * k, a[1] * cov + c[1] * k, a[2] * cov + c[2] * k)
     for p in st["dust"]:
         u = p[4] / p[5]
         b = 0.8 * (1.0 - u) ** 1.2 * (0.5 + 0.5 * hash01(p[7], tw))
@@ -336,6 +339,19 @@ def sleigh(t, ctx, P, st):
             u = uh - off
             return u if d > 0 else Lp - u
 
+        # the train blots out the sky behind it (no change on a black sky), so on a blue
+        # sky the reindeer stay amber and the sleigh red instead of mixing to pink
+        a0, a1 = sorted((S(-1.0), S(sl1 + 0.5)))
+        k, _ = pth.locate(max(0.0, a0))
+        for j in range(max(0, k - 1), len(pth.order)):
+            sj = pth.s[j]
+            if sj - 0.5 > a1:
+                break
+            cov = min(1.0, max(0.0, min(a1, sj + 0.5) - max(a0, sj - 0.5)))
+            if cov > 0:
+                i = pth.order[j]
+                c = frame[i]
+                frame[i] = (c[0] * (1 - cov), c[1] * (1 - cov), c[2] * (1 - cov))
         # jingle: a soft golden shimmer around the sleigh
         sx, sy = pth.point(min(max(S((sl0 + sl1) / 2), 0.0), Lp))
         jg = P["jingle"]

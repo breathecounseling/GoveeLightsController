@@ -12,11 +12,29 @@
         "colors": [
           "#ff7a00",
           "#ffb000",
-          "#b0102a",
+          "#ff1a00",
           "#ff4a00"
         ],
         "length": 55,
         "speed": 1
+      }
+    },
+    {
+      "effect": "fire",
+      "target": "Peak",
+      "params": {
+        "colors": [
+          "#500600",
+          "#b01400",
+          "#ff3000",
+          "#ff6a00",
+          "#ffb020"
+        ],
+        "intensity": 1.3,
+        "scale": 4,
+        "speed": 1.2,
+        "rise": 0.25,
+        "axis": "y"
       }
     },
     {
@@ -25,12 +43,12 @@
       "blend": "lighten",
       "params": {
         "colors": [
+          "#fff0a0",
+          "#ffd040",
           "#ffb000",
-          "#ff6a00",
-          "#c02000",
-          "#a01030"
+          "#ff7a00"
         ],
-        "rate": 2,
+        "rate": 3,
         "gravity": 6,
         "life": 4,
         "drift": 0.8,
@@ -39,6 +57,10 @@
     },
     {
       "effect": "twinkle",
+      "target": [
+        "Eaves",
+        "Lower roofline"
+      ],
       "blend": "add",
       "opacity": 0.6,
       "params": {

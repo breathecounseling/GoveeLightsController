@@ -8,14 +8,51 @@
     {
       "effect": "solid",
       "params": {
-        "color": "#021a06"
+        "color": "#052a0c"
+      }
+    },
+    {
+      "effect": "gradient",
+      "target": "Peak",
+      "params": {
+        "colors": [
+          "#0a5a14",
+          "#063a10",
+          "#021a0a"
+        ],
+        "length": 6,
+        "speed": 0,
+        "axis": "y"
       }
     },
     {
       "effect": "fireflies",
       "params": {
-        "density": 0.05,
-        "life": 2.5
+        "colors": [
+          "#c0ff00",
+          "#e8ff10",
+          "#90ff20"
+        ],
+        "density": 0.11,
+        "life": 2.2,
+        "snap": 0.8,
+        "drift": 1.5
+      },
+      "blend": "lighten"
+    },
+    {
+      "effect": "fireflies",
+      "target": "Whole front gable",
+      "params": {
+        "colors": [
+          "#c0ff00",
+          "#ffff30"
+        ],
+        "density": 0.08,
+        "life": 1.8,
+        "drift": 1.0,
+        "snap": 0.8,
+        "seed": 41
       },
       "blend": "lighten"
     }

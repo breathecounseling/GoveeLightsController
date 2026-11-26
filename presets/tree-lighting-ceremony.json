@@ -9,9 +9,9 @@
       "effect": "twinkle",
       "params": {
         "colors": [
-          "#ffe0b0"
+          "#fff4e0"
         ],
-        "background": "#ffc070",
+        "background": "#ffb868",
         "density": 0.18,
         "duration": 3.0,
         "seed": 11
@@ -24,14 +24,21 @@
         "Garage peak"
       ],
       "blend": "normal",
-      "opacity": 0.2
+      "opacity": 0.75
     },
     {
       "effect": "tree",
       "params": {
         "intro": 12,
         "relight": 3,
-        "burst_every": 10
+        "burst_every": 7,
+        "body": "#00e040",
+        "body2": "#20b800",
+        "star": "#ffe680",
+        "star_pulse": 0.45,
+        "glow_level": 0.28,
+        "level": 1.0,
+        "shade": 0.12
       },
       "target": "Whole front gable"
     },

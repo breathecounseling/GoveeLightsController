@@ -20,7 +20,7 @@
           "#ff0050"
         ],
         "sparkle": "#ffd0e0",
-        "level": 0.6,
+        "level": 0.7,
         "density": 0.35,
         "length": 40,
         "speed": 1.5,
@@ -31,8 +31,16 @@
       "effect": "floaters",
       "target": "Whole front gable",
       "params": {
-        "outline": 0.7,
-        "glow": 0.45
+        "colors": [
+          "#ff0010",
+          "#ff0028",
+          "#ff1a1a"
+        ],
+        "level": 1.0,
+        "background": "#4a00ff",
+        "glow": 0.5,
+        "outline": 0.8,
+        "pop_color": "#ffb0d0"
       }
     },
     {
@@ -40,14 +48,13 @@
       "target": "Both peaks",
       "params": {
         "colors": [
-          "#ff0030",
-          "#ff1a8c"
+          "#ff0020",
+          "#ff1a6a"
         ],
-        "background": "#70001a",
+        "background": "#200000",
         "bpm": 58,
-        "decay": 0.22
-      },
-      "opacity": 0.7
+        "decay": 0.3
+      }
     }
   ]
 }
