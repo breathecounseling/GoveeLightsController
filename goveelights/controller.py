@@ -285,7 +285,7 @@ class Controller:
             log.warning("evolve step failed: %s", e)
             return
         self.scene_dict = scene.to_dict()
-        self.engine.set_scene(scene, 8.0)
+        self.engine.set_scene(scene, 8.0, continuous=True)   # keep snow piles, tree, etc.
         self.playing = {"kind": "evolve", "id": ev["id"], "name": ev["base"].get("name", ev["id"])}
 
     def play_playlist(self, name: str, manual: bool = True, fade: float | None = None):

@@ -103,7 +103,8 @@ def _demo_elevation(t: float, demo: float) -> float:
 def dusk_sky(t: float, P: dict) -> dict:
     """Per-frame sky state (computed once per frame, shared by every bulb)."""
     night = P["colors"]
-    key = (t, P["demo"], P["lat"], P["lon"], P["shift"], tuple(night), P["night_level"])
+    key = (t, P["demo"], P["lat"], P["lon"], P["shift"], tuple(night), P["night_level"],
+           P["sun_glow"])
     m = getattr(_memo, "dusk", None)
     if m is not None and m[0] == key:
         return m[1]
