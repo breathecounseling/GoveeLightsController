@@ -4,6 +4,7 @@
   python -m goveelights diag            Phase 1 diagnostic tool on its own
   python -m goveelights play <preset>   play without the UI
   python -m goveelights effects | layout | set-password
+  python -m goveelights hologram <scene> clips for LED hologram fans (--list, --help)
   python -m goveelights install-service | uninstall-service      (Windows, at boot, admin)
   python -m goveelights install-startup | uninstall-startup      (Windows, at login)
 """
@@ -275,6 +276,9 @@ def main(argv=None):
     if not argv or (argv[0].startswith("-") and not _leading_options_then_subcommand(argv)) or argv[0] == "serve":
         from .app_server import main as app_main
         return app_main(argv[1:] if argv and argv[0] == "serve" else argv)
+    if argv[0] == "hologram":
+        from .hologram.cli import main as holo_main
+        return holo_main(argv[1:])
     if argv[0] == "diag":
         from .diag_server import main as diag_main
         return diag_main(argv[1:])

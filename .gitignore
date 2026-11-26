@@ -16,3 +16,4 @@ user_presets/
 tools/private_denylist.txt
 *.egg-info/
 build/
+hologram_clips/

@@ -234,6 +234,19 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
 .subox{border:1px solid var(--line);border-radius:12px;padding:8px;margin-bottom:8px;background:var(--p2)}
 .subox .meta{font-size:12px;color:var(--dim);margin-top:6px}
 .disc{color:var(--dim);font-size:11.5px;line-height:1.4;margin:16px 4px 8px;text-align:center}
+/* hologram fans */
+.hostage{position:relative;margin:4px auto 6px;max-width:100%}
+.hostage .fan{position:absolute;border-radius:50%;overflow:hidden;background:#000;box-shadow:0 0 0 2px #2c3542,0 0 18px #0008}
+.hostage .fan img{display:block;width:100%;height:100%;image-rendering:auto}
+.hostage .fan i{position:absolute;left:50%;top:50%;width:6%;height:6%;margin:-3% 0 0 -3%;border-radius:50%;background:#1b212bb0;border:1px solid #2c3542}
+.hostage .fan b{position:absolute;left:0;right:0;bottom:3%;text-align:center;font-size:10px;color:#8d98a7;font-weight:500}
+.hostage.busy{opacity:.55}
+.hofiles{display:grid;grid-template-columns:1fr;gap:6px;margin-top:8px}
+.hofiles a{display:flex;align-items:center;gap:8px;background:var(--p2);border:1px solid var(--line);border-radius:10px;padding:9px 10px;color:var(--text);text-decoration:none;font-size:13.5px;min-height:44px}
+.hofiles a span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hofiles a em{font-style:normal;color:var(--dim);font-size:12px}
+.hotips{font-size:13px;line-height:1.45;color:var(--text);margin:0;padding-left:18px}
+.hotips li{margin-bottom:6px}
 </style>
 </head>
 <body>
@@ -430,12 +443,66 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
     <div id="palList"></div>
   </div>
   <div class="card">
+    <h2>Hologram fans</h2>
+    <p class="help">Make looping clips for spinning LED "hologram" fans on the porch rail: Santa's sleigh, a jack-o'-lantern, fireworks… in the house's colours, for one fan or a row of them showing one big picture.</p>
+    <button class="pri" onclick="tabTo('holo')">Open the fan studio</button>
+  </div>
+  <div class="card">
     <h2>App</h2>
     <p class="help">Run in the background: <code>python -m goveelights install-service</code> on a Windows PC; on macOS or Linux see docs/SERVICE.md.</p>
     <div class="row"><button class="grow" onclick="openSetup()">Run first-time setup again</button>
     <button class="bad" onclick="if(confirm('Stop the app? Lights go back to the Govee app.'))post('quit').then(()=>toast('Stopped'))">Quit app</button></div>
   </div>
   <p class="disc" id="disclaimer">Unofficial project, not affiliated with or endorsed by Govee. "Govee" is a trademark of its owner, used only to name the lights this works with. It uses undocumented LAN commands that may change or stop working with a firmware update. Use at your own risk. MIT licence.</p>
+</section>
+
+<!-- HOLOGRAM FANS (from More) -->
+<section id="s-holo">
+  <div class="tb"><button class="sm" onclick="tabTo('more')">‹ More</button><b class="sp" style="font-size:16px">Hologram fans</b></div>
+  <div class="card">
+    <div class="chips" id="hoScenes" style="margin-bottom:10px"></div>
+    <div class="hostage" id="hoStage"></div>
+    <p class="help" id="hoBlurb" style="color:var(--text)"></p>
+    <p class="help" id="hoNote">Black is see-through on a fan: only the bright parts float in the air.</p>
+    <p class="help" id="hoInfo"></p>
+  </div>
+  <div class="card">
+    <h2>Fans</h2>
+    <div class="seg" id="hoLayouts"></div>
+    <div class="knob"><label>Fan size</label><select id="hoDia" onchange="hoDiaSel(this.value)"><option value="30">30 cm</option><option value="42">42 cm</option><option value="50">50 cm</option><option value="56">56 cm</option><option value="65">65 cm</option><option value="75">75 cm</option><option value="100">100 cm</option><option value="custom">Other…</option></select><span></span></div>
+    <div class="knob" id="hoDiaCRow" style="display:none"><label>Fan cm</label><input type="number" id="hoDiaC" min="10" max="300" step="1" inputmode="numeric" placeholder="blade tip to tip" onchange="hoDiaC(this.value)"><span></span></div>
+    <div class="knob" id="hoGapRow"><label>Gap</label><input id="hoGap" type="range" min="0" max="60" step="1"><output id="oHoGap"></output></div>
+    <p class="help" id="hoGapHelp">The gap between neighbouring fans' blade tips, as mounted. Splice mode: each fan plays its own slice of one big picture, so measure it.</p>
+    <div class="knob"><label>Colours</label><select id="hoCols" onchange="hoSet('colors',this.value)"></select><span></span></div>
+    <div class="knob" id="hoTeamRow"><label>Team</label><div class="row"><input type="color" id="hoT1" onchange="hoTeam()"><input type="color" id="hoT2" onchange="hoTeam()"><button class="sm ghost" onclick="hoSet('team',null)">Reset</button></div><span></span></div>
+    <div class="knob" id="hoYearRow"><label>Year</label><input type="number" id="hoYear" min="2000" max="2200" inputmode="numeric" onchange="hoYear(this.value)"><span></span></div>
+    <div class="knob"><label>Loop</label><select id="hoSecs" onchange="hoSet('seconds',+this.value||null)"><option value="">scene's own</option><option value="4">4 s</option><option value="6">6 s</option><option value="8">8 s</option><option value="10">10 s</option></select><span></span></div>
+  </div>
+  <div class="card">
+    <h2>Make the files</h2>
+    <div class="knob"><label>Size</label><select id="hoSize" onchange="hoSet('size',+this.value)"></select><span></span></div>
+    <div class="knob"><label>Frame rate</label><select id="hoFps" onchange="hoSet('fps',+this.value||null)"><option value="">scene's own</option><option value="20">20 fps</option><option value="24">24 fps</option><option value="30">30 fps</option></select><span></span></div>
+    <div class="row wrap" style="gap:14px;margin:6px 0">
+      <label class="row"><input type="checkbox" id="hoGif" checked> <span>GIF</span></label>
+      <label class="row"><input type="checkbox" id="hoMp4" checked> <span>MP4</span></label>
+      <label class="row"><input type="checkbox" id="hoPng"> <span>PNG frames (zip)</span></label>
+    </div>
+    <p class="help" id="hoMp4Note"></p>
+    <div class="row"><button class="pri grow" id="hoMakeBtn" onclick="hoMake()">Make files</button><button id="hoCancel" style="display:none" onclick="post('hologram/cancel').then(hoPoll)">Cancel</button></div>
+    <div class="prog" id="hoProg" style="display:none"><i id="hoProgBar"></i></div>
+    <p class="help" id="hoJobNote"></p>
+    <div class="hofiles" id="hoFiles"></div>
+  </div>
+  <div class="card">
+    <h2>Loading them onto the fans</h2>
+    <ul class="hotips">
+      <li><b>One file per fan.</b> Each fan gets its own clip (fan 1 is the left one; on a square of four: top left, top right, bottom left, bottom right). Upload it in the fan's own app (Wi-Fi or Bluetooth) or copy it to the fan's SD card, then set the fan to loop it.</li>
+      <li><b>MP4 if the app takes it,</b> GIF otherwise. Most apps accept a square MP4 (720 × 720 is safe) and re-encode to the fan's own resolution.</li>
+      <li><b>Splice (a row or square of fans):</b> start the clips together (most apps have a "sync" or group play). If yours can't, the scenes still read on each fan alone.</li>
+      <li><b>No live control.</b> No consumer fan takes a live picture from a PC; switching clips is done in the fan's app. (Experimental community protocols exist for some models; see docs/HOLOGRAM_FANS.md.)</li>
+      <li><b>Safety:</b> the blades are fast and hard. Mount out of reach of children and passers-by, behind the clear guard or dome; outdoors use an IP65 (rain-rated) domed fan and an outdoor-rated plug. Fix it so wind can't swing it into anything, and check the maker's cold-weather limit before winter nights.</li>
+    </ul>
+  </div>
 </section>
 </main>
 
@@ -500,11 +567,12 @@ const store = { get(k,d){ try{ const v=localStorage.getItem(k); return v==null?d
 
 // ------------------------------------------------------------- nav + sheet
 function tabTo(t){
-  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.t === (t === 'holo' ? 'more' : t)));
   document.querySelectorAll('main section').forEach(s => s.classList.toggle('on', s.id === 's-'+t));
   store.set('tab', t); window.scrollTo(0,0);
   if (t === 'create' && !draft) draftLoading = editCurrent(true);
   if (t === 'shows') loadTonight();
+  if (t === 'holo') loadHolo();
 }
 document.querySelectorAll('#nav button').forEach(b => b.onclick = () => tabTo(b.dataset.t));
 function openSheet(title, body){ $('sheetTitle').textContent = title; const sb=$('sheetBody'); sb.innerHTML=''; if (typeof body === 'string') sb.innerHTML = body; else sb.appendChild(body); $('sheet').scrollTop=0; $('sheet').classList.add('on'); $('scrim').classList.add('on') }
@@ -2124,6 +2192,129 @@ async function setupFinish(){
     SCH = await get('schedule'); schedForm(); await reloadLayout(); await loadExtras(); refresh();
     toast('All set. Try a preset on Play!');
   } finally { $('suDone').disabled = false }
+}
+
+// ------------------------------------------------------------- hologram fans (More -> Hologram fans)
+let HOI = null, HO = null, hoTimer = null, hoPollT = null, hoSeq = 0, hoNoCols = '';
+const HO_DEF = {scene: 'sleigh', layout: '1', diameter: 42, gap: 4, colors: '', team: null, year: null, seconds: null, fps: null, size: 720};
+function hoSave(){ store.set('holo', JSON.stringify(HO)) }
+async function loadHolo(){
+  if (!HO){ let s = {}; try { s = JSON.parse(store.get('holo', '{}')) || {} } catch(e) {} HO = Object.assign({}, HO_DEF, s) }
+  try { HOI = await get('hologram') } catch(e) { toast('Could not load the fan studio'); return }
+  if (!HOI.scenes.some(x => x.id === HO.scene)) HO.scene = HOI.scenes[0].id;
+  if (!(HO.layout in HOI.layouts)) HO.layout = '1';
+  if (!HOI.sizes.includes(HO.size)) HO.size = 720;
+  if (!(HO.diameter >= 10 && HO.diameter <= 300)) HO.diameter = 42;
+  if (HO.year != null && !hoYearOk(HO.year)) HO.year = null;     // a bad year saved earlier would fail every preview
+  $('hoScenes').innerHTML = HOI.scenes.map(x => `<button class="chip" data-id="${esc(x.id)}">${esc(x.name)}</button>`).join('');
+  $('hoScenes').querySelectorAll('button').forEach(b => b.onclick = () => hoSet('scene', b.dataset.id));
+  $('hoLayouts').innerHTML = Object.entries(HOI.layouts).map(([k, v]) => `<button data-v="${esc(k)}" title="${esc(v)}">${k === '1' ? '1 fan' : esc(k)}</button>`).join('');
+  $('hoLayouts').querySelectorAll('button').forEach(b => b.onclick = () => hoSet('layout', b.dataset.v));
+  const opts = [['', "Scene's own"], ['house', 'Match the house (what is playing)']]
+    .concat(HOI.palettes.map(n => ['pal:' + n, 'Palette: ' + n]))
+    .concat(HOI.presets.map(p => ['preset:' + p.id, 'Preset: ' + p.name]));
+  $('hoCols').innerHTML = opts.map(([v, n]) => `<option value="${esc(v)}">${esc(n)}</option>`).join('');
+  $('hoSize').innerHTML = HOI.sizes.map(n => `<option value="${n}">${n} × ${n}${n === 720 ? ' (most fans)' : ''}</option>`).join('');
+  $('hoMp4Note').textContent = HOI.mp4 ? 'MP4 is H.264, square, made with ffmpeg (' + HOI.encoder + ').' : 'MP4 needs ffmpeg on the PC (not found), so only GIF and PNG frames can be made.';
+  $('hoMp4').disabled = !HOI.mp4; if (!HOI.mp4) $('hoMp4').checked = false;
+  $('hoGap').oninput = e => { $('oHoGap').textContent = e.target.value + ' cm' };
+  $('hoGap').onchange = e => hoSet('gap', +e.target.value);
+  hoForm(); hoPreview(); hoShowJob(HOI.job); if (HOI.job && HOI.job.state === 'running') hoPoll();
+}
+function hoForm(){
+  $('hoScenes').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.id === HO.scene));
+  $('hoScenes').querySelector('.on')?.scrollIntoView({block: 'nearest', inline: 'nearest'});
+  $('hoLayouts').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === HO.layout));
+  const stdDia = [...$('hoDia').options].some(o => o.value === String(HO.diameter));
+  $('hoDia').value = stdDia ? String(HO.diameter) : 'custom'; $('hoDiaCRow').style.display = stdDia ? 'none' : '';
+  if (!stdDia) $('hoDiaC').value = HO.diameter;
+  $('hoGap').value = HO.gap; $('oHoGap').textContent = HO.gap + ' cm';
+  const multi = HO.layout !== '1';
+  $('hoGapRow').style.display = multi ? '' : 'none'; $('hoGapHelp').style.display = multi ? '' : 'none';
+  $('hoCols').value = HO.colors; if ($('hoCols').value !== HO.colors) { HO.colors = ''; $('hoCols').value = '' }
+  const sc = HOI.scenes.find(x => x.id === HO.scene) || {};
+  $('hoTeamRow').style.display = sc.team ? '' : 'none';
+  const tm = HO.team || HOI.team; $('hoT1').value = tm[0]; $('hoT2').value = tm[1] || tm[0];
+  $('hoYearRow').style.display = HO.scene === 'newyear' ? '' : 'none'; $('hoYear').value = HO.year || '';
+  $('hoSecs').value = HO.seconds ? String(HO.seconds) : ''; $('hoFps').value = HO.fps ? String(HO.fps) : ''; $('hoSize').value = String(HO.size);
+  $('hoBlurb').textContent = sc.blurb || '';
+  hoInfo(sc);
+}
+function hoSet(k, v){ HO[k] = v; hoSave(); hoForm(); if (!['size', 'fps'].includes(k)) hoPreview() }
+function hoDiaSel(v){
+  if (v !== 'custom') return hoSet('diameter', +v);
+  $('hoDiaCRow').style.display = ''; $('hoDiaC').value = HO.diameter; $('hoDiaC').focus();
+}
+function hoDiaC(v){
+  const d = Math.round(+v);
+  if (!(d >= 10 && d <= 300)) { toast('Fan size must be 10 to 300 cm'); $('hoDiaC').value = HO.diameter; return }
+  hoSet('diameter', d);
+}
+function hoYearOk(y){ return Number.isInteger(y) && y >= 2000 && y <= 2200 }
+function hoYear(v){
+  if (v === '') return hoSet('year', null);
+  const y = +v;
+  if (!hoYearOk(y)) { toast('Year must be 2000 to 2200'); $('hoYear').value = HO.year || ''; return }
+  hoSet('year', y);
+}
+function hoTeam(){ HO.team = [$('hoT1').value, $('hoT2').value]; hoSave(); hoPreview() }
+function hoBody(){
+  return {scene: HO.scene, layout: HO.layout, diameter: HO.diameter, spacing: HO.diameter + (HO.layout === '1' ? 0 : HO.gap),
+          colors: HO.colors, team: HO.scene === 'football' ? HO.team : null, year: HO.year, seconds: HO.seconds, fps: HO.fps, size: HO.size};
+}
+function hoPreview(){
+  clearTimeout(hoTimer);
+  hoTimer = setTimeout(async () => {
+    const seq = ++hoSeq; $('hoStage').classList.add('busy');
+    const r = await post('hologram/preview', hoBody());
+    if (seq !== hoSeq) return;
+    $('hoStage').classList.remove('busy');
+    if (r) hoStage(r);
+  }, 250);
+}
+function hoStage(r){
+  const L = r.layout, st = $('hoStage');
+  const card = st.parentElement, cs = getComputedStyle(card);          // the card's content box, not its padding
+  const W = Math.min(card.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 2, 560), k = W / L.canvas[0];
+  st.style.width = W + 'px'; st.style.height = Math.round(L.canvas[1] * k) + 'px';
+  st.innerHTML = r.tiles.map((src, i) => { const [x, y] = L.origins[i];
+    return `<div class="fan" style="left:${x * k}px;top:${y * k}px;width:${L.size * k}px;height:${L.size * k}px"><img src="${src}" alt="fan ${i + 1}"><i></i>${r.tiles.length > 1 ? `<b>${i + 1}</b>` : ''}</div>` }).join('');
+  const sc = (HOI && HOI.scenes.find(x => x.id === HO.scene)) || {};
+  $('hoNote').textContent = (r.tiles.length > 1 ? (sc.splice === false ? 'Its own copy on each of the ' + r.tiles.length + ' fans (this scene doesn\'t span them). '
+    : 'Splice: one picture across ' + r.tiles.length + ' fans, centres ' + L.spacing_cm + ' cm apart. ') : '')
+    + 'Black is see-through on a fan. Loop ' + r.seconds + ' s' + (HO.scene === 'newyear' ? ', year ' + r.year : '') + '.';
+  hoNoCols = HO.colors && !(r.colors || []).length ? HO.colors : '';     // e.g. lights off: nothing to match
+  hoInfo(sc);
+}
+function hoInfo(sc){
+  $('hoInfo').textContent = !HO.colors ? ''
+    : hoNoCols === HO.colors ? (HO.colors === 'house' ? 'Nothing playing has colours to match' : 'That choice has no bright colours') + ', so this uses the scene\'s own colours.'
+    : sc.palette_role ? 'The chosen colours recolour the ' + sc.palette_role + '.' : '';
+}
+async function hoMake(){
+  const formats = [['gif', 'hoGif'], ['mp4', 'hoMp4'], ['png', 'hoPng']].filter(([, id]) => $(id).checked && !$(id).disabled).map(([f]) => f);
+  if (!formats.length) return toast('Pick at least one kind of file');
+  const r = await post('hologram/make', Object.assign(hoBody(), {formats}));
+  if (r) { hoShowJob(r.job); hoPoll() }
+}
+async function hoPoll(){
+  clearTimeout(hoPollT);
+  let j; try { j = await get('hologram/job') } catch(e) { return }
+  hoShowJob(j);
+  if (j.state === 'running' && $('s-holo').classList.contains('on')) hoPollT = setTimeout(hoPoll, 1000);
+}
+function hoShowJob(j){
+  if (!j) return;
+  const run = j.state === 'running';
+  $('hoMakeBtn').disabled = run; $('hoCancel').style.display = run ? '' : 'none'; $('hoProg').style.display = run ? '' : 'none';
+  $('hoProgBar').style.width = (run && j.total ? Math.round(100 * j.done / j.total) : 0) + '%';
+  const what = j.scene ? ((HOI && (HOI.scenes.find(x => x.id === j.scene) || {}).name) || j.scene) + ', ' + (j.layout === '1' ? '1 fan' : j.layout) + ', ' + j.size + ' px' : '';
+  $('hoJobNote').textContent = run ? 'Making ' + what + '… frame ' + (j.done || 0) + ' of ' + (j.total || '?') + ' (the lights keep running).'
+    : j.state === 'done' ? 'Ready: ' + what + (j.seconds ? ' (took ' + Math.round(j.seconds) + ' s)' : '') + '. Download each fan\'s file:' + Object.entries(j.skipped || {}).map(([k, v]) => ' ' + k.toUpperCase() + ' skipped: ' + v + '.').join('')
+    : j.state === 'failed' ? 'Could not make the files: ' + (j.error || 'unknown error') : j.state === 'cancelled' ? 'Cancelled.' : '';
+  const files = j.state === 'done' ? (j.files || []) : [];
+  $('hoFiles').innerHTML = files.map(f => { const m = f.match(/fan(\d+)/), ext = f.endsWith('-png.zip') ? 'PNG frames (zip)' : f.split('.').pop().toUpperCase();
+    return `<a href="/api/hologram/file?name=${encodeURIComponent(f)}" download="${esc(f)}"><span>${m ? 'Fan ' + m[1] : 'The fan'}: ${esc(ext)}</span><em>${esc(f)}</em></a>` }).join('');
 }
 
 // ------------------------------------------------------------- boot

@@ -121,9 +121,32 @@ def validate_schedule(sch) -> None:
         raise ValueError(f"schedule not saved, a value is invalid ({type(e).__name__}: {e})") from None
 
 
+def _studio_for(ctl):
+    """The hologram fan studio, made on first use (clips go next to the config)."""
+    from .hologram.studio import Studio
+    cfg = getattr(ctl, "cfg", None)
+    base = Path(cfg.path).resolve().parent if cfg is not None and getattr(cfg, "path", None) else Path.cwd()
+    return Studio(base / "hologram_clips")
+
+
+_FILE_TYPES = {".gif": "image/gif", ".mp4": "video/mp4", ".zip": "application/zip", ".png": "image/png"}
+
+
 def make_handler(ctl: Controller, on_quit, auth: Auth):
+    studio_box: list = []
+    studio_lock = threading.Lock()
+
+    def studio():
+        # made on first use (the import stays off the startup path), under a lock: two
+        # phones asking at once must share one studio, or quit could miss a running job
+        with studio_lock:
+            if not studio_box:
+                studio_box.append(_studio_for(ctl))
+            return studio_box[0]
+
     class H(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
+        studio_box = None          # set below: lets the server stop a running clip job on quit
         timeout = 30          # a client that goes quiet mid-request can't hold a thread forever
 
         def log_message(self, fmt, *a):
@@ -304,6 +327,12 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                                        "visitor": ctl.vcfg, "transitions": Engine.TRANSITIONS,
                                        "self_heal": ctl.ecfg.get("self_heal", True), "reenable_min": ctl.ecfg.get("reenable_min", 0),
                                        "leagues": {k: v[2] for k, v in LEAGUES.items()}, "pictures": list(PICTURES)})
+                if path == "/api/hologram":         # More -> Hologram fans
+                    return self._json(studio().info(ctl))
+                if path == "/api/hologram/job":
+                    return self._json(studio().job())
+                if path == "/api/hologram/file":
+                    return self._send_file(studio().file(q.get("name", [""])[0]))
                 if path == "/api/diag/state":
                     return self._json(ctl.diag.state())
                 if path == "/api/diag/report":
@@ -314,6 +343,26 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                 log.exception("GET %s failed", path)
                 return self._json({"ok": False, "error": "internal error (see the log)"}, 500)
             self._json({"error": "not found"}, 404)
+
+        def _send_file(self, p: Path):
+            """A finished clip, as a download (streamed: a PNG zip can be tens of MB)."""
+            size = p.stat().st_size
+            self.send_response(200)
+            self.send_header("Content-Type", _FILE_TYPES.get(p.suffix, "application/octet-stream"))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(size))
+            self.send_header("Content-Disposition", f'attachment; filename="{p.name}"')
+            self._sec_headers()
+            self.end_headers()
+            try:
+                with open(p, "rb") as f:
+                    while True:
+                        chunk = f.read(256 * 1024)
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+            except OSError:              # the phone gave up mid-download: headers are gone, just hang up
+                self.close_connection = True
 
         def _stream(self):
             """Server-sent events: the engine's current colours, ~12 times a second."""
@@ -633,10 +682,17 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
             if a == "diag/exit":
                 ctl.exit_diag()
                 return {"ok": True}
+            if a == "hologram/preview":
+                return studio().preview(ctl, b)
+            if a == "hologram/make":
+                return {"ok": True, "job": studio().start(ctl, b)}
+            if a == "hologram/cancel":
+                return {"ok": True, "job": studio().cancel()}
             if a == "quit":
                 threading.Thread(target=on_quit, daemon=True).start()
                 return {"ok": True}
             raise KeyError(f"unknown action {a}")
+    H.studio_box = studio_box
     return H
 
 
@@ -685,6 +741,8 @@ def main(argv=None):
             return
         done.set()
         log.info("shutting down, releasing lights to the Govee app")
+        for st in getattr(srv.RequestHandlerClass, "studio_box", None) or []:
+            st.stop()                          # a clip being made in the background
         ctl.shutdown()
         threading.Thread(target=srv.shutdown, daemon=True).start()
 
