@@ -210,8 +210,15 @@ class Controller:
         sc = Scene.from_dict(scene_dict, self.user_palettes)
         L = self.engine.layout
         out = []
+        start = 2.0
+        if any(layer.gen.frame for layer in sc.layers):
+            # effects with memory (tree lighting up, snow piling, fireworks) start empty:
+            # let them run a few seconds first so the preview shows them in full swing
+            start = 6.0
+            for k in range(40):
+                sc.render(k * 0.15, L, look)
         for k in range(frames):
-            cols = sc.render(2.0 + k / fps, L, look)
+            cols = sc.render(start + k / fps, L, look)
             out.append("".join(f"{int(c[0] * 255 + .5):02x}{int(c[1] * 255 + .5):02x}{int(c[2] * 255 + .5):02x}"
                                for c in cols))
         res = {"fps": fps, "frames": out}
