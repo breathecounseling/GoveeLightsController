@@ -49,6 +49,8 @@ class Effect:
     fn: Callable[[float, Pixel, dict], Color]
     params: list[Param] = field(default_factory=list)
     description: str = ""
+    group: str = ""            # picker group, e.g. "Scenes", "Physics"
+    frame: bool = False        # True: fn(t, ctx, P, state) -> whole frame (effects with memory)
 
     def resolve(self, params: dict | None) -> dict:
         """Merge with defaults, coerce types, convert colours to floats."""
@@ -83,15 +85,28 @@ class Effect:
 
     def to_dict(self) -> dict:
         return {"name": self.name, "label": self.label, "description": self.description,
-                "params": [p.to_dict() for p in self.params]}
+                "group": self.group, "frame": self.frame, "params": [p.to_dict() for p in self.params]}
 
 
 EFFECTS: dict[str, Effect] = {}
 
 
-def effect(name: str, label: str, params: list[Param], description: str = ""):
+def effect(name: str, label: str, params: list[Param], description: str = "", group: str = ""):
+    """Per-pixel effect: fn(t, pixel, P) -> colour. Pure: any frame for any time."""
     def deco(fn):
-        EFFECTS[name] = Effect(name, label, fn, params, description)
+        EFFECTS[name] = Effect(name, label, fn, params, description, group)
+        return fn
+    return deco
+
+
+def frame_effect(name: str, label: str, params: list[Param], description: str = "", group: str = ""):
+    """Whole-frame effect with memory: fn(t, ctx, P, state) -> list of colours for every
+    pixel of the virtual strip (only ctx.idx, the layer's target pixels, are used).
+    `state` is a dict that persists between frames (particles, accumulated snow…);
+    ctx has layout, idx, clock, dt (seconds since last frame, already scaled by master
+    speed), bpm and a per-scene cache. The first frame has dt == 0."""
+    def deco(fn):
+        EFFECTS[name] = Effect(name, label, fn, params, description, group, frame=True)
         return fn
     return deco
 
@@ -152,12 +167,19 @@ def solid(t, p, P):
 def chase(t, p, P):
     s, _ = coord(p, P["axis"])
     x = s - travel(t, P)
-    sp = P["spacing"]
-    k = math.floor(x / sp)
-    if (x - k * sp) < P["width"]:
-        cols = P["colors"]
-        return cols[k % len(cols)]
-    return P["background"]
+    sp, w = P["spacing"], P["width"]
+    # the bulb covers [x-0.5, x+0.5]; light it by how much of a dot overlaps it, so dots
+    # glide smoothly between bulbs instead of hopping (anti-aliasing)
+    best, cov = None, 0.0
+    for k in (math.floor((x - 0.5) / sp), math.floor((x + 0.5) / sp)):
+        a = k * sp
+        o = max(0.0, min(x + 0.5, a + w) - max(x - 0.5, a))
+        if o > cov:
+            best, cov = k, o
+    if best is None or cov <= 0:
+        return P["background"]
+    cols = P["colors"]
+    return lerp(P["background"], cols[best % len(cols)], min(1.0, cov / min(1.0, w)))
 
 
 @effect("comet", "Comet with tail", [
@@ -194,7 +216,8 @@ def wipe(t, p, P):
     d = abs(travel(t, P))
     k = int(d // cycle)
     filled = d - k * cycle
-    return cols[k % len(cols)] if s < filled else cols[(k - 1) % len(cols)]
+    cov = min(1.0, max(0.0, filled - s + 0.5))        # soft, gliding edge
+    return lerp(cols[(k - 1) % len(cols)], cols[k % len(cols)], cov)
 
 
 @effect("wave", "Sine wave", [
@@ -264,9 +287,11 @@ def candy_cane(t, p, P):
     k = math.floor(x)
     f = x - k
     c = cols[k % len(cols)]
-    b = P["blend"]
-    if b > 0 and f > 1 - b:
-        return lerp(c, cols[(k + 1) % len(cols)], (f - (1 - b)) / b)
+    b = max(P["blend"], min(0.5, 0.5 / P["width"]))    # at least one bulb of edge softening
+    if f > 1 - b:
+        return lerp(c, cols[(k + 1) % len(cols)], (f - (1 - b)) / b * 0.5)
+    if f < b:
+        return lerp(c, cols[(k - 1) % len(cols)], (b - f) / b * 0.5)
     return c
 
 
@@ -783,3 +808,22 @@ LOOKS = {
 for _n, _d in LOOKS.items():
     if _n in EFFECTS:
         EFFECTS[_n].description = _d
+
+
+# ------------------------------------------------------------ picker groups
+GROUP_ORDER = ["Scenes", "Physics", "Sparkle & glitter", "Along the lights", "Across the house (2D)",
+               "Text, pictures & numbers", "Weather", "Texture & time", "Utility"]
+_GROUPS = {
+    "Sparkle & glitter": ["glitter", "shimmer", "sequins", "fizz", "fireflies", "twinkle", "sparkle"],
+    "Along the lights": ["solid", "chase", "comet", "scanner", "wipe", "wave", "candy_cane", "alternate",
+                         "gradient", "rainbow"],
+    "Across the house (2D)": ["ripple", "sweep", "plasma", "aurora", "bursts"],
+    "Text, pictures & numbers": ["picture", "digits", "countdown", "paint"],
+    "Weather": ["snowfall", "rain", "lightning"],
+    "Texture & time": ["fire", "breathe"],
+    "Utility": ["off", "mapcode"],
+}
+for _g, _names in _GROUPS.items():
+    for _n in _names:
+        if _n in EFFECTS and not EFFECTS[_n].group:
+            EFFECTS[_n].group = _g

@@ -345,7 +345,7 @@ h2 .sp{flex:1}
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const h = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild };
-let BLEND_INFO = {};
+let BLEND_INFO = {}, GROUP_ORDER = [];
 let ST = {}, EFX = {}, FXD = {}, BLENDS = [], SHAPES = [], PRESETS = [], LAYOUT = null, PL = {}, SCH = {}, PALS = {}, PAL_BUILTIN = [], PAL_CATS = {};
 let draft = null, draftId = null, sel = 0, panel = 'source', filter = 'all', draftLoading = null;
 const hist = {u: [], r: [], last: null};
@@ -714,14 +714,11 @@ function sourcePanel(L, card){
 }
 function swatchOwn(L){ const g = EFX[L.effect]; let cols=[]; g.params.forEach(p => { if (p.kind==='colors') cols = cols.concat(val(L,p)); else if (p.kind==='color' && p.name!=='background') cols.push(val(L,p)) }); return cols.length ? palCss(cols) : '#333' }
 function effectPicker(L){
-  const groups = {'Sparkle & glitter': ['glitter','shimmer','sequins','fizz','fireflies','twinkle','sparkle'],
-                  'Along the lights': ['solid','chase','comet','scanner','wipe','wave','candy_cane','alternate','gradient','rainbow'],
-                  'Across the house (2D)': ['ripple','sweep','plasma','aurora','bursts'],
-                  'Pictures & numbers': ['picture','digits','countdown','paint'],
-                  'Weather': ['snowfall','rain','lightning'],
-                  'Texture & time': ['fire','breathe','off']};
+  const groups = {};
+  Object.values(EFX).filter(e => e.group !== 'Utility').forEach(e => (groups[e.group || 'Other'] ||= []).push(e.name));
+  const order = [...(GROUP_ORDER || []), ...Object.keys(groups)].filter((g, i, a) => groups[g] && a.indexOf(g) === i);
   const el = h('<div></div>');
-  Object.entries(groups).forEach(([gname, names]) => {
+  order.map(g => [g, groups[g]]).forEach(([gname, names]) => {
     el.appendChild(h(`<div class="grp">${gname}</div>`));
     const grid = h('<div class="pick"></div>');
     names.filter(n => EFX[n]).forEach(n => { const e = EFX[n]; const b = h(`<button class="${n===L.effect?'on':''}"><canvas></canvas><b>${esc(e.label)}</b><span>${esc(e.description||'')}</span></button>`);
@@ -1329,7 +1326,7 @@ async function security(){
 
 // ------------------------------------------------------------- boot
 (async function boot(){
-  const e = await get('effects'); e.effects.forEach(x => EFX[x.name] = x); e.fx.forEach(x => FXD[x.name] = x); BLENDS = e.blends; SHAPES = e.shapes; BLEND_INFO = e.blend_info || {};
+  const e = await get('effects'); e.effects.forEach(x => EFX[x.name] = x); e.fx.forEach(x => FXD[x.name] = x); BLENDS = e.blends; SHAPES = e.shapes; BLEND_INFO = e.blend_info || {}; GROUP_ORDER = e.group_order || [];
   LAYOUT = await get('layout'); layoutPreview(); openStream();
   await loadPalettes(); PL = await get('playlists'); SCH = await get('schedule');
   drawPad(); await loadPresets(); plSelect(); schedForm(); await loadExtras(); await refresh(); setInterval(refresh, 2000); security();

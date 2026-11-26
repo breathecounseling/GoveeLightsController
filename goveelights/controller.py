@@ -126,6 +126,7 @@ class Controller:
             e = Engine(layout, out, fps=float(self.ecfg.get("fps", 20)), gamma=float(self.ecfg.get("gamma", 1.0)),
                        brightness=float(self.ecfg.get("brightness", 1.0)))
             e.master.update(self.cfg.data.get("master", {}))
+            e.dither = bool(self.ecfg.get("dither", True))
             self._thumbs = {}
             if old and old.scene:
                 e.set_scene(old.scene)

@@ -31,6 +31,7 @@ class Run:
     reverse: bool = False
     hidden: set[int] = field(default_factory=set)
     geometry: list[list[float]] = field(default_factory=list)
+    trim: tuple | None = None            # per-run colour gains (r, g, b), e.g. to warm up a bluish run
     pixels: list[Pixel] = field(default_factory=list)   # visible, virtual order
 
     def positions(self) -> list[tuple[float, float]]:
@@ -156,7 +157,8 @@ class Layout:
                 continue   # count not confirmed yet: not part of the strip
             runs.append(Run(mac=mac, name=d.get("name") or mac, count=int(count),
                             reverse=bool(d.get("reversed")), hidden=set(d.get("hidden") or []),
-                            geometry=d.get("geometry") or []))
+                            geometry=d.get("geometry") or [],
+                            trim=tuple(float(v) for v in d["trim"]) if d.get("trim") else None))
         return cls(runs, cfg.data.get("zones", []))
 
     def summary(self) -> str:

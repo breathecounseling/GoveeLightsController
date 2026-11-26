@@ -32,6 +32,7 @@ from pathlib import Path
 
 from . import modulation
 from .color import BLACK, Color, hex_to_rgb, luminance
+from . import effects_ext  # noqa: F401  (registers plug-in effects)
 from .effects import EFFECTS, Effect
 from .fx import FX, Ctx
 from .layout import Layout
@@ -126,6 +127,7 @@ class Layer:
                       for u in (self.fx or [])]
         self.clock: float | None = None
         self.travel = 0.0
+        self.state: dict = {}           # memory for frame effects (particles, snow…)
 
     # kept for callers of the v1 API
     @property
@@ -197,7 +199,7 @@ class Scene:
         self._last_t = old._last_t
         for a, b in zip(self.layers, old.layers):
             if a.effect == b.effect and b.clock is not None:
-                a.clock, a.travel = b.clock, b.travel
+                a.clock, a.travel, a.state = b.clock, b.travel, b.state
                 for ua, ub in zip(a.units, b.units):
                     if ua.type == ub.type:
                         ua.state = ub.state
@@ -249,9 +251,14 @@ class Scene:
                     P = dict(P)
                 P["_travel"] = L.travel
             fn, clock = L.gen.fn, L.clock
-            frame = [BLACK] * n
-            for i in idx:
-                frame[i] = fn(clock, px[i], P)
+            if L.gen.frame:
+                frame = fn(clock, Ctx(layout, idx, clock, ldt, bpm, ctx_cache), P, L.state)
+                if len(frame) != n:
+                    frame = (list(frame) + [BLACK] * n)[:n]
+            else:
+                frame = [BLACK] * n
+                for i in idx:
+                    frame[i] = fn(clock, px[i], P)
             if L.units:
                 ctx = Ctx(layout, idx, clock, ldt, bpm, ctx_cache)
                 for ui, U in enumerate(L.units):

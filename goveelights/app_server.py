@@ -18,7 +18,7 @@ from .auth import COOKIE, Auth
 from .config import Config
 from .controller import Controller
 from .diag_server import build_report, lan_ips
-from .effects import EFFECTS
+from .effects import EFFECTS, GROUP_ORDER
 from .fx import FX
 from .modulation import SHAPES
 from .palettes import BUILTIN, all_palettes, categories
@@ -156,7 +156,7 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                 if path == "/api/effects":
                     return self._json({"effects": [e.to_dict() for e in EFFECTS.values()],
                                        "fx": [f.to_dict() for f in FX.values()], "blends": BLENDS,
-                                       "blend_info": BLEND_INFO,
+                                       "blend_info": BLEND_INFO, "group_order": GROUP_ORDER,
                                        "shapes": SHAPES})
                 if path == "/api/palettes":
                     return self._json({"palettes": all_palettes(ctl.user_palettes), "builtin": list(BUILTIN),

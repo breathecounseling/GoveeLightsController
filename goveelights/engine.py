@@ -15,15 +15,33 @@ from .scene import Scene, blend
 log = logging.getLogger(__name__)
 
 
-def to_device_frames(layout: Layout, colors: list[Color], gamma: float = 1.0) -> dict[str, list[tuple[int, int, int]]]:
-    """Virtual-strip colours -> per-run frames in physical bulb order (hidden bulbs dark)."""
+def to_device_frames(layout: Layout, colors: list[Color], gamma: float = 1.0,
+                     dither: list | None = None) -> dict[str, list[tuple[int, int, int]]]:
+    """Virtual-strip colours -> per-run frames in physical bulb order (hidden bulbs dark).
+    Applies each run's colour trim. With a `dither` error buffer (one [r, g, b] per
+    pixel, kept between frames), values between two 8-bit levels alternate over time
+    so slow dim fades look smooth instead of stepping (temporal dithering)."""
     frames = {r.mac: [(0, 0, 0)] * r.count for r in layout.runs}
-    if gamma == 1.0:
-        conv = lambda v: int(v * 255 + 0.5)  # noqa: E731
-    else:
-        conv = lambda v: int((v ** gamma) * 255 + 0.5)  # noqa: E731
-    for p, c in zip(layout.pixels, colors):
-        frames[p.mac][p.local] = (conv(c[0]), conv(c[1]), conv(c[2]))
+    trims = {r.mac: getattr(r, "trim", None) for r in layout.runs}
+    for k, (p, c) in enumerate(zip(layout.pixels, colors)):
+        tr = trims[p.mac]
+        vals = (c[0] * tr[0], c[1] * tr[1], c[2] * tr[2]) if tr else c
+        out = []
+        for ch in range(3):
+            v = min(1.0, max(0.0, vals[ch]))
+            if gamma != 1.0:
+                v = v ** gamma
+            v *= 255.0
+            if dither is not None and v < 48.0:            # only where steps are visible
+                v += dither[k][ch]
+                q = int(min(255, max(0, round(v))))
+                dither[k][ch] = max(-0.5, min(0.5, v - q))
+            else:
+                q = int(v + 0.5)
+                if dither is not None:
+                    dither[k][ch] = 0.0
+            out.append(q)
+        frames[p.mac][p.local] = (out[0], out[1], out[2])
     return frames
 
 
@@ -35,6 +53,8 @@ class Engine:
         self.live = False          # False: render for preview only, lights untouched
         self.master = {"speed": 1.0, "hue": 0.0, "palette": "", "bpm": 120.0}
         self.blackout = False
+        self.dither = True                       # smooth dim fades (temporal dithering)
+        self._dither_buf = [[0.0, 0.0, 0.0] for _ in layout.pixels]
         self.overlays: dict[str, tuple] = {}   # name -> (scene, blend, opacity[, until, start, decay]): weather, pad hits
         self.dim = 1.0                          # late-night dimming from the schedule
         self.hue_sweep: tuple[float, float] | None = None   # (start, seconds): one trip round the colour wheel
@@ -140,7 +160,8 @@ class Engine:
             cols = [(c[0] * b, c[1] * b, c[2] * b) for c in cols]
         self.last_colors = cols
         if self.live:
-            for mac, frame in to_device_frames(self.layout, cols, self.gamma).items():
+            for mac, frame in to_device_frames(self.layout, cols, self.gamma,
+                                               self._dither_buf if self.dither else None).items():
                 self.output.send_frame(mac, frame)
         st = self.stats
         st["frames"] += 1
