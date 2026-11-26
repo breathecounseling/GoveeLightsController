@@ -7,3 +7,4 @@ govee_config.tmp
 govee_auth.json
 govee_auth.tmp
 goveelights.log
+.claude/worktrees/
