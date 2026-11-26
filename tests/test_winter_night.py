@@ -348,6 +348,76 @@ class BallDropTests(unittest.TestCase):
         self.assertEqual(wn._parse_hhmm("25:00"), (0, 0))
 
 
+class ReviewFixTests(unittest.TestCase):
+    def setUp(self):
+        self.L = house()
+
+    def test_ball_never_vanishes_during_drop(self):
+        from goveelights import geometry as geo
+        L = self.L
+        for target in ("all", "Whole front gable"):
+            for cd in ("digits", "rows", "off"):
+                P = EFFECTS["ball_drop"].resolve({"mode": "loop", "seconds": 10, "pause": 4, "countdown": cd})
+                st, seen = {}, 0
+                for k in range(330):
+                    t = k * 0.05
+                    out = step("ball_drop", L, L.indices(target), P, st, t, 0.0 if k == 0 else 0.05)
+                    if st["phase"] != "drop":
+                        continue
+                    seen += 1
+                    x, y = st["ball"]
+                    m = max([max(out[i]) for i, d in geo.near(L, x, y, 1.6) if i in st["allowed"]] or [0.0])
+                    self.assertGreater(m, 0.6, (target, cd, t, y))
+                self.assertGreater(seen, 150)
+
+    def test_sleigh_outshines_its_trail(self):
+        L = self.L
+        P = EFFECTS["sleigh"].resolve({"stars": 0, "jingle": 0})
+        idx = L.indices("Eaves")
+        st, frames = {}, 0
+        for k in range(400):
+            t = k * 0.05
+            out = step("sleigh", L, idx, P, st, t, 0.0 if k == 0 else 0.05)
+            pth = st["path"]
+            ps = st["pass"]
+            if ps is None:
+                continue
+            frames += 1
+            # every trail bulb (more than 4 bulbs behind the sleigh's tail) stays capped
+            _, sl0, sl1 = wn._sl_train(P)
+            Lp, d = pth.length, ps["dir"]
+            for j, i in enumerate(pth.order):
+                u = pth.s[j] if d > 0 else Lp - pth.s[j]
+                if u < ps["u"] - sl1 - 4:
+                    self.assertLessEqual(max(out[i]), wn.SL_SPARK_MAX + 1e-6, (t, i))
+            if ps["u"] - sl1 > 1 and ps["u"] - sl0 < Lp - 1:                      # the sleigh itself is full-bright
+                self.assertGreater(max(max(out[i]) for i in pth.order), 0.9)
+        self.assertGreater(frames, 50)
+
+    def test_sleigh_dust_only_with_somewhere_to_fall(self):
+        L = self.L
+        _, st = run("sleigh", L, "Eaves", frames=200)
+        self.assertFalse(st["dust_ok"])
+        self.assertEqual(st["dust"], [])
+        _, st = run("sleigh", L, "all", frames=200)
+        self.assertTrue(st["dust_ok"])
+
+    def test_icicle_drops_always_have_somewhere_to_land(self):
+        L = self.L
+        for grav in (4, 18, 40):
+            P = EFFECTS["icicles"].resolve({"gravity": grav, "rate": 120})
+            idx = L.indices("Whole front")
+            st, falls = {}, set()
+            for k in range(1200):
+                t = k * 0.05
+                step("icicles", L, idx, P, st, t, 0.0 if k == 0 else 0.05)
+                for d in st["drops"]:
+                    if d["m"] == wn.FALL and d["id"] not in falls:
+                        falls.add(d["id"])
+                        self.assertIsNotNone(d["land"], (grav, t))
+            self.assertGreater(len(falls), 20)
+
+
 class PresetTests(unittest.TestCase):
     def test_presets(self):
         L = house()

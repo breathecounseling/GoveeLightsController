@@ -150,6 +150,7 @@ def _stars(frame, idx, clock, density, seed, colour=(0.75, 0.85, 1.0)):
 DIRECTIONS = ["alternate", "north to south", "south to north"]
 SL_MAX_SPARKS = 420
 SL_MAX_DUST = 160
+SL_SPARK_MAX = 0.6    # trail sparkles never outshine the sleigh
 
 
 def _sl_setup(ctx, st):
@@ -163,6 +164,15 @@ def _sl_setup(ctx, st):
     st["path"] = max(tracks, key=lambda t: t.length) if tracks else None
     st["sparks"], st["dust"] = [], []
     st["pass"] = None
+    # stardust only makes sense if some target bulb lies below the roofline to catch it
+    pth = st["path"]
+    st["dust_ok"] = False
+    if pth is not None:
+        px = L.pixels
+        on = set(pth.order)
+        others = [px[i] for i in idx if i not in on]
+        pts = [pth.point(s) for s in pth.s]
+        st["dust_ok"] = any(abs(p.x - x) <= 2.0 and p.y < y - 1.0 for p in others for x, y in pts)
 
 
 def _sl_train(P) -> tuple[list, float, float]:
@@ -190,7 +200,8 @@ def _sl_train(P) -> tuple[list, float, float]:
     Param("trim_color", "color", "#ffb020", "Sleigh trim (gold)", help="the curled front and the back of the sleigh"),
     Param("deer_color", "color", "#ff8a30", "Reindeer colour", help="warm amber reads best"),
     Param("nose_color", "color", "#ff0000", "Rudolph's nose"),
-    Param("sparkle_colors", "colors", ["#ffc030", "#ffffff", "#ffe080"], "Trail sparkle colours"),
+    Param("sparkle_colors", "colors", ["#ffc030", "#ffe080", "#ffffff"], "Trail sparkle colours",
+          help="white sparkles are scattered half as often as the others, keeping the trail golden"),
     Param("trail", "number", 2.6, "Trail lingers (s)", 0.3, 8, 0.1,
           help="how long the glittering sparkles behind the sleigh last"),
     Param("sparkle", "number", 1.0, "Trail density", 0, 3, 0.05,
@@ -249,8 +260,14 @@ def sleigh(t, ctx, P, st):
     # ---------------------------------------------------------- physics
     dt, steps = _substeps(_frame_dt(ctx))
     sc = P["sparkle_colors"] or [GOLD]
+    # gold-weighted: near-white sparkles are drawn at half the rate, so the trail stays golden
+    scw, acc = [], 0.0
+    for c in sc:
+        acc += 0.5 if min(c) > 0.9 else 1.0
+        scw.append(acc)
     spark_rate = 26.0 * P["sparkle"] * (P["speed"] / 13.0) ** 0.5
     life0 = P["trail"]
+    dust_p = P["dust"] * 0.35 if st["dust_ok"] else 0.0
     for _ in range(steps):
         if ps is not None:
             d = ps["dir"]
@@ -261,11 +278,11 @@ def sleigh(t, ctx, P, st):
             lam = spark_rate * dt
             k = int(lam) + (1 if rng.random() < lam - int(lam) else 0)
             for _ in range(k):
-                u = ps["u"] - tail_off - 0.7 - rng.random() * 1.8
+                u = ps["u"] - tail_off - 1.5 - rng.random() * 1.8   # a dark bulb before the trail
                 s = u if d > 0 else Lp - u
                 if 0 <= s <= Lp:
-                    col = sc[rng.randrange(len(sc))]
-                    if rng.random() < P["dust"] * 0.35 and len(st["dust"]) < SL_MAX_DUST:
+                    col = sc[min(len(sc) - 1, bisect.bisect_left(scw, rng.random() * acc))]
+                    if rng.random() < dust_p and len(st["dust"]) < SL_MAX_DUST:
                         x, y = pth.point(s)
                         st["dust"].append([x, y, (rng.random() - 0.5) * 0.8, 0.3 * rng.random(), 0.0,
                                            life0 * (0.8 + 0.8 * rng.random()), col, rng.randrange(1 << 20)])
@@ -290,13 +307,22 @@ def sleigh(t, ctx, P, st):
 
     # ---------------------------------------------------------- render
     tw = int(clock * 14)
+    trail = [BLACK] * n if st["sparks"] else None
     for s in st["sparks"]:
         u = s[1] / s[2]
-        b = (min(1.0, s[1] / 0.06) * (1.0 - u) ** 1.4) * (0.45 + 0.55 * hash01(s[4], tw))
+        # capped below the sleigh so the sleigh, not its tail, is the brightest thing up there
+        b = (_smooth(s[1] / 0.3) * (1.0 - u) ** 1.4) * (0.45 + 0.55 * hash01(s[4], tw)) * SL_SPARK_MAX
         if hash01(s[4], tw, 3) < 0.08:              # an occasional bright glint
-            b = min(1.0, b * 1.8 + 0.2)
+            b = min(SL_SPARK_MAX, b * 1.8 + 0.12)
         c = s[3]
-        geo.splat_path(frame, pth, s[0], (c[0] * b, c[1] * b, c[2] * b), 0.9)
+        geo.splat_path(trail, pth, s[0], (c[0] * b, c[1] * b, c[2] * b), 0.9)
+    if trail is not None:                           # overlapping sparkles: cap the sum per bulb
+        for i in pth.order:
+            c = trail[i]
+            m = max(c)
+            if m > 0:
+                k = SL_SPARK_MAX / m if m > SL_SPARK_MAX else 1.0
+                _add(frame, i, c, k)
     for p in st["dust"]:
         u = p[4] / p[5]
         b = 0.8 * (1.0 - u) ** 1.2 * (0.5 + 0.5 * hash01(p[7], tw))
@@ -337,6 +363,7 @@ def sleigh(t, ctx, P, st):
         tl = P["sleigh_length"]
         _segment(frame, pth, S(sl0), S(sl0 + 0.9), P["trim_color"], 1.0)
         _segment(frame, pth, S(sl0 + 0.9), S(sl1 - 0.45), P["sleigh_color"], 1.0)
+        _segment(frame, pth, S(sl0 + 0.9), S(sl1 - 0.45), WARM_WHITE, 0.22)   # lift: reads brightest
         _segment(frame, pth, S(sl1 - 0.45), S(sl1), P["trim_color"], 0.8)
         # a white-hot glint riding on the sleigh (light catching the runners)
         gl = 0.35 + 0.25 * math.sin(clock * 11.0)
@@ -346,7 +373,8 @@ def sleigh(t, ctx, P, st):
 
 # ====================================================================== icicles
 IC_MAX_DROPS = 60
-FORM, SLIDE, FALL = 0, 1, 2
+FORM, SLIDE, FALL, GLINT = 0, 1, 2, 3
+GLINT_T = 0.6         # a drop with nothing below to fall onto fades out as a glint (s)
 FLAT = 0.18           # |slope| below this counts as a flat eave: drops drip straight off it
 SLIDE_G = 10.0        # how strongly a drop is pulled down a slope (bulbs/s² per unit slope)
 SLIDE_DRAG = 1.4      # wet friction on the roof (1/s): drops slide calmly
@@ -385,7 +413,7 @@ def _ic_setup(ctx, st):
         elif _ic_land(st, px, x, y - 0.3) is not None:
             w = 1.4
         else:
-            w = 0.45
+            w = 0.1                                 # nothing below to splash on: rarely
         acc += w
         cum.append(acc)
     st["cum"] = cum
@@ -511,7 +539,11 @@ def icicles(t, ctx, P, st):
                     pth = tracks[d["k"]]
                     sl = pth.slope(d["s"])
                     if abs(sl) < FLAT:
-                        _ic_drip(st, d, pth, 0.0, px)
+                        x, y = pth.point(d["s"])
+                        if _ic_land(st, px, x, y - 0.3) is None:
+                            d["m"], d["age"] = GLINT, 0.0    # nothing below: an invisible fall
+                        else:
+                            _ic_drip(st, d, pth, 0.0, px, g)
                     else:
                         d["m"], d["age"] = SLIDE, 0.0
                 alive.append(d)
@@ -528,8 +560,11 @@ def icicles(t, ctx, P, st):
                 sl2 = pth.slope(d["s"])
                 # leaves the roof at the low end: where it flattens out or the line ends
                 if off or abs(sl2) < FLAT or d["age"] > 10.0 or (sl2 * d["v"] > 0 and abs(d["v"]) < 0.05):
-                    _ic_drip(st, d, pth, d["v"], px)
+                    _ic_drip(st, d, pth, d["v"], px, g)
                 alive.append(d)
+            elif d["m"] == GLINT:
+                if d["age"] < GLINT_T:
+                    alive.append(d)
             else:                                   # FALL
                 d["vy"] -= g * dt
                 d["x"] += d["vx"] * dt
@@ -577,6 +612,10 @@ def icicles(t, ctx, P, st):
             back = -1.0 if d["v"] > 0 else 1.0       # a glistening tail uphill
             for m, w in ((0.7, 0.45), (1.4, 0.25), (2.1, 0.12)):
                 geo.splat_path(frame, pth, d["s"] + back * m, (dc[0] * w, dc[1] * w, dc[2] * w), 1.0)
+        elif d["m"] == GLINT:                       # lets go as a flash of light, then fades
+            u = min(1.0, d["age"] / GLINT_T)
+            b = (1.0 - u) ** 1.5
+            geo.splat_path(frame, tracks[d["k"]], d["s"], (dc[0] * b, dc[1] * b, dc[2] * b), 1.2)
         else:
             geo.splat(frame, L, d["x"], d["y"], dc, 1.2, allowed)
             geo.splat(frame, L, d["x"] - d["vx"] * 0.04, d["y"] - d["vy"] * 0.04,
@@ -603,7 +642,7 @@ def icicles(t, ctx, P, st):
     return _clamp(frame, idx)
 
 
-def _ic_drip(st, d, pth, v, px):
+def _ic_drip(st, d, pth, v, px, g=18.0):
     """The drop lets go of the roof: 2D free fall from where it is, keeping its speed."""
     s = min(max(d["s"], 0.0), pth.length)
     x, y = pth.point(s)
@@ -617,7 +656,7 @@ def _ic_drip(st, d, pth, v, px):
     land = _ic_land(st, px, x, y - 0.3)
     if land is not None and abs(d["vx"]) > 0.05:
         fall = y - px[land].y
-        tt = math.sqrt(2 * max(0.0, fall) / 18.0)
+        tt = math.sqrt(2 * max(0.0, fall) / max(0.1, g))
         land = _ic_land(st, px, x + d["vx"] * tt, y - 0.3) or land
     d["land"] = land
 
@@ -697,6 +736,9 @@ def _bd_setup(ctx, st):
         cx = ytop = ybot = ystar = 0.0
         star = []
     st["cx"], st["ytop"], st["ybot"], st["ystar"], st["star"] = cx, ytop, ybot, ystar, star
+    # the top row's centre bulbs: where the ball lands after leaving the star (bridges the
+    # dark gap between the apex and the zigzag's top row)
+    st["top_mid"] = sorted(rows[-1], key=lambda i: abs(px[i].x - cx))[:2] if rows else []
     st["rest"] = [i for i in idx if i not in zs and i not in set(star)]
     st["zig_idx"] = sorted(zig)
     if zig:
@@ -963,6 +1005,20 @@ def _bd_ball(frame, st, L, P, clock, x, y, size=1.0, show=0.0):
     bc = P["ball_colors"] or [WHITE]
     seed = P["seed"]
     fac = int(clock * 7)
+    # between the apex star and the zigzag's top row there are no bulbs (~2 bulbs of gap):
+    # hand the ball over from the star to the top row's centre so it never vanishes
+    star, mid = st["star"], st.get("top_mid") or []
+    ys, yt = st["ystar"], st["ytop"]
+    bridging = bool(star) and bool(mid) and ys - yt > 1e-6 and yt < y < ys
+    if bridging:
+        ring = 0.0
+        g = (ys - y) / (ys - yt)
+        for grp, w in ((star, min(1.0, 2.0 * (1.0 - g))), (mid, min(1.0, 2.0 * g))):
+            for i in grp:
+                if i in allowed and w > 0:
+                    c = lerp(bc[int(hash01(i, fac, seed) * 997) % len(bc)], WHITE, 0.5)
+                    a = frame[i]
+                    frame[i] = (max(a[0], c[0] * w), max(a[1], c[1] * w), max(a[2], c[2] * w))
     for i, d in geo.near(L, x, y, R + 1.4):
         if i not in allowed:
             continue
@@ -986,7 +1042,7 @@ def _bd_ball(frame, st, L, P, clock, x, y, size=1.0, show=0.0):
     # the star bulbs: glow with the ball while it waits, dim once it has left
     for i in st["star"]:
         d = abs(y - L.pixels[i].y)
-        if d >= R:
+        if d >= R and not bridging:
             _add(frame, i, GOLD, 0.25)
 
 
