@@ -56,10 +56,10 @@ what is below what). They are plug-ins in `goveelights/effects_ext/`:
   street. This colours the house like the sky at this moment (real sun position), then settles
   into night colours. **Depth cascade** FX makes any layer fall from the roof to the porch or
   ripple from the apex. **Mirror at the apex** FX mirrors any layer around the gable peak.
-* **Evolve** (Play → ⟳ on a card): plays a preset and every few minutes crossfades into a fresh
+* **Evolve** (Play → ✨ Evolve next to what's playing, or as a schedule program): plays a preset and every few minutes crossfades into a fresh
   variation of it (small, related changes), so the house never looks quite the same twice.
 * **Smoothness:** motion is anti-aliased between bulbs, dark fades are dithered so they don't
-  step, and each run has a colour-match trim (More → Output → Colour match, with a white test)
+  step, and each run has a colour-match trim (Colour match in settings, with a white test)
   so the three boxes show the same white.
 
 Preview any effect or preset on the house without lights:
