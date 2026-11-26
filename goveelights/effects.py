@@ -27,7 +27,7 @@ from .layout import Pixel
 @dataclass
 class Param:
     name: str
-    kind: str                 # color | colors | number | int | bool | choice
+    kind: str                 # color | colors | number | int | bool | choice | text
     default: Any
     label: str = ""
     min: float | None = None
@@ -73,6 +73,8 @@ class Effect:
                     v = bool(v)
                 elif prm.kind == "choice" and v not in (prm.options or []):
                     v = prm.default
+                elif prm.kind == "text":          # free text: always a plain, bounded string
+                    v = ("" if v is None else str(v))[:200]
             except (TypeError, ValueError):
                 v = self.resolve({})[prm.name] if params else prm.default
             if prm.kind in ("int", "number"):
