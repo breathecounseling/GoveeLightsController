@@ -50,9 +50,13 @@ def _check_hm(v, what: str):
         raise ValueError(f"{what} must be a time like 18:30") from None
 
 
+_MONTH_DAYS = (31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)    # 02-29 allowed (leap years)
+
+
 def _check_mmdd(v, what: str):
     try:
-        ok = isinstance(v, str) and len(v) == 5 and v[2] == "-" and 1 <= int(v[:2]) <= 12 and 1 <= int(v[3:]) <= 31
+        ok = (isinstance(v, str) and len(v) == 5 and v[2] == "-" and 1 <= int(v[:2]) <= 12
+              and 1 <= int(v[3:]) <= _MONTH_DAYS[int(v[:2]) - 1])
     except ValueError:
         ok = False
     if not ok:

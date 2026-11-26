@@ -1361,7 +1361,8 @@ const isBuiltinShow = n => !!n && n in builtinShows();
 const showDef = n => userShows()[n] || builtinShows()[n] || null;
 const allShowNames = () => [...Object.keys(builtinShows()), ...Object.keys(userShows()).filter(n => !(n in builtinShows()))];
 /* Same rule as Controller._cue_secs: missing or not a number -> 20 s, else at least 1 s. */
-const cueSecs = c => { const v = c.seconds; if (v === undefined || v === null || v === '' || !Number.isFinite(+v)) return 20; return Math.max(1, +v) };
+const cueSecs = c => { const v = c.seconds; const s = (v === undefined || v === null || v === '' || !Number.isFinite(+v)) ? 20 : Math.max(1, +v);
+  return c.countdown_to ? Math.trunc(Math.max(3, Math.min(99, s))) : s };   // the controller's countdown is 3-99 s
 const cuesBad = sh => (sh.cues || []).findIndex(c => !(c && (c.preset || c.countdown_to)));
 const fmtDur = t => { t = Math.round(t); const m = Math.floor(t/60), s = t%60; return m ? (s ? `${m}m ${s}s` : `${m} min`) : `${s}s` };
 const presetName = id => (PRESETS.find(p => p.id === id) || {}).name || id;
@@ -1412,7 +1413,7 @@ function shEditor(){
         : `<select class="full" data-f="preset">${c.preset ? '' : '<option value="" selected disabled>(pick a preset)</option>'}${optsWithMissing(PRESETS.map(p => [p.id, p.name]), c.preset)}</select>`}
       <div class="full row"><div class="grow"><label class="dim" style="font-size:11px">${k+1}. Transition in</label><select data-f="transition">${(EXTRAS.transitions||[]).map(t => opt(t, TRANS_LABEL[t]||t, t===(c.transition||'crossfade'))).join('')}</select></div>
         <div style="width:70px"><label class="dim" style="font-size:11px">over (s)</label><input type="number" data-f="fade" min="0" max="10" step="0.5" value="${c.fade??1.5}"></div>
-        <div style="width:70px"><label class="dim" style="font-size:11px">then hold (s)</label><input type="number" data-f="seconds" min="2" max="600" step="1" value="${c.seconds??20}"></div></div>
+        <div style="width:70px"><label class="dim" style="font-size:11px">then hold (s)</label><input type="number" data-f="seconds" min="${c.countdown_to?3:2}" max="${c.countdown_to?99:600}" step="1" value="${c.countdown_to?cueSecs(c):c.seconds??20}"></div></div>
       <div class="row full"><span class="grow"></span><button class="sm" data-a="up" ${k?'':'disabled'} aria-label="Move up">↑</button><button class="sm" data-a="down" ${k<sh.cues.length-1?'':'disabled'} aria-label="Move down">↓</button><button class="sm bad" data-a="del" aria-label="Remove cue">✕</button></div></div>`);
     el.querySelectorAll('[data-f]').forEach(i => i.onchange = () => { const f = i.dataset.f;
       if (f === 'countdown_to' && !i.value){ i.value = c.countdown_to; return toast('Pick a time') }   // a blank time would drop the cue
@@ -1436,8 +1437,10 @@ function shEditor(){
 /* A showtime's optional "date" ("MM-DD") or "dates" (list), as the controller reads them. */
 const stDates = st => { const d = st.date || st.dates; return !d ? [] : typeof d === 'string' ? [d] : Array.isArray(d) ? d.map(String) : [] };
 /* "12-31, 1-1" -> ['12-31','01-01'] (zero-padded: the controller compares with strftime %m-%d); '' -> []; bad -> null. */
-function parseStDates(s){ const out = [];
-  for (const t of String(s).split(/[\s,]+/).filter(Boolean)){ const m = /^(\d{1,2})-(\d{1,2})$/.exec(t); if (!m || +m[1] < 1 || +m[1] > 12 || +m[2] < 1 || +m[2] > 31) return null;
+function parseStDates(s){ const out = [], MONTH_DAYS = [31,29,31,30,31,30,31,31,30,31,30,31];     // 02-29 allowed (leap years)
+  // "12-31", "12/31", "12.31" or "1231" (a phone's number pad has no '-'); separated by commas or spaces
+  for (const t of String(s).split(/[\s,;]+/).filter(Boolean)){ const m = /^(\d{1,2})[-/.](\d{1,2})$/.exec(t) || /^(\d{2})(\d{2})$/.exec(t);
+    if (!m || +m[1] < 1 || +m[1] > 12 || +m[2] < 1 || +m[2] > MONTH_DAYS[+m[1]-1]) return null;
     const v = m[1].padStart(2,'0') + '-' + m[2].padStart(2,'0'); if (!out.includes(v)) out.push(v) }
   return out }
 function drawShowtimes(){
@@ -1447,13 +1450,15 @@ function drawShowtimes(){
       <div class="full"><label>Show</label><select data-f="show">${optsWithMissing(names, st.show)}</select></div>
       <div><label>From</label><input type="time" data-f="from" value="${esc(st.from||'17:00')}"></div><div><label>To</label><input type="time" data-f="to" value="${esc(st.to||'22:00')}"></div>
       <div class="full"><label>Every</label><select data-f="every">${[[15,'15 minutes'],[30,'30 minutes'],[60,'hour'],[120,'2 hours']].map(([v,l]) => opt(v,l,+st.every===v)).join('')}</select></div>
-      <div class="full"><label>Date (MM-DD, optional; e.g. 12-31)</label><input type="text" data-f="date" inputmode="numeric" placeholder="every day" value="${esc(stDates(st).join(', '))}"></div>
+      <div class="full"><label>Date (MM-DD, optional; e.g. 12-31)</label><input type="text" data-f="date" inputmode="text" autocapitalize="off" autocomplete="off" placeholder="every day" value="${esc(stDates(st).join(', '))}"></div>
       ${stDates(st).length ? `<div class="full dim" style="font-size:11px">Only on ${esc(stDates(st).join(', '))}</div>` : `<div class="full days">${D.map((d,i) => `<button class="${(st.days||[]).includes(i)?'on':''}" data-day="${i}">${d}</button>`).join('')}<span class="dim" style="font-size:11px;align-self:center;margin-left:4px">(none = every day)</span></div>`}
       <label class="row full"><input type="checkbox" data-f="only_when_on" ${st.only_when_on!==false?'checked':''}> Only when the lights are on <span class="dim" style="font-size:11px">(untick to switch them on for it)</span></label>
       <label class="row"><input type="checkbox" data-f="enabled" ${st.enabled!==false?'checked':''}> On</label><button class="sm bad" data-del>Remove</button></div>`);
     el.querySelectorAll('[data-f]').forEach(i => i.onchange = () => { const f = i.dataset.f;
       if (f === 'date'){ const ds = parseStDates(i.value); if (!ds){ i.value = stDates(st).join(', '); return toast('Date: MM-DD, e.g. 12-31') }
-        delete st.date; delete st.dates; if (ds.length === 1) st.date = ds[0]; else if (ds.length) st.dates = ds; return drawShowtimes() }
+        delete st.date; delete st.dates; if (ds.length === 1) st.date = ds[0]; else if (ds.length) st.dates = ds;
+        if (ds.length) delete st.days;                 // a date replaces the weekday buttons: don't keep hidden days
+        return drawShowtimes() }
       st[f] = i.type==='checkbox' ? i.checked : f==='every' ? +i.value : i.value });
     el.querySelectorAll('[data-day]').forEach(b => b.onclick = () => { const d = +b.dataset.day; st.days = st.days||[]; st.days = st.days.includes(d) ? st.days.filter(x=>x!==d) : [...st.days, d].sort(); drawShowtimes() });
     el.querySelector('[data-del]').onclick = () => { EXTRAS.showtimes.splice(k,1); drawShowtimes() };
