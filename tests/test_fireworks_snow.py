@@ -104,9 +104,11 @@ class SnowTests(unittest.TestCase):
         eaves, porch = L.indices("Flat eaves"), L.indices("Porch")
         self.assertGreater(sum(snow.get(i, 0) for i in eaves) / len(eaves), 0.3)
         self.assertGreater(sum(snow.get(i, 0) for i in porch) / len(porch), 0.3)
-        # snow lands on rooflines, not on the zigzag's inner rows
-        inner = L.indices("Zigzag bottom half")
-        self.assertLess(sum(snow.get(i, 0) for i in inner), 0.5)
+        # some snow settles on the zigzag tree's rows, but they hold less than the eaves
+        tree = L.indices("Peak")
+        self.assertGreater(sum(snow.get(i, 0) for i in tree), 1.0)
+        cap = EFFECTS["snowdrift"].resolve({})["max_snow"]
+        self.assertLessEqual(max(snow.get(i, 0) for i in tree), cap * 0.5 + 1e-9)
         # settled snow is lit, cool white with a touch of blue
         c = cols[eaves[len(eaves) // 2]]
         self.assertGreater(c[2], 0.2)
@@ -204,6 +206,133 @@ class PresetTests(unittest.TestCase):
             valid(self, cols, L.n)
             per = (time.perf_counter() - t0) / 200 * 1000
             self.assertLess(per, 20, pid)
+
+
+class ReviewFixTests(unittest.TestCase):
+    def setUp(self):
+        self.L = house()
+
+    def test_bursts_land_where_there_are_bulbs(self):
+        from goveelights.geometry import near
+        L = self.L
+        eff = EFFECTS["fireworks"]
+        P = eff.resolve({"launch_zone": "Lower roofline", "rate": 40})
+        idx = L.indices("all")
+        allowed, st, seen, counts = set(idx), {}, set(), []
+        for k in range(int(90 / 0.05)):
+            t = k * 0.05
+            eff.fn(t, Ctx(L, idx, t, 0.05 if k else 0.0), P, st)
+            for p in st["parts"]:
+                if p[0] == 3 and p[8] == "burst" and id(p) not in seen:
+                    seen.add(id(p))
+                    counts.append(sum(1 for i, _ in near(L, p[1], p[2], 5) if i in allowed))
+        self.assertGreater(len(counts), 15)
+        self.assertLessEqual(sum(c < 15 for c in counts), len(counts) * 0.05)
+
+    def test_master_speed_substeps_keep_pace(self):
+        L = self.L
+        eff = EFFECTS["fireworks"]
+        idx = L.indices("Whole front")
+        means = []
+        for dt in (0.05, 0.25):
+            P, st, n = eff.resolve({"rate": 30}), {}, []
+            for k in range(int(120 / dt)):
+                eff.fn(k * dt, Ctx(L, idx, k * dt, dt if k else 0.0), P, st)
+                n.append(len(st["parts"]))
+            means.append(sum(n) / len(n))
+        self.assertLess(abs(means[1] - means[0]), 0.35 * means[0])
+
+    def test_modulated_finale_still_fires(self):
+        import math
+        L = self.L
+        eff = EFFECTS["fireworks"]
+        P = eff.resolve({"rate": 2, "finale": 20})
+        st, fins, was = {}, 0, False
+        for k in range(int(70 / 0.05)):
+            t = k * 0.05
+            P["finale"] = 20 + 8 * math.sin(t)        # what a modulation does to the param
+            eff.fn(t, Ctx(L, L.indices("all"), t, 0.05 if k else 0.0), P, st)
+            on = bool(st.get("pending"))
+            fins += on and not was
+            was = on
+        self.assertGreaterEqual(fins, 2)
+
+    def test_unborn_embers_do_not_move(self):
+        from goveelights.effects_ext.fireworks_snow import EMBER, _fw_step
+        st = {"parts": [[EMBER, 1.0, 2.0, 3.0, 4.0, -0.2, 3.0, (1, 1, 1), "Peony", None, 5,
+                         0, 0, 0, 0, False]], "ylo": -10}
+        _fw_step(st, EFFECTS["fireworks"].resolve({}), None, 0.1, 3.0)
+        e = st["parts"][0]
+        self.assertEqual((e[1], e[2], e[3], e[4]), (1.0, 2.0, 3.0, 4.0))
+
+    def test_settled_snow_is_conserved_without_melt(self):
+        L = self.L
+        idx = L.indices("Whole front")
+        _, st = run_effect("snowdrift", L, "Whole front", {"accumulate": 4, "melt": 0}, frames=1200)
+        eff = EFFECTS["snowdrift"]
+        P = eff.resolve({"rate": 0, "melt": 0})
+        for k in range(200):                         # let the flakes in the air land first
+            eff.fn(60 + k * 0.1, Ctx(L, idx, 60 + k * 0.1, 0.1), P, st)
+        before = sum(st["snow"].values())
+        for k in range(3000):
+            t = 80 + k * 0.1
+            eff.fn(t, Ctx(L, idx, t, 0.1), P, st)
+        self.assertGreater(before, 3)
+        self.assertAlmostEqual(sum(st["snow"].values()), before, delta=before * 0.01)
+
+    def test_isolated_deposit_stays(self):
+        L = self.L
+        idx = L.indices("all")
+        eff = EFFECTS["snowdrift"]
+        P = eff.resolve({"rate": 0, "melt": 0})
+        st = {}
+        eff.fn(0, Ctx(L, idx, 0, 0.0), P, st)
+        i = L.indices("Flat eaves")[5]
+        st["snow"] = {i: 0.3}
+        for k in range(600):
+            eff.fn(k * 0.1, Ctx(L, idx, k * 0.1, 0.1), P, st)
+        self.assertAlmostEqual(st["snow"].get(i, 0), 0.3, places=6)
+
+    def test_snow_fills_slowly_and_unevenly(self):
+        L = self.L
+        idx = L.indices("all")
+        eff = EFFECTS["snowdrift"]
+        P = eff.resolve({})
+        st, at = {}, {}
+        for k in range(int(480 / 0.1) + 1):
+            t = k * 0.1
+            eff.fn(t, Ctx(L, idx, t, 0.1 if k else 0.0), P, st)
+            if k in (600, 4800):
+                v = [st["snow"].get(i, 0) for i in L.indices("Flat eaves")]
+                m = sum(v) / len(v)
+                at[k] = (m, (sum((x - m) ** 2 for x in v) / len(v)) ** 0.5)
+        self.assertLess(at[600][0], 0.2)                 # one minute in: a light dusting
+        self.assertGreater(at[4800][0], 0.25)            # eight minutes: clearly snowy
+        self.assertLess(at[4800][0], 0.75)               # ... but not a flat, capped line
+        self.assertGreater(at[4800][1], 0.04)            # drifts, not a uniform tone
+
+    def test_snow_stays_white_under_a_palette(self):
+        L = self.L
+        params = {"accumulate": 6, "color": "#ff0000", "snow_color": "#00ff00"}
+        cols, st = run_effect("snowdrift", L, "all", params, frames=1200)
+        lit_snow = [cols[i] for i, v in st["snow"].items() if v > 0.3]
+        self.assertTrue(lit_snow)
+        for c in lit_snow:
+            self.assertGreater(min(c), 0.4 * max(c))     # still whitish, not pure green
+
+    def test_clearing_gust(self):
+        L = self.L
+        idx = L.indices("all")
+        eff = EFFECTS["snowdrift"]
+        P = eff.resolve({"accumulate": 6, "clear": 1, "melt": 0})
+        st, peak = {}, 0.0
+        for k in range(int(75 / 0.1)):
+            t = k * 0.1
+            eff.fn(t, Ctx(L, idx, t, 0.1 if k else 0.0), P, st)
+            if 55 < t < 59.9:
+                peak = max(peak, sum(st["snow"].values()))
+        self.assertGreater(peak, 5)
+        self.assertLess(sum(st["snow"].values()), peak * 0.5)
 
 
 if __name__ == "__main__":

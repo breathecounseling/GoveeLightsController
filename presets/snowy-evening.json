@@ -8,9 +8,9 @@
     {
       "effect": "solid",
       "params": {
-        "color": "#ff9a40"
+        "color": "#ffb468"
       },
-      "opacity": 0.55
+      "opacity": 0.38
     },
     {
       "effect": "snowdrift",
@@ -19,10 +19,10 @@
         "sway": 0.9,
         "wind": -0.2,
         "max_snow": 0.9,
-        "melt": 0.08,
+        "melt": 0.12,
         "glisten": 0.5
       },
-      "blend": "screen"
+      "blend": "lighten"
     }
   ]
 }

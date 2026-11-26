@@ -18,10 +18,24 @@
       }
     },
     {
+      "effect": "gradient",
+      "params": {
+        "colors": [
+          "#0024a8",
+          "#0a1890",
+          "#0030b8"
+        ],
+        "length": 40,
+        "speed": 0.6
+      },
+      "target": "Peak"
+    },
+    {
       "effect": "snowdrift",
       "params": {
         "rate": 10,
-        "accumulate": 1.2
+        "accumulate": 1.0,
+        "melt": 0.15
       },
       "blend": "screen"
     }

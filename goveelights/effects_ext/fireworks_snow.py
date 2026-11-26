@@ -12,20 +12,22 @@ snowdrift  flakes drift down with a gentle sway and LAND on the first surface be
 
 Both are @frame_effect generators: all memory lives in the layer's `state` dict,
 randomness comes from a random.Random kept in that state (deterministic for a given
-seed and frame sequence), dt is capped, and particle counts are bounded so they can
-run for hours. Particles are drawn with geometry.splat so they glide between bulbs.
+seed and frame sequence), large frames are substepped (and a stall is capped), and
+particle counts are bounded so they can run for hours.
+Particles are drawn with geometry.splat so they glide between bulbs.
 """
 from __future__ import annotations
 
 import math
 import random
 
-from ..color import BLACK, hash01, lerp, noise2
+from ..color import BLACK, fbm2, hash01, lerp, noise2
 from ..effects import Param, frame_effect
 from ..geometry import near, splat
 from ..sparkle import glint
 
-MAX_DT = 0.1                  # seconds: a stalled frame never makes particles teleport
+MAX_DT = 0.1                  # seconds: largest physics step (bigger frames are substepped)
+MAX_FRAME_DT = 0.5            # seconds: a stalled frame never makes particles teleport
 
 
 def _layout_key(ctx) -> tuple:
@@ -95,8 +97,18 @@ def _fw_setup(ctx, P, st):
             prof[k] = max(prof.get(k, -1e9), px[i].y)
         st["prof"] = prof
         st["ylo"] = min(px[i].y for i in pool)
+        # burst columns: only where a burst at its typical height has plenty of bulbs to
+        # draw on (the front gable, not the empty sky between the gables and the garage)
+        dens = {}
+        for k in range(math.floor(st["bx"][0]), math.floor(st["bx"][1]) + 1):
+            by = _burst_y(st, k + 0.5) - 0.8
+            dens[k] = sum(1 for i, _ in near(L, k + 0.5, by, 5.0) if i in st["allowed"])
+        best = max(dens.values(), default=0)
+        need = 0.5 * best if best < 24 else max(12, 0.5 * best)
+        st["cols"] = sorted(k for k, c in dens.items() if c >= need and c > 0) or \
+            sorted(dens) or [math.floor(st["bx"][0])]
     else:
-        st["bx"], st["top"], st["prof"], st["ylo"] = (0.0, 0.0), 0.0, {}, 0.0
+        st["bx"], st["top"], st["prof"], st["ylo"], st["cols"] = (0.0, 0.0), 0.0, {}, 0.0, [0]
 
 
 def _profile(st, x: float) -> float:
@@ -105,15 +117,21 @@ def _profile(st, x: float) -> float:
     return st["top"] if best is None else best
 
 
+def _burst_y(st, x: float) -> float:
+    """Typical burst height over column x: between the roof there and the top of the area."""
+    return 0.45 * _profile(st, x) + 0.55 * st["top"] - 0.9
+
+
 def _launch(st, P, rng, big=False):
     if not st["launch"]:
         return
     x0, y0 = rng.choice(st["launch"])
-    lo, hi = st["bx"]
-    w = hi - lo
-    bx = lo + w * (0.12 + 0.76 * rng.random())
-    roof = _profile(st, bx)
-    by = 0.45 * roof + 0.55 * st["top"] - 0.9 - 1.4 * rng.random()
+    cols = st["cols"]
+    # trim the outermost dense columns a little so bursts stay well inside the area
+    m = len(cols) // 8
+    cols = cols[m:len(cols) - m] or cols
+    bx = cols[rng.randrange(len(cols))] + rng.random()
+    by = _burst_y(st, bx) - 1.4 * rng.random()
     by = max(by, y0 + 3.0)
     if big:
         by += 0.6
@@ -174,12 +192,61 @@ def _finale_plan(rng, n_shells: int) -> list[float]:
     return out
 
 
+def _substeps(dt) -> tuple[float, int]:
+    """Split the frame's dt into equal physics steps of at most MAX_DT, so a high master
+    speed makes the particles move faster instead of falling behind the clock. A stalled
+    frame (dt > MAX_FRAME_DT) is cut short so nothing teleports."""
+    total = min(MAX_FRAME_DT, max(0.0, dt or 0.0))
+    n = max(1, math.ceil(total / MAX_DT - 1e-9))
+    return total / n, n
+
+
+def _fw_step(st, P, rng, dt, g):
+    """Advance every particle by dt: shells climb and burst, sparks and embers fly."""
+    alive = []
+    ylo = st["ylo"] - 2.0
+    for s in st["parts"]:
+        kind = s[0]
+        s[5] += dt
+        age, life = s[5], s[6]
+        if kind == SHELL:
+            u = min(1.0, age / life)
+            e = 1 - (1 - u) ** 2                    # decelerating climb, like a real shell
+            s[1] = s[11] + (s[13] - s[11]) * e
+            s[2] = s[12] + (s[14] - s[12]) * e
+            if u >= 1.0:
+                _burst(st, P, rng, s)
+                continue
+            alive.append(s)
+            continue
+        if age >= life:
+            continue
+        if kind == FLASH or age < 0:               # flashes don't move; embers wait to be born
+            alive.append(s)
+            continue
+        if kind == SPARK:
+            drag = 2.2 if s[8] == "Willow" else 2.6
+            gg = g * (0.55 if s[8] == "Willow" else 1.0)
+        else:                                      # ember: heavy drag, sinks slowly
+            drag, gg = 2.8, g * 0.45
+        k = math.exp(-drag * dt)
+        s[3] *= k
+        s[4] = s[4] * k - gg * dt
+        s[1] += s[3] * dt
+        s[2] += s[4] * dt
+        if s[2] < ylo:                             # fell past the lowest bulb
+            continue
+        alive.append(s)
+    # (sparks that _burst appends to st["parts"] are visited by this same loop)
+    st["parts"] = alive
+
+
 @frame_effect("fireworks", "Porch fireworks", [
     Param("rate", "number", 22, "Shells per minute", 2, 120, 1,
           help="how often a shell launches from the porch (on average)"),
     Param("burst_size", "int", 38, "Burst size (sparks)", 20, 60, 1,
           help="sparks in each burst"),
-    Param("colors", "colors", ["#ff2020", "#20ff40", "#ffc020", "#2060ff", "#ff40d0", "#ffffff"],
+    Param("colors", "colors", ["#ff2020", "#20ff40", "#ffc020", "#3a8cff", "#ff40d0", "#ffffff"],
           "Shell colours", help="each shell picks one; follows the layer's palette"),
     Param("style", "choice", "Mixed", "Shell style", options=STYLES,
           help="Mixed picks peonies, rings, gold willows, two-tone and crackle shells at random"),
@@ -215,23 +282,28 @@ def fireworks(t, ctx, P, st):
         st["seed"] = P["seed"]
         st["rng"] = random.Random(P["seed"] * 7919 + 17)
     rng = st["rng"]
-    dt = min(MAX_DT, max(0.0, ctx.dt or 0.0))
+    dt, steps = _substeps(ctx.dt)
     clock = ctx.clock
-    parts = st["parts"]
 
     # ---------------------------------------------------------- scheduling
-    fin = P["finale"]
+    fin = max(0.0, P["finale"])
     pending = st.setdefault("pending", [])
     if "next" not in st or st["next"] > clock + 120 or st["next"] < clock - 5:
         st["next"] = clock + 0.25
-    if fin > 0:
-        k = math.floor(clock / fin)
-        if st.get("fin_k") is None or st.get("fin_n") != fin:
-            st["fin_k"], st["fin_n"] = (0 if clock < fin else k), fin   # never fire on the first frame
-        if k >= 1 and st["fin_k"] != k:
-            st["fin_k"] = k
-            pending[:] = [clock + o for o in _finale_plan(rng, P["finale_shells"])]
-            st["fin_end"] = pending[-1] + 2.2
+    # finale timer: seconds since the last finale (or since it was switched on). Comparing
+    # elapsed time with the current value keeps it working when 'finale' is modulated.
+    last_fin = st.get("fin_last")
+    if last_fin is None or fin <= 0 or clock < last_fin:
+        st["fin_last"] = clock
+    elif clock - last_fin >= fin and not pending:
+        st["fin_last"] = clock
+        pending[:] = [clock + o for o in _finale_plan(rng, P["finale_shells"])]
+        st["fin_end"] = pending[-1] + 2.2
+    if pending and pending[0] > clock + 60:          # clock jumped back: drop a stale plan
+        pending.clear()
+        st.pop("fin_end", None)
+    if st.get("fin_end", -1) > clock + 60:
+        st.pop("fin_end", None)
     in_finale = pending or clock < st.get("fin_end", -1)
     if pending:
         last = len(pending)
@@ -245,48 +317,29 @@ def fireworks(t, ctx, P, st):
     if in_finale:
         st["next"] = max(st["next"], st.get("fin_end", clock) + 1.0)
 
-    # ---------------------------------------------------------- physics
-    g, crackle = P["gravity"], P["crackle"]
+    # ---------------------------------------------------------- physics (substepped)
+    g = P["gravity"]
+    for _ in range(steps):
+        _fw_step(st, P, rng, dt, g)
+    # bound the particle count (keep the newest) so a huge finale can never run away
+    if len(st["parts"]) > 900:
+        st["parts"] = st["parts"][-900:]
+
+    # ---------------------------------------------------------- render
+    crackle = P["crackle"]
     fresh = list(frame)
     allowed = st["allowed"]
     flashes = []
-    alive = []
-    for s in parts:
-        kind = s[0]
-        s[5] += dt
-        age, life = s[5], s[6]
+    for s in st["parts"]:
+        kind, age, life = s[0], s[5], s[6]
         if kind == SHELL:
-            u = min(1.0, age / life)
-            e = 1 - (1 - u) ** 2                    # decelerating climb, like a real shell
-            s[1] = s[11] + (s[13] - s[11]) * e
-            s[2] = s[12] + (s[14] - s[12]) * e
-            if u >= 1.0:
-                _burst(st, P, rng, s)
-                continue
             fl = 0.75 + 0.25 * hash01(s[10], int(clock * 30))
             splat(fresh, L, s[1], s[2], (fl, fl * 0.72, fl * 0.35), 1.1, allowed)
-            alive.append(s)
-            continue
-        if age >= life:
             continue
         if kind == FLASH:
             flashes.append(s)
-            alive.append(s)
             continue
-        if kind == SPARK:
-            drag = 2.2 if s[8] == "Willow" else 2.6
-            gg = g * (0.55 if s[8] == "Willow" else 1.0)
-        else:                                      # ember: heavy drag, sinks slowly
-            drag, gg = 2.8, g * 0.45
-        k = math.exp(-drag * dt)
-        s[3] *= k
-        s[4] = s[4] * k - gg * dt
-        s[1] += s[3] * dt
-        s[2] += s[4] * dt
-        if s[2] < st["ylo"] - 2.0 or age < 0:      # fell past the lowest bulb / not yet born
-            if age >= 0:
-                continue
-            alive.append(s)
+        if age < 0:                                # ember not born yet
             continue
         u = age / life
         if kind == SPARK:
@@ -308,11 +361,7 @@ def fireworks(t, ctx, P, st):
                 (0.6 + 0.4 * hash01(s[10], int(clock * 9)))
             c = (s[7][0] * bright, s[7][1] * bright, s[7][2] * bright)
             splat(fresh, L, s[1], s[2], c, 1.0, allowed)
-        alive.append(s)
-    # bound the particle count (keep the newest) so a huge finale can never run away
-    if len(alive) > 900:
-        alive = alive[-900:]
-    st["parts"] = alive
+    dt = dt * steps                                # the whole frame, for the afterglow below
 
     # flashes: the launch puff on the porch and a soft glow lighting the roof at each burst
     px = L.pixels
@@ -351,7 +400,16 @@ def fireworks(t, ctx, P, st):
 
 # ====================================================================== snowdrift
 FRONT_ZONES = ("Lower roofline", "Accent")
+TREE_ZONE = "Peak"             # the zigzag rows under the front gable: snow on the boughs
 REACH = 0.75                   # how far either side of a bulb a flake still lands on it
+TREE_CATCH = 0.16              # chance a flake falling in front of the gable settles on each row
+TREE_HOLD = 0.5                # rows hold less snow, so the tree stays readable
+TREE_GAIN = 3.0                # a flake settling on the tree is spread over many close bulbs
+TREE_SHARE = 1.5               # over the tree, this many times 'front' of the flakes fall in front
+SETTLE = 0.03                  # per second: how fast snow evens out between neighbours
+FLAKE_WHITE = (0.9, 0.93, 1.0)
+SNOW_WHITE = (0.78, 0.86, 1.0)
+CLEAR_TIME = 4.0               # seconds a clearing gust takes to sweep across the house
 
 
 def _bins(items):
@@ -381,33 +439,44 @@ def _sd_setup(ctx, st):
     px = L.pixels
     same_layout = st.get("key") is not None and st["key"][:2] == key[:2]
     st["key"] = key
-    st["allowed"] = set(idx)
+    allowed = st["allowed"] = set(idx)
     if not same_layout:
         st["flakes"], st["snow"] = [], {}
     else:                                   # keep the snow that is still on the new target
-        st["snow"] = {i: v for i, v in st.get("snow", {}).items() if i in st["allowed"]}
+        st["snow"] = {i: v for i, v in st.get("snow", {}).items() if i in allowed}
+    st["dyn"], st["dyn_t"] = {}, None
+    # three depth planes: the main rooflines (back), the zigzag tree in front of the gable
+    # wall, and the lower roofline (porch / garage) closest to the street
+    tree = set(_zone(L, TREE_ZONE)) & allowed
+    if len(tree) == len(idx):               # only the tree: its rows are the surfaces
+        tree = set()
     front = set()
     for z in FRONT_ZONES:
         front.update(_zone(L, z))
-    front &= st["allowed"]
+    front = (front & allowed) - tree
     if len(front) == len(idx):              # only the lower roofline: one plane
         front = set()
-    back = [i for i in idx if i not in front]
+    back = [i for i in idx if i not in front and i not in tree]
+    front_l, tree_l = sorted(front), sorted(tree)
     st["planes"] = [_bins([(i, px[i].x, px[i].y) for i in back]),
-                    _bins([(i, px[i].x, px[i].y) for i in sorted(front)])]
-    st["has_front"] = bool(front)
-    # neighbours on the same run and plane, for spreading and settling the snow
+                    _bins([(i, px[i].x, px[i].y) for i in front_l])]
+    st["tree_bins"] = _bins([(i, px[i].x, px[i].y) for i in tree_l])
+    st["has_front"], st["has_tree"] = bool(front), bool(tree)
+    # neighbours on the same run and plane (tree: the same row), for spreading and settling
     nb = {}
-    for plane in (back, sorted(front)):
+    for plane, flat in ((back, False), (front_l, False), (tree_l, True)):
         pb = _bins([(i, px[i].x, px[i].y) for i in plane])
         for i in plane:
             p = px[i]
             k = math.floor(p.x)
             nb[i] = [it[0] for j in (k - 2, k - 1, k, k + 1, k + 2) for it in pb.get(j, ())
                      if it[0] != i and px[it[0]].run == p.run and
-                     math.hypot(it[1] - p.x, it[2] - p.y) <= 1.3]
+                     math.hypot(it[1] - p.x, it[2] - p.y) <= 1.3 and
+                     (not flat or abs(it[2] - p.y) < 0.3)]
     st["nb"] = nb
-    # how much snow each bulb can hold: less on steep roof edges, a little uneven like real drifts
+    # each settling pair once (i < j), for a conservative exchange between neighbours
+    st["pairs"] = [(i, j) for i, ns in nb.items() for j in ns if i < j]
+    # how much snow each bulb can hold: less on steep roof edges, uneven like real drifts
     hold = {}
     for i in idx:
         sl = 0.0
@@ -415,7 +484,8 @@ def _sd_setup(ctx, st):
         if ns:
             p = px[i]
             sl = max(abs(px[j].y - p.y) / max(0.3, abs(px[j].x - p.x)) for j in ns)
-        hold[i] = (1 - 0.3 * min(1.0, sl)) * (0.82 + 0.18 * hash01(i, 4242))
+        hold[i] = (1 - 0.3 * min(1.0, sl)) * (0.6 + 0.4 * hash01(i, 4242)) * \
+            (TREE_HOLD if i in tree else 1.0)
     st["hold"] = hold
     # closely spaced bulbs each catch fewer flakes: scale deposits so every roofline fills
     # at about the same pace; the lower roofline (in front) catches a little extra
@@ -424,6 +494,14 @@ def _sd_setup(ctx, st):
         ns = nb.get(i, ())
         sp = min(abs(px[j].x - px[i].x) for j in ns) if ns else 1.0
         gain[i] = (1.0 / min(1.5, max(0.4, sp))) * (1.5 if i in front else 1.0)
+    # over the tree most flakes fall in front of the gable: the outline above it and the
+    # tree's many rows share them, so both get a boost to keep pace with the other rooflines
+    tcols = {math.floor(px[i].x) for i in tree}
+    for i in idx:
+        if i in tree:
+            gain[i] *= TREE_GAIN
+        elif i not in front and math.floor(px[i].x) in tcols:
+            gain[i] *= 1.0 / max(0.25, 1 - TREE_SHARE * 0.5)
     st["gain"] = gain
     if idx:
         xs = [px[i].x for i in idx]
@@ -435,17 +513,37 @@ def _sd_setup(ctx, st):
             k = math.floor(px[i].x)
             prof[k] = max(prof.get(k, -1e9), px[i].y)
         st["prof"] = prof
-        fr: set[int] = set()
-        for i in front:
-            k = math.floor(px[i].x)
-            fr.update((k - 1, k, k + 1))
-        st["front_cols"] = fr
+
+        def cols(s):
+            out: set[int] = set()
+            for i in s:
+                k = math.floor(px[i].x)
+                out.update((k - 1, k, k + 1))
+            return out
+        st["tree_cols"] = cols(tree)
+        st["front_cols"] = cols(front) | st["tree_cols"]
 
 
-def _deposit(st, ctx, i: int, x: float, amount: float, cap: float):
+def _dyn_hold(st, ctx, seed: int):
+    """Slowly wandering extra capacity per bulb (0.55..1): drifts build in some places and
+    thin out in others over the minutes. Refreshed about once a second."""
+    clock = ctx.clock
+    if st["dyn_t"] is not None and abs(clock - st["dyn_t"]) < 1.0:
+        return st["dyn"]
+    st["dyn_t"] = clock
+    px = ctx.layout.pixels
+    tt = clock / 400.0
+    dyn = st["dyn"]
+    for i in ctx.idx:
+        f = fbm2(px[i].x * 0.12, tt + px[i].y * 0.05, 2, seed + 313)
+        dyn[i] = 0.55 + 0.45 * min(1.0, max(0.0, 1.8 * (f - 0.5) + 0.5))
+    return dyn
+
+
+def _deposit(st, ctx, i: int, x: float, amount: float, cap: float, dyn):
     """Add snow where a flake landed, shared with the neighbour on the side it fell."""
     px = ctx.layout.pixels
-    snow = st["snow"]
+    snow, hold = st["snow"], st["hold"]
     share = [(i, 1.0)]
     for j in st["nb"].get(i, ()):
         d = abs(px[j].x - x)
@@ -453,7 +551,103 @@ def _deposit(st, ctx, i: int, x: float, amount: float, cap: float):
             share.append((j, 0.45 * (1 - d / 1.2)))
     tot = sum(w for _, w in share)
     for j, w in share:
-        snow[j] = min(cap, snow.get(j, 0.0) + amount * w / tot)
+        cur = snow.get(j, 0.0)
+        hc = cap * hold.get(j, 1.0) * dyn.get(j, 1.0)
+        new = cur + amount * w / tot
+        snow[j] = new if new <= hc else max(cur, hc)
+
+
+def _sd_step(st, ctx, P, rng, dt, rate, wind, dyn):
+    """Spawn, move and land the flakes for one physics step of dt seconds."""
+    flakes = st["flakes"]
+    width = st["xr"][1] - st["xr"][0]
+    st["spawn"] = st.get("spawn", 0.0) + rate * dt * max(0.2, width / 85.0)
+    if st["spawn"] > 50:
+        st["spawn"] = 50.0
+    while st["spawn"] >= 1.0 and len(flakes) < 400:
+        st["spawn"] -= 1.0
+        x = st["xr"][0] + width * rng.random() - wind * 2.0
+        k = math.floor(x)
+        top = max((st["prof"][j] for j in range(k - 3, k + 4) if j in st["prof"]), default=st["yhi"])
+        y = top + 0.9 + 1.6 * rng.random()
+        share = P["front"] * (TREE_SHARE if k in st["tree_cols"] else 1.0)
+        plane = 1 if k in st["front_cols"] and rng.random() < share else 0
+        # [x0, y, speed, sway amp, sway freq, phase, age, plane, size, brightness, drift x]
+        flakes.append([x, y, P["fall"] * (0.65 + 0.7 * rng.random()), P["sway"] * (0.5 + 0.7 * rng.random()),
+                       0.7 + 0.8 * rng.random(), rng.random() * math.tau, 0.0, plane,
+                       P["size"] * (0.75 + 0.5 * rng.random()), 0.55 + 0.4 * rng.random(), 0.0])
+    if st["spawn"] >= 1.0:
+        st["spawn"] = 0.0
+
+    cap = P["max_snow"]
+    amount = 0.03 * P["accumulate"]
+    gain = st["gain"]
+    tree_bins = st["tree_bins"] if st["has_tree"] else None
+    alive = []
+    ylo = st["ylo"] - 1.5
+    for f in flakes:
+        f[6] += dt
+        x_old = f[0] + f[10] + f[3] * math.sin(f[4] * (f[6] - dt) + f[5])
+        y_old = f[1]
+        f[10] += wind * dt
+        f[1] -= f[2] * dt
+        if dt > 0:
+            x = f[0] + f[10] + f[3] * math.sin(f[4] * f[6] + f[5])
+            if f[7] == 1 and tree_bins is not None:       # passing in front of the tree's rows
+                hit = _surface(tree_bins, x_old, y_old + 1e-6)
+                if hit is not None and f[1] <= hit[2] and rng.random() < TREE_CATCH:
+                    if amount > 0:
+                        _deposit(st, ctx, hit[0], x, amount * gain.get(hit[0], 1.0), cap, dyn)
+                    continue
+            hit = _surface(st["planes"][f[7]], x_old, y_old + 1e-6)
+            if hit is not None and f[1] <= hit[2]:
+                if amount > 0:
+                    _deposit(st, ctx, hit[0], x, amount * gain.get(hit[0], 1.0), cap, dyn)
+                continue
+        if f[1] < ylo:
+            continue
+        alive.append(f)
+    st["flakes"] = alive
+
+
+def _sd_settle(st, px, P, dt, cap, dyn, clear_x, clear_dir):
+    """Melt, even out between neighbours (conservatively) and apply each bulb's capacity."""
+    snow = st["snow"]
+    if not snow or dt <= 0:
+        return
+    # neighbours that both hold snow trade a little towards their mean: nothing is lost,
+    # and an isolated pile keeps its snow
+    k = SETTLE * dt
+    if k > 0:
+        delta: dict[int, float] = {}
+        for i, j in st["pairs"]:
+            a, b = snow.get(i), snow.get(j)
+            if a is None or b is None:
+                continue
+            fl = (b - a) * k
+            delta[i] = delta.get(i, 0.0) + fl
+            delta[j] = delta.get(j, 0.0) - fl
+        for i, d in delta.items():
+            snow[i] += d
+    # melt: a share of the snow per minute (plus a little, so it does melt away completely)
+    m = P["melt"] / 60.0 * dt
+    hold = st["hold"]
+    relax = 1 - math.exp(-dt / 30.0)
+    for i in list(snow):
+        v = snow[i]
+        if m:
+            v -= m * (v + 0.05)
+        hc = cap * hold.get(i, 1.0) * dyn.get(i, 1.0)
+        if v > cap:
+            v = cap
+        if m and v > hc:                    # the drift's capacity shrank: it slowly slumps
+            v -= (v - hc) * relax           # (with melt off, settled snow simply stays)
+        if clear_x is not None and (px[i].x - clear_x) * clear_dir <= 0:
+            v *= math.exp(-dt * 4.0)        # the clearing gust has passed this bulb
+        if v <= 0.002:
+            del snow[i]
+            continue
+        snow[i] = v
 
 
 @frame_effect("snowdrift", "Snow that piles up", [
@@ -470,22 +664,30 @@ def _deposit(st, ctx, i: int, x: float, amount: float, cap: float):
     Param("gusts", "number", 0.4, "Gusts", 0, 1, 0.05,
           help="the snowfall and wind slowly come and go"),
     Param("front", "number", 0.5, "Snow in front", 0, 1, 0.05,
-          help="share of flakes falling in front of the house onto the porch and garage line"),
+          help="share of flakes falling in front of the house: past the zigzag tree (where some "
+               "settle on its rows) and onto the porch and garage line"),
     Param("accumulate", "number", 1.0, "Pile-up speed", 0, 8, 0.05,
-          help="1 = the eaves fill in about four minutes at the default snowfall"),
+          help="1 = the eaves fill over about eight to ten minutes at the default snowfall"),
     Param("max_snow", "number", 0.8, "Deepest snow (brightness)", 0.1, 1, 0.05,
           help="how bright a bulb gets once it is fully covered"),
-    Param("melt", "number", 0.05, "Melt (per minute)", 0, 2, 0.01,
-          help="how fast settled snow fades away; 0 = it stays"),
+    Param("melt", "number", 0.15, "Melt (per minute)", 0, 2, 0.01,
+          help="share of the settled snow that melts each minute; the snow levels off where "
+               "melting balances the snowfall. 0 = it stays"),
+    Param("clear", "number", 0, "Gust clears it every (min)", 0, 120, 1,
+          help="every N minutes a gust sweeps the settled snow off and it starts piling up "
+               "again; 0 = never"),
     Param("glisten", "number", 0.35, "Glisten", 0, 1, 0.05,
           help="occasional sparkles on the settled snow"),
     Param("color", "color", "#e6eeff", "Flake colour"),
     Param("snow_color", "color", "#c8dcff", "Settled snow colour", help="cool white with a touch of blue"),
+    Param("tint", "number", 0.3, "Colour strength", 0, 1, 0.05,
+          help="how much the two colours (or a palette) tint the white snow; 1 = use them exactly"),
     Param("seed", "int", 11, "Seed", 0, 9999, 1),
 ], "Soft white flakes drifting down past the lights with a gentle sway. Each one lands on the "
-   "first roofline below it and the snow builds up there: over a few minutes the eaves, the "
-   "gable edges and the porch line slowly fill with a cool white glow that glistens now and "
-   "then, and (if melt is on) slowly fades.",
+   "first roofline below it and the snow builds up there, unevenly like real drifts: over "
+   "several minutes the eaves, the gable edges, the porch line and the boughs of the zigzag "
+   "tree fill with a cool white glow that glistens now and then, settling where melting "
+   "balances the snowfall.",
    group="Weather")
 def snowdrift(t, ctx, P, st):
     L, idx = ctx.layout, ctx.idx
@@ -498,91 +700,56 @@ def snowdrift(t, ctx, P, st):
         st["seed"] = P["seed"]
         st["rng"] = random.Random(P["seed"] * 104729 + 3)
     rng = st["rng"]
-    dt = min(MAX_DT, max(0.0, ctx.dt or 0.0))
+    dt, steps = _substeps(ctx.dt)
     clock = ctx.clock
     px = L.pixels
     allowed = st["allowed"]
-    flakes = st["flakes"]
+    dyn = _dyn_hold(st, ctx, P["seed"])
 
     # gusts: slow noise on the snowfall and wind
     gn = noise2(clock * 0.035, 0.5, P["seed"]) * 2 - 1 if P["gusts"] > 0 else 0.0
     rate = P["rate"] * max(0.0, 1 + P["gusts"] * 0.8 * gn)
     wind = P["wind"] + P["gusts"] * 0.6 * (noise2(clock * 0.05, 7.5, P["seed"]) * 2 - 1)
 
-    # ------------------------------------------------------------ spawn
-    width = st["xr"][1] - st["xr"][0]
-    st["spawn"] = st.get("spawn", 0.0) + rate * dt * max(0.2, width / 85.0)
-    if st["spawn"] > 50:
-        st["spawn"] = 50.0
-    while st["spawn"] >= 1.0 and len(flakes) < 400:
-        st["spawn"] -= 1.0
-        x = st["xr"][0] + width * rng.random() - wind * 2.0
-        k = math.floor(x)
-        top = max((st["prof"][j] for j in range(k - 3, k + 4) if j in st["prof"]), default=st["yhi"])
-        y = top + 0.9 + 1.6 * rng.random()
-        plane = 1 if st["has_front"] and k in st["front_cols"] and rng.random() < P["front"] else 0
-        # [x0, y, speed, sway amp, sway freq, phase, age, plane, size, brightness, drift x]
-        flakes.append([x, y, P["fall"] * (0.65 + 0.7 * rng.random()), P["sway"] * (0.5 + 0.7 * rng.random()),
-                       0.7 + 0.8 * rng.random(), rng.random() * math.tau, 0.0, plane,
-                       P["size"] * (0.75 + 0.5 * rng.random()), 0.55 + 0.4 * rng.random(), 0.0])
-    if st["spawn"] >= 1.0:
-        st["spawn"] = 0.0
+    # an occasional clearing gust sweeps across in the wind's direction
+    clear_x, clear_dir = None, 1.0 if wind >= 0 else -1.0
+    period = P["clear"] * 60.0
+    last = st.get("clear_last")
+    if last is None or period <= 0 or clock < last:
+        st["clear_last"], st["sweep"] = clock, None
+    elif st.get("sweep") is None and clock - last >= period:
+        st["sweep"], st["sweep_dir"] = clock, clear_dir
+    if st.get("sweep") is not None:
+        u = (clock - st["sweep"]) / CLEAR_TIME
+        if u > 1.4 or u < 0:
+            st["sweep"], st["clear_last"] = None, clock
+        else:
+            lo, hi = st["xr"]
+            clear_dir = st["sweep_dir"]
+            clear_x = lo + (hi - lo) * u if clear_dir > 0 else hi - (hi - lo) * u
 
-    # ------------------------------------------------------------ fall and land
     cap = P["max_snow"]
-    amount = 0.055 * P["accumulate"]
-    col = P["color"]
+    for _ in range(steps):
+        _sd_step(st, ctx, P, rng, dt, rate, wind, dyn)
+        _sd_settle(st, px, P, dt, cap, dyn, clear_x, clear_dir)
+
+    # ------------------------------------------------------------ render
+    tint = min(1.0, max(0.0, P["tint"]))
+    col = lerp(FLAKE_WHITE, P["color"], tint)
+    sc = lerp(SNOW_WHITE, P["snow_color"], tint)
     fresh = frame
-    alive = []
-    ylo = st["ylo"] - 1.5
-    for f in flakes:
-        f[6] += dt
-        x_old = f[0] + f[10] + f[3] * math.sin(f[4] * (f[6] - dt) + f[5])
-        y_old = f[1]
-        f[10] += wind * dt
-        f[1] -= f[2] * dt
+    for f in st["flakes"]:
         x = f[0] + f[10] + f[3] * math.sin(f[4] * f[6] + f[5])
-        if dt > 0:
-            hit = _surface(st["planes"][f[7]], x_old, y_old + 1e-6)
-            if hit is not None and f[1] <= hit[2]:
-                if amount > 0:
-                    _deposit(st, ctx, hit[0], x, amount * st["gain"].get(hit[0], 1.0), cap)
-                continue
-        if f[1] < ylo:
-            continue
         b = f[9] * min(1.0, f[6] / 0.6)             # fade in at the top
         splat(fresh, L, x, f[1], (col[0] * b, col[1] * b, col[2] * b), f[8], allowed)
-        alive.append(f)
-    st["flakes"] = alive
-
-    # ------------------------------------------------------------ settled snow
-    snow = st["snow"]
-    if snow:
-        melt = P["melt"] / 60.0 * dt
-        nb = st["nb"]
-        settle = 0.12 * dt
-        sc = P["snow_color"]
-        gl = P["glisten"]
-        hold = st["hold"]
-        for i in list(snow):
-            v = snow[i]
-            if settle and nb.get(i):          # snow evens out a little between neighbours
-                avg = sum(snow.get(j, 0.0) for j in nb[i]) / len(nb[i])
-                v += (avg - v) * settle
-            v -= melt
-            hc = cap * hold.get(i, 1.0)
-            if v > hc:
-                v = hc
-            if v <= 0.002:
-                del snow[i]
-                continue
-            snow[i] = v
-            if i not in allowed:
-                continue
-            b = v
-            if gl > 0 and v > 0.15:
-                gv, _ = glint(i, clock, 0.06 * gl, 0.04, 0.35, P["seed"], 1)
-                b += gv * 0.45 * v
-            a = fresh[i]
-            fresh[i] = (a[0] + sc[0] * b, a[1] + sc[1] * b, a[2] + sc[2] * b)
+    gl = P["glisten"]
+    for i, v in st["snow"].items():
+        if i not in allowed:
+            continue
+        b = v
+        if gl > 0 and v > 0.15:
+            gv, _ = glint(i, clock, 0.06 * gl, 0.04, 0.35, P["seed"], 1)
+            b += gv * 0.45 * v
+        a = fresh[i]
+        fresh[i] = (a[0] + sc[0] * b, a[1] + sc[1] * b, a[2] + sc[2] * b)
     return _clamp_frame(fresh, idx)
