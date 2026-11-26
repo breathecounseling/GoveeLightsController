@@ -52,6 +52,13 @@ their zones. If it never answers on the LAN, paste a Govee API key there and add
   The Tonight card says so ("The holiday calendar has an update") until you do.
   Thanksgiving night 2026 step by step: [TONIGHT.md](TONIGHT.md).
   A fourth run joins the whole-house looks once it has a bulb count.
+* Peak pictures (Dec 2026): eight little December pictures on the zigzag, each with its
+  own trim on the eaves and porch: wreath, snowman, gingerbread house, a present that
+  opens, a winter star, a swinging ornament, Rudolph and JOY. Presets *Peak picture: …*,
+  the show *Peak pictures* (about 4 minutes), and a few of them in the Christmas, Advent
+  and Christmas Day rotations from 27 November (Thanksgiving is unchanged). After the
+  update the Tonight card says "The holiday calendar has an update" once more: tap it
+  to add the pictures to the rotations.
 * Open-source prep: neutral defaults for new installs with the one-time migration above,
   target aliases, first-run setup, example layout, docs and `tools/export_public.py`.
 

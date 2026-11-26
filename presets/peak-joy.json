@@ -1,0 +1,16 @@
+{
+  "name": "Peak picture: JOY",
+  "tags": [
+    "Holiday",
+    "Christmas",
+    "Peak pictures"
+  ],
+  "layers": [
+    {
+      "effect": "peak_picture",
+      "params": {
+        "style": "joy"
+      }
+    }
+  ]
+}
