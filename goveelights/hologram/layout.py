@@ -75,7 +75,10 @@ class FanLayout:
         return [(x + h, y + h) for (x, y) in self.origins()]
 
     def hero(self) -> int:
-        """The fan that gets the main subject: the middle one (left of middle for even rows)."""
+        """The fan that gets the main subject: the middle one (left of middle for even rows,
+        so fan 2 of 4 in a row). A 2x2 square has no middle fan, and the centre of the
+        square is the dark gap between the four, so its hero is fan 2, the top right: the
+        moon and the pumpkin sit there and things travel across the other three."""
         return (self.count - 1) // 2
 
     def tiles(self, cv: Canvas, mask: bool = True) -> list[Canvas]:

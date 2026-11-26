@@ -81,6 +81,7 @@ class Scene:
     fps = 24
     default_colors: tuple = ()
     palette_role = ""          # what palette colours recolour (shown in the app)
+    splice = True              # False: each fan of a set shows its own copy, not a slice of one picture
 
     def __init__(self, ctx: Ctx):
         self.ctx = ctx
@@ -96,7 +97,7 @@ class Scene:
     def info(cls) -> dict:
         return {"id": cls.id, "name": cls.name, "blurb": cls.blurb, "seconds": cls.seconds, "fps": cls.fps,
                 "colors": list(cls.default_colors), "palette_role": cls.palette_role,
-                "team": cls.id == "football"}
+                "team": cls.id == "football", "splice": cls.splice}
 
 
 # ---------------------------------------------------------------- shared pieces
@@ -277,17 +278,23 @@ class Sleigh(Scene):
         self.s = 0.14 * R
         self.x0 = min(xs) - R - 8.0 * self.s
         self.x1 = max(xs) + R + 1.6 * self.s
-        if c.layout.rows > 1:              # 2x2: climb from the bottom row to the moon's row
-            self.y0, self.y1 = max(ys) + 0.1 * R, min(ys) - 0.05 * R
-        else:
-            self.y0 = self.y1 = ys[0] + 0.28 * R
+        # One pass along each row of fans, bottom row first: a straight diagonal on a 2x2
+        # would spend most of the loop in the dark gap between the four circles.
+        self.rows = sorted(set(round(y, 3) for y in ys), reverse=True)
         self.gallop = c.cyc(2.0)
 
-    def path(self, u):
+    def path(self, t):
+        """The sleigh's anchor at loop phase t, and its heading (radians)."""
         R = self.ctx.R
-        x = self.x0 + (self.x1 - self.x0) * u
-        y = self.y0 + (self.y1 - self.y0) * u - 0.36 * R * math.sin(math.pi * u)
-        return x, y
+        n = len(self.rows)
+        k = min(n - 1, int(t * n))
+        u = t * n - k
+        y0 = self.rows[k] + 0.28 * R
+        dx = self.x1 - self.x0
+        x = self.x0 + dx * u
+        y = y0 - 0.36 * R * math.sin(math.pi * u)
+        ang = math.atan2(-0.36 * R * math.pi * math.cos(math.pi * u), dx)
+        return x, y, ang
 
     def reindeer(self, X: Xf, ox, ph, rudolph):
         bob = 0.06 * math.sin(ph)
@@ -336,9 +343,7 @@ class Sleigh(Scene):
             cv.circle(mx + dx * mr, my + dy * mr, rr * mr, (236, 214, 130))
         twinkle_stars(cv, c, t, 8, avoid=(mx, my, mr * 1.3))
         self.snow.draw(cv, t)
-        x, y = self.path(t)
-        xa, ya = self.path(min(1.0, t + 0.01))
-        ang = math.atan2(ya - y, xa - x)
+        x, y, ang = self.path(t)
         ph = TAU * self.gallop * t
         X = Xf(cv, x, y, self.s, ang)
         X.outlined(lambda: self.figure(X, ph), max(2.0, 0.012 * R))
@@ -426,6 +431,7 @@ class Ghosts(Scene):
     seconds = 6.0
     default_colors = ("#f4f8ff", "#80ffa8", "#d0a8ff", "#80ecff")
     palette_role = "ghosts"
+    splice = False
 
     def setup(self):
         c = self.ctx
@@ -541,6 +547,7 @@ class SnowGlobe(Scene):
     seconds = 8.0
     default_colors = ("#ff2030", "#ffd020", "#2a8cff", "#ff40c0")
     palette_role = "ornaments"
+    splice = False
 
     def setup(self):
         c = self.ctx
@@ -606,6 +613,7 @@ class Wreath(Scene):
     seconds = 6.0
     default_colors = ("#ff1a2e", "#ffd23a")
     palette_role = "berries and star"
+    splice = False
 
     def setup(self):
         c = self.ctx
@@ -711,10 +719,13 @@ class NewYear(Scene):
                 width = font.layout(txt).width * hh / font.ROWS
                 if width > 1.7 * R:                      # keep inside the circle
                     hh *= 1.7 * R / width
+                    width = 1.7 * R
                 col = self.cols[(wi + fi) % len(self.cols)]
                 if col == (255, 255, 255) and len(self.cols) > 1:
                     col = self.cols[0]
                 o = max(2.0, 0.025 * R)
+                ty = cy + dy * R                         # clear the burst out of the letters' box
+                cv.rect(cx - width / 2 - o, ty - hh / 2 - o, cx + width / 2 + o, ty + hh / 2 + o, BLACK)
                 for ox, oy in ((o, 0), (-o, 0), (0, o), (0, -o), (o, o), (-o, -o), (o, -o), (-o, o)):
                     cv.text(txt, cx + ox, cy + dy * R + oy, hh, BLACK)
                 cv.text(txt, cx, cy + dy * R, hh, col)
@@ -725,7 +736,7 @@ class Football(Scene):
     name = "Game day field goal"
     blurb = "A football tumbles through the goal posts, then team-colour confetti. Uses your team colours."
     seconds = 6.0
-    default_colors = ("#fc4c02", "#0a2343")
+    default_colors = ("#ffd23a", "#22d34a")        # goal-post gold and field green until a team is set
     palette_role = "team colours"
 
     BROWN = (196, 98, 36)
@@ -737,7 +748,9 @@ class Football(Scene):
         self.c2 = team[1] if len(team) > 1 else WHITE
         n = len(c.fans)
         self.post = n - 1 if c.layout.rows == 1 else 1            # top-right on a 2x2
-        self.kick = 0 if c.layout.rows == 1 else 2                # bottom-left on a 2x2
+        # On a 2x2 the kick comes from the fan straight below the posts: a diagonal from
+        # bottom-left would cross the dark middle between the four fans.
+        self.kick = 0 if c.layout.rows == 1 else 3
         self.spin = c.cyc(1.2)
 
     def posts(self, cv, cx, cy, s, glow):
@@ -773,11 +786,23 @@ class Football(Scene):
             a, b = p(u * rx, -0.3 * ry), p(u * rx, 0.2 * ry)
             cv.line(a[0], a[1], b[0], b[1], 0.025 * R * s, WHITE)
 
+    def ball_at(self, u):
+        """The ball's centre and size u of the way through its flight (0..1)."""
+        c, R = self.ctx, self.ctx.R
+        px, py = c.fans[self.post]
+        kx, ky = c.fans[self.kick]
+        same = self.kick == self.post
+        sx, sy = kx - (0.22 * R if same else 0.3 * R), ky + 0.58 * R
+        ex, ey = px, py - 0.25 * R
+        lift = 0.4 if same else 1.0 if ky == py else 0.25      # a gentler arc on a straight-up kick
+        x = sx + (ex - sx) * u
+        y = sy + (ey - sy) * u - 0.55 * R * math.sin(math.pi * u) * lift
+        return x, y, 1.25 - 0.7 * u
+
     def draw(self, cv: Canvas, t: float):
         c, R = self.ctx, self.ctx.R
         t %= 1.0                                         # a timeline: t = 1 is t = 0
         px, py = c.fans[self.post]
-        kx, ky = c.fans[self.kick]
         FLY = 0.42
         good = (t - FLY) % 1.0
         glow = max(0.0, 1 - good / 0.25) if good < 0.25 else 0.0
@@ -789,12 +814,7 @@ class Football(Scene):
                 cv.circle(cx + 0.9 * R * math.cos(a), cy + 0.9 * R * math.sin(a), 0.05 * R, scale(col, 1.0 if on else 0.35))
         self.posts(cv, px, py, 1.0, glow)
         if t < FLY:
-            u = t / FLY
-            sx, sy = kx - (0.3 * R if self.kick != self.post else 0.22 * R), ky + 0.58 * R
-            ex, ey = px, py - 0.25 * R
-            x = sx + (ex - sx) * u
-            y = sy + (ey - sy) * u - 0.55 * R * math.sin(math.pi * u) * (1 if self.kick != self.post else 0.4)
-            s = 1.25 - 0.7 * u
+            x, y, s = self.ball_at(t / FLY)
             self.ball(cv, x, y, s, TAU * self.spin * t)
         elif good < 0.62:
             hh = 0.3 * R

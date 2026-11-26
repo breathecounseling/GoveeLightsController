@@ -1,5 +1,6 @@
-"""Write a clip out as files a fan's app or SD card takes: animated GIF (always), a PNG
-sequence (always), and H.264 MP4 when ffmpeg is installed (skipped otherwise).
+"""Write a clip out as files a fan's app or SD card takes: animated GIF, H.264 MP4 when
+ffmpeg is installed (skipped otherwise) and, if asked, the PNG frames (a folder or a zip
+per fan). The default is GIF + MP4, the same as the app.
 
 One pass renders each frame once and feeds every fan's GIF, PNGs and ffmpeg pipe, so a
 four-fan set costs little more than one fan."""
@@ -20,6 +21,8 @@ from .canvas import Canvas
 from .render import Clip
 
 FORMATS = ("gif", "mp4", "png")
+DEFAULT_FORMATS = ("gif", "mp4")
+FFMPEG_WAIT = 300           # seconds an encoder may take to finish after the last frame
 _H264 = ("libx264", "libopenh264", "h264_mf", "h264_videotoolbox", "h264_nvenc", "h264_qsv")
 _ffmpeg_cache: dict = {}
 
@@ -105,7 +108,7 @@ def names(clip: Clip) -> list[str]:
     return [f"{stem}-{lay.name}-fan{k + 1}" for k in range(lay.count)]
 
 
-def export(clip: Clip, out_dir, formats=("gif", "png", "mp4"), local_palette: bool = False,
+def export(clip: Clip, out_dir, formats=DEFAULT_FORMATS, local_palette: bool = False,
            progress=None, zip_png: bool = False) -> dict:
     """Write the clip. Returns {"files": [...], "skipped": {format: reason}, "seconds": t}.
     progress(done_frames, total_frames) is called as it goes."""
@@ -165,6 +168,7 @@ def export(clip: Clip, out_dir, formats=("gif", "png", "mp4"), local_palette: bo
                     old.unlink()
                 pngdirs.append(d)
 
+    ok = False
     try:
         for i in range(n):
             tiles = clip.frame(i)
@@ -187,6 +191,7 @@ def export(clip: Clip, out_dir, formats=("gif", "png", "mp4"), local_palette: bo
                             zips[k][1].writestr(nm, data)
             if progress:
                 progress(i + 1, n)
+        ok = True
     finally:
         for w, fh in zip(writers, gfiles):
             try:
@@ -200,12 +205,21 @@ def export(clip: Clip, out_dir, formats=("gif", "png", "mp4"), local_palette: bo
                 pr.stdin.close()
             except OSError:
                 pass
+            pr.stdin = None                  # closed: communicate() must not flush it
+            if not ok:                       # the frames failed: no half-written MP4s left behind
+                _stop(pr, p)
     for k, b in enumerate(base):
         if writers:
             files.append(f"{b}.gif")
     for p, pr in procs:
-        err = pr.stderr.read().decode("utf-8", "replace").strip() if pr.stderr else ""
-        if pr.wait(timeout=300) == 0 and p.exists():
+        try:
+            _, err = pr.communicate(timeout=FFMPEG_WAIT)
+        except subprocess.TimeoutExpired:
+            _stop(pr, p)
+            skipped["mp4"] = f"ffmpeg did not finish within {FFMPEG_WAIT} s"
+            continue
+        err = (err or b"").decode("utf-8", "replace").strip()
+        if pr.returncode == 0 and p.exists():
             files.append(p.name)
         else:
             skipped["mp4"] = f"ffmpeg failed: {err[:200] or 'exit ' + str(pr.returncode)}"
@@ -216,6 +230,22 @@ def export(clip: Clip, out_dir, formats=("gif", "png", "mp4"), local_palette: bo
     files += [d.name + "/" for d in pngdirs] + [zp.name for zp, _ in zips]
     return {"files": files, "skipped": skipped, "seconds": round(time.time() - t0, 2), "frames": n,
             "info": clip.info()}
+
+
+def _stop(pr, path: Path):
+    """Kill an ffmpeg encoder, reap it and remove its partial file."""
+    try:
+        pr.kill()
+    except OSError:
+        pass
+    try:
+        pr.communicate(timeout=10)
+    except (subprocess.TimeoutExpired, OSError, ValueError):
+        pass
+    try:
+        path.unlink()
+    except OSError:
+        pass
 
 
 def preview_gifs(clip: Clip) -> list[bytes]:

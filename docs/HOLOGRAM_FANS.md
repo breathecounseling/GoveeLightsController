@@ -13,17 +13,27 @@ More → Hologram fans on the phone, or on the PC:
 python -m goveelights hologram --list
 python -m goveelights hologram sleigh --layout 1x3 --size 720 --seconds 8 --out holo
 python -m goveelights hologram fireworks --palette "Patriotic"
-python -m goveelights hologram football --team "#fc4c02,#0a2343"
+python -m goveelights hologram football --team "#c8102e,#ffffff" --formats gif,mp4,png
 ```
 
 Scenes: Santa's sleigh over the moon, jack-o'-lantern with ghosts, ghost swirl, fireworks,
 snow globe, star and wreath, Happy New Year, game-day field goal (in your team colours).
 Every clip loops seamlessly: the last frame runs straight back into the first.
 
-Each run writes, per fan: an animated GIF, an H.264 MP4 (only if `ffmpeg` is on the PC's
-PATH; it's skipped otherwise) and, if asked, the PNG frames. Files are named
-`<scene>-<size>[-<layout>-fanN]`, fan 1 being the left one (on a 2 × 2 square: top left,
-top right, bottom left, bottom right).
+Each run writes, per fan: an animated GIF and an H.264 MP4 (only if `ffmpeg` is on the
+PC's PATH; it's skipped otherwise). PNG frames are only written if asked: tick "PNG
+frames" in the app, or add `png` to `--formats` on the PC (the default is `gif,mp4`).
+`--palette` takes a built-in palette, one you made in the app, or `#hex,#hex,...`. Files
+are named `<scene>-<size>[-<layout>-fanN]`, fan 1 being the left one (on a 2 × 2 square:
+top left, top right, bottom left, bottom right).
+
+On a splice set the main subject (the moon, the pumpkin, the goal posts) sits in one
+fan: the middle one of a row (fan 2 of a row of 4), and on a 2 × 2 square fan 2, the top
+right (the middle of a square is the gap between the fans). The ghost swirl, snow globe
+and wreath don't span the fans: each fan plays its own copy.
+
+The phone's small previews are drawn inside the app (they're tiny and cached); the
+full-size files are made in a separate, low-priority process so the lights never wait.
 
 ## Buying
 
@@ -49,16 +59,12 @@ top right, bottom left, bottom right).
 No consumer fan takes a live picture from a PC, so the fans can't follow the lights
 frame by frame. Switching which stored clip plays is done in the fan's app.
 
-Some people have reverse-engineered the LAN control of particular models (for example
-UDP discovery on port 8988 plus TCP 6666 on some 42 cm "PD42"/Holoscope-style fans, or a
-TCP port on a 42 cm model's own Wi-Fi access point). These projects are the starting points:
+Some people have reverse-engineered the LAN or Wi-Fi control of particular fan models
+(typically a discovery broadcast plus a TCP command port, or the fan's own Wi-Fi access
+point). To find that work, search GitHub for "hologram fan" together with your fan's
+model number or app name; check the project matches your exact model before trying it.
 
-* <https://github.com/AuClark/sektor5> (pull request #106)
-* <https://github.com/Michdo93/hologram-fan-projector>
-* <https://github.com/zackmcmurrin-dev/holo-fan-linux>
-* <https://github.com/leogreal/holofan>
-
-They are **experimental and untested here** (no fan was available). The app ships only the
+Any such protocol is **experimental and untested here** (no fan was available). The app ships only the
 interface a driver would fill in, `goveelights/hologram/drivers.py`: a `FanDriver` base
 class (discover / list clips / play clip / power), a `ManualDriver` (the default: it never
 touches the network), a clearly marked `LanProtocolStub` that does nothing, and a `FanHub`

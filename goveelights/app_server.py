@@ -120,7 +120,7 @@ def _studio_for(ctl):
     """The hologram fan studio, made on first use (clips go next to the config)."""
     from .hologram.studio import Studio
     cfg = getattr(ctl, "cfg", None)
-    base = Path(cfg.path).parent if cfg is not None and getattr(cfg, "path", None) else Path.cwd()
+    base = Path(cfg.path).resolve().parent if cfg is not None and getattr(cfg, "path", None) else Path.cwd()
     return Studio(base / "hologram_clips")
 
 
@@ -129,11 +129,15 @@ _FILE_TYPES = {".gif": "image/gif", ".mp4": "video/mp4", ".zip": "application/zi
 
 def make_handler(ctl: Controller, on_quit, auth: Auth):
     studio_box: list = []
+    studio_lock = threading.Lock()
 
     def studio():
-        if not studio_box:
-            studio_box.append(_studio_for(ctl))
-        return studio_box[0]
+        # made on first use (the import stays off the startup path), under a lock: two
+        # phones asking at once must share one studio, or quit could miss a running job
+        with studio_lock:
+            if not studio_box:
+                studio_box.append(_studio_for(ctl))
+            return studio_box[0]
 
     class H(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -336,12 +340,15 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
             self.send_header("Content-Disposition", f'attachment; filename="{p.name}"')
             self._sec_headers()
             self.end_headers()
-            with open(p, "rb") as f:
-                while True:
-                    chunk = f.read(256 * 1024)
-                    if not chunk:
-                        break
-                    self.wfile.write(chunk)
+            try:
+                with open(p, "rb") as f:
+                    while True:
+                        chunk = f.read(256 * 1024)
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+            except OSError:              # the phone gave up mid-download: headers are gone, just hang up
+                self.close_connection = True
 
         def _stream(self):
             """Server-sent events: the engine's current colours, ~12 times a second."""

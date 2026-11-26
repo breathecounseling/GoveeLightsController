@@ -4,7 +4,7 @@ Consumer hologram fans are filled with clips through their own phone app (or an 
 card) and then play them on their own. None of them takes a live picture from a PC
 (the only "live" option is an HDMI fan wall such as AIHOLO's, a different product). A
 few models have community, reverse-engineered LAN protocols for picking which stored
-clip plays (see docs/HOLOGRAM_FANS.md for links). Those were not verified here - there
+clip plays (see docs/HOLOGRAM_FANS.md for how to find them). Those were not verified here - there
 was no fan to test against - so this module only defines the shape a driver would
 take, plus the hook a show cue or schedule rule could call later:
 
@@ -78,11 +78,11 @@ class ManualDriver(FanDriver):
 
 
 class LanProtocolStub(FanDriver):
-    """Placeholder for the community LAN protocols (e.g. UDP discovery + TCP control on
-    some 42 cm "PD42"/Holoscope-style fans, or a TCP port on AP-mode models). Deliberately
-    NOT implemented: the protocols are reverse-engineered, differ between firmware, and
-    could not be checked without a fan. Port one of the projects linked in
-    docs/HOLOGRAM_FANS.md here, test it on your fan, then register it with FanHub.add."""
+    """Placeholder for the community LAN protocols (typically a discovery broadcast plus
+    a TCP command port, or a port on the fan's own Wi-Fi access point). Deliberately NOT
+    implemented: the protocols are reverse-engineered, differ between models and firmware,
+    and could not be checked without a fan. Port a project that matches your model (see
+    docs/HOLOGRAM_FANS.md) here, test it on your fan, then register it with FanHub.add."""
 
     name = "lan-stub"
 

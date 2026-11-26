@@ -218,7 +218,7 @@ microphone hears the music and the house keeps time with it:
 **Hologram fans** (More → Hologram fans): makes looping clips for spinning LED hologram
 fans on the porch rail (Santa's sleigh, jack-o'-lantern, fireworks, snow globe...) in the
 house's colours, for one fan or a spliced row / square of fans, as GIF, MP4 (if ffmpeg is
-installed) and PNG frames. The clips are made in a separate low-priority process, so the
+installed) and, if asked, PNG frames. Full-size clips are made in a separate low-priority process, so the
 lights keep running smoothly. CLI: `python -m goveelights hologram --list`. Buying,
 safety and loading tips: [docs/HOLOGRAM_FANS.md](docs/HOLOGRAM_FANS.md). Fans can't be
 driven live; the files are loaded in the fan's own app.

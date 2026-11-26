@@ -3,7 +3,7 @@
     python -m goveelights hologram --list
     python -m goveelights hologram sleigh --layout 1x3 --size 720 --seconds 8 --out holo/
     python -m goveelights hologram fireworks --palette "Patriotic"
-    python -m goveelights hologram football --team "#fc4c02,#0a2343" --formats gif,mp4
+    python -m goveelights hologram football --team "#c8102e,#ffffff" --formats gif,mp4,png
 """
 from __future__ import annotations
 
@@ -16,8 +16,21 @@ from pathlib import Path
 from . import LAYOUT_NAMES, LAYOUTS, SCENES, Clip, FanLayout, export
 
 
-def colours(v: str | None, what: str) -> list[str] | None:
-    """A palette name (built-in) or comma-separated #hex colours."""
+def user_palettes(config) -> dict:
+    """The palettes made in the app (the config's "palettes"), read only; {} if none."""
+    if not config:
+        from ..config import DEFAULT_PATH
+        config = DEFAULT_PATH
+    try:
+        with open(config, encoding="utf-8") as f:
+            pals = json.load(f).get("palettes")
+    except (OSError, ValueError, AttributeError):
+        return {}
+    return pals if isinstance(pals, dict) else {}
+
+
+def colours(v: str | None, what: str, config=None) -> list[str] | None:
+    """A palette name (built-in, or made in the app) or comma-separated #hex colours."""
     if not v:
         return None
     if "#" in v or all(len(x.strip()) in (3, 6) and all(ch in "0123456789abcdefABCDEF" for ch in x.strip())
@@ -31,7 +44,10 @@ def colours(v: str | None, what: str) -> list[str] | None:
     pals = all_palettes()
     key = next((k for k in pals if k.lower() == v.strip().lower()), None)
     if key is None:
-        raise SystemExit(f"{what}: '{v}' is not a built-in palette or a list of #hex colours")
+        pals = all_palettes(user_palettes(config))
+        key = next((k for k in pals if k.lower() == v.strip().lower()), None)
+    if key is None:
+        raise SystemExit(f"{what}: '{v}' is not a palette (built-in or yours) or a list of #hex colours")
     return list(pals[key])
 
 
@@ -47,10 +63,12 @@ def main(argv=None) -> int:
     ap.add_argument("--fps", type=float, help="frames a second (10-30, default per scene)")
     ap.add_argument("--diameter", type=float, default=42.0, help="fan diameter in cm (default 42)")
     ap.add_argument("--spacing", type=float, default=0.0, help="fan centre spacing in cm (default diameter + 10%%)")
-    ap.add_argument("--palette", help="recolour: a built-in palette name or #hex,#hex,...")
+    ap.add_argument("--palette", help="recolour: a palette name (built-in or made in the app) or #hex,#hex,...")
+    ap.add_argument("--config", help="config file to read your own palettes from (default: the app's)")
     ap.add_argument("--team", help="team colours for the football scene: #hex,#hex")
     ap.add_argument("--year", type=int, help="year for the New Year scene (default: the coming one)")
-    ap.add_argument("--formats", default="gif,png,mp4", help="any of gif,png,mp4 (default all; mp4 needs ffmpeg)")
+    ap.add_argument("--formats", default=",".join(export.DEFAULT_FORMATS),
+                    help="any of gif,png,mp4 (default gif,mp4; mp4 needs ffmpeg; png = every frame as a PNG)")
     ap.add_argument("--local-palette", action="store_true", help="GIF: a palette per frame instead of one per clip")
     ap.add_argument("--zip-png", action="store_true", help="put each fan's PNG frames in a zip")
     ap.add_argument("--sheet", action="store_true", help="also write a contact sheet PNG of 8 frames")
@@ -68,7 +86,7 @@ def main(argv=None) -> int:
         raise SystemExit(f"unknown scene '{a.scene}' (one of {', '.join(SCENES)})")
     try:
         lay = FanLayout(a.layout, size=a.size, diameter_cm=a.diameter, spacing_cm=a.spacing)
-        clip = Clip(a.scene, lay, a.seconds, a.fps, colours(a.palette, "--palette"), colours(a.team, "--team"), a.year)
+        clip = Clip(a.scene, lay, a.seconds, a.fps, colours(a.palette, "--palette", a.config), colours(a.team, "--team"), a.year)
     except ValueError as e:
         raise SystemExit(str(e)) from None
     fmts = [f.strip().lower() for f in a.formats.split(",") if f.strip()]

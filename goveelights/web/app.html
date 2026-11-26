@@ -459,18 +459,19 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
   <div class="card">
     <h2>Fans</h2>
     <div class="seg" id="hoLayouts"></div>
-    <div class="knob"><label>Fan size</label><select id="hoDia" onchange="hoSet('diameter',+this.value)"><option value="30">30 cm</option><option value="42">42 cm</option><option value="50">50 cm</option><option value="56">56 cm</option><option value="65">65 cm</option><option value="75">75 cm</option><option value="100">100 cm</option></select><span></span></div>
+    <div class="knob"><label>Fan size</label><select id="hoDia" onchange="hoDiaSel(this.value)"><option value="30">30 cm</option><option value="42">42 cm</option><option value="50">50 cm</option><option value="56">56 cm</option><option value="65">65 cm</option><option value="75">75 cm</option><option value="100">100 cm</option><option value="custom">Other…</option></select><span></span></div>
+    <div class="knob" id="hoDiaCRow" style="display:none"><label>Fan cm</label><input type="number" id="hoDiaC" min="10" max="300" step="1" inputmode="numeric" placeholder="blade tip to tip" onchange="hoDiaC(this.value)"><span></span></div>
     <div class="knob" id="hoGapRow"><label>Gap</label><input id="hoGap" type="range" min="0" max="60" step="1"><output id="oHoGap"></output></div>
     <p class="help" id="hoGapHelp">The gap between neighbouring fans' blade tips, as mounted. Splice mode: each fan plays its own slice of one big picture, so measure it.</p>
     <div class="knob"><label>Colours</label><select id="hoCols" onchange="hoSet('colors',this.value)"></select><span></span></div>
     <div class="knob" id="hoTeamRow"><label>Team</label><div class="row"><input type="color" id="hoT1" onchange="hoTeam()"><input type="color" id="hoT2" onchange="hoTeam()"><button class="sm ghost" onclick="hoSet('team',null)">Reset</button></div><span></span></div>
-    <div class="knob" id="hoYearRow"><label>Year</label><input type="number" id="hoYear" min="2000" max="2200" inputmode="numeric" onchange="hoSet('year',this.value?+this.value:null)"><span></span></div>
+    <div class="knob" id="hoYearRow"><label>Year</label><input type="number" id="hoYear" min="2000" max="2200" inputmode="numeric" onchange="hoYear(this.value)"><span></span></div>
     <div class="knob"><label>Loop</label><select id="hoSecs" onchange="hoSet('seconds',+this.value||null)"><option value="">scene's own</option><option value="4">4 s</option><option value="6">6 s</option><option value="8">8 s</option><option value="10">10 s</option></select><span></span></div>
   </div>
   <div class="card">
     <h2>Make the files</h2>
     <div class="knob"><label>Size</label><select id="hoSize" onchange="hoSet('size',+this.value)"></select><span></span></div>
-    <div class="knob"><label>Speed</label><select id="hoFps" onchange="hoSet('fps',+this.value||null)"><option value="">scene's own</option><option value="20">20 fps</option><option value="24">24 fps</option><option value="30">30 fps</option></select><span></span></div>
+    <div class="knob"><label>Frame rate</label><select id="hoFps" onchange="hoSet('fps',+this.value||null)"><option value="">scene's own</option><option value="20">20 fps</option><option value="24">24 fps</option><option value="30">30 fps</option></select><span></span></div>
     <div class="row wrap" style="gap:14px;margin:6px 0">
       <label class="row"><input type="checkbox" id="hoGif" checked> <span>GIF</span></label>
       <label class="row"><input type="checkbox" id="hoMp4" checked> <span>MP4</span></label>
@@ -2052,7 +2053,7 @@ async function security(){
 }
 
 // ------------------------------------------------------------- hologram fans (More -> Hologram fans)
-let HOI = null, HO = null, hoTimer = null, hoPollT = null, hoSeq = 0;
+let HOI = null, HO = null, hoTimer = null, hoPollT = null, hoSeq = 0, hoNoCols = '';
 const HO_DEF = {scene: 'sleigh', layout: '1', diameter: 42, gap: 4, colors: '', team: null, year: null, seconds: null, fps: null, size: 720};
 function hoSave(){ store.set('holo', JSON.stringify(HO)) }
 async function loadHolo(){
@@ -2061,6 +2062,8 @@ async function loadHolo(){
   if (!HOI.scenes.some(x => x.id === HO.scene)) HO.scene = HOI.scenes[0].id;
   if (!(HO.layout in HOI.layouts)) HO.layout = '1';
   if (!HOI.sizes.includes(HO.size)) HO.size = 720;
+  if (!(HO.diameter >= 10 && HO.diameter <= 300)) HO.diameter = 42;
+  if (HO.year != null && !hoYearOk(HO.year)) HO.year = null;     // a bad year saved earlier would fail every preview
   $('hoScenes').innerHTML = HOI.scenes.map(x => `<button class="chip" data-id="${esc(x.id)}">${esc(x.name)}</button>`).join('');
   $('hoScenes').querySelectorAll('button').forEach(b => b.onclick = () => hoSet('scene', b.dataset.id));
   $('hoLayouts').innerHTML = Object.entries(HOI.layouts).map(([k, v]) => `<button data-v="${esc(k)}" title="${esc(v)}">${k === '1' ? '1 fan' : esc(k)}</button>`).join('');
@@ -2080,7 +2083,10 @@ function hoForm(){
   $('hoScenes').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.id === HO.scene));
   $('hoScenes').querySelector('.on')?.scrollIntoView({block: 'nearest', inline: 'nearest'});
   $('hoLayouts').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === HO.layout));
-  $('hoDia').value = String(HO.diameter); $('hoGap').value = HO.gap; $('oHoGap').textContent = HO.gap + ' cm';
+  const stdDia = [...$('hoDia').options].some(o => o.value === String(HO.diameter));
+  $('hoDia').value = stdDia ? String(HO.diameter) : 'custom'; $('hoDiaCRow').style.display = stdDia ? 'none' : '';
+  if (!stdDia) $('hoDiaC').value = HO.diameter;
+  $('hoGap').value = HO.gap; $('oHoGap').textContent = HO.gap + ' cm';
   const multi = HO.layout !== '1';
   $('hoGapRow').style.display = multi ? '' : 'none'; $('hoGapHelp').style.display = multi ? '' : 'none';
   $('hoCols').value = HO.colors; if ($('hoCols').value !== HO.colors) { HO.colors = ''; $('hoCols').value = '' }
@@ -2090,9 +2096,25 @@ function hoForm(){
   $('hoYearRow').style.display = HO.scene === 'newyear' ? '' : 'none'; $('hoYear').value = HO.year || '';
   $('hoSecs').value = HO.seconds ? String(HO.seconds) : ''; $('hoFps').value = HO.fps ? String(HO.fps) : ''; $('hoSize').value = String(HO.size);
   $('hoBlurb').textContent = sc.blurb || '';
-  $('hoInfo').textContent = sc.palette_role && HO.colors ? 'The chosen colours recolour the ' + sc.palette_role + '.' : '';
+  hoInfo(sc);
 }
 function hoSet(k, v){ HO[k] = v; hoSave(); hoForm(); if (!['size', 'fps'].includes(k)) hoPreview() }
+function hoDiaSel(v){
+  if (v !== 'custom') return hoSet('diameter', +v);
+  $('hoDiaCRow').style.display = ''; $('hoDiaC').value = HO.diameter; $('hoDiaC').focus();
+}
+function hoDiaC(v){
+  const d = Math.round(+v);
+  if (!(d >= 10 && d <= 300)) { toast('Fan size must be 10 to 300 cm'); $('hoDiaC').value = HO.diameter; return }
+  hoSet('diameter', d);
+}
+function hoYearOk(y){ return Number.isInteger(y) && y >= 2000 && y <= 2200 }
+function hoYear(v){
+  if (v === '') return hoSet('year', null);
+  const y = +v;
+  if (!hoYearOk(y)) { toast('Year must be 2000 to 2200'); $('hoYear').value = HO.year || ''; return }
+  hoSet('year', y);
+}
 function hoTeam(){ HO.team = [$('hoT1').value, $('hoT2').value]; hoSave(); hoPreview() }
 function hoBody(){
   return {scene: HO.scene, layout: HO.layout, diameter: HO.diameter, spacing: HO.diameter + (HO.layout === '1' ? 0 : HO.gap),
@@ -2110,12 +2132,22 @@ function hoPreview(){
 }
 function hoStage(r){
   const L = r.layout, st = $('hoStage');
-  const W = Math.min(st.parentElement.clientWidth - 2, 560), k = W / L.canvas[0];
+  const card = st.parentElement, cs = getComputedStyle(card);          // the card's content box, not its padding
+  const W = Math.min(card.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 2, 560), k = W / L.canvas[0];
   st.style.width = W + 'px'; st.style.height = Math.round(L.canvas[1] * k) + 'px';
   st.innerHTML = r.tiles.map((src, i) => { const [x, y] = L.origins[i];
     return `<div class="fan" style="left:${x * k}px;top:${y * k}px;width:${L.size * k}px;height:${L.size * k}px"><img src="${src}" alt="fan ${i + 1}"><i></i>${r.tiles.length > 1 ? `<b>${i + 1}</b>` : ''}</div>` }).join('');
-  $('hoNote').textContent = (r.tiles.length > 1 ? 'Splice: one picture across ' + r.tiles.length + ' fans, centres ' + L.spacing_cm + ' cm apart. ' : '')
+  const sc = (HOI && HOI.scenes.find(x => x.id === HO.scene)) || {};
+  $('hoNote').textContent = (r.tiles.length > 1 ? (sc.splice === false ? 'Its own copy on each of the ' + r.tiles.length + ' fans (this scene doesn\'t span them). '
+    : 'Splice: one picture across ' + r.tiles.length + ' fans, centres ' + L.spacing_cm + ' cm apart. ') : '')
     + 'Black is see-through on a fan. Loop ' + r.seconds + ' s' + (HO.scene === 'newyear' ? ', year ' + r.year : '') + '.';
+  hoNoCols = HO.colors && !(r.colors || []).length ? HO.colors : '';     // e.g. lights off: nothing to match
+  hoInfo(sc);
+}
+function hoInfo(sc){
+  $('hoInfo').textContent = !HO.colors ? ''
+    : hoNoCols === HO.colors ? (HO.colors === 'house' ? 'Nothing playing has colours to match' : 'That choice has no bright colours') + ', so this uses the scene\'s own colours.'
+    : sc.palette_role ? 'The chosen colours recolour the ' + sc.palette_role + '.' : '';
 }
 async function hoMake(){
   const formats = [['gif', 'hoGif'], ['mp4', 'hoMp4'], ['png', 'hoPng']].filter(([, id]) => $(id).checked && !$(id).disabled).map(([f]) => f);
