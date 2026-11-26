@@ -6,6 +6,27 @@
   ],
   "layers": [
     {
+      "effect": "twinkle",
+      "params": {
+        "colors": [
+          "#ffe0b0"
+        ],
+        "background": "#ffc070",
+        "density": 0.18,
+        "duration": 3.0,
+        "seed": 11
+      },
+      "target": [
+        "North wall",
+        "Front eave",
+        "South wall",
+        "Garage",
+        "Garage peak"
+      ],
+      "blend": "normal",
+      "opacity": 0.2
+    },
+    {
       "effect": "tree",
       "params": {
         "intro": 12,
@@ -32,7 +53,7 @@
       },
       "target": "Porch",
       "blend": "add",
-      "opacity": 0.45
+      "opacity": 0.25
     }
   ]
 }

@@ -6,6 +6,27 @@
   ],
   "layers": [
     {
+      "effect": "twinkle",
+      "params": {
+        "colors": [
+          "#e0ecff"
+        ],
+        "background": "#a0c0ff",
+        "density": 0.18,
+        "duration": 3.0,
+        "seed": 11
+      },
+      "target": [
+        "North wall",
+        "Front eave",
+        "South wall",
+        "Garage",
+        "Garage peak"
+      ],
+      "blend": "normal",
+      "opacity": 0.2
+    },
+    {
       "effect": "tree",
       "params": {
         "body": "#0050ff",
@@ -13,14 +34,13 @@
         "level": 0.8,
         "shimmer": 0.3,
         "shade": 0.3,
-        "garland": "#ffffff",
+        "garland": "#c0e0ff",
         "garland_style": "swag",
-        "garland_width": 2.2,
+        "garland_width": 2.0,
         "garland_spacing": 12,
         "speed": 0.8,
         "garland_sparkle": 2.0,
         "ornament_colors": [
-          "#ffffff",
           "#00e0ff",
           "#a020ff",
           "#ffffff",
@@ -28,9 +48,9 @@
         ],
         "density": 0.16,
         "glints": 0.25,
-        "star": "#e8f4ff",
-        "glow": "#7090ff",
-        "glow_level": 0.22,
+        "star": "#f4f8ff",
+        "glow": "#90b0ff",
+        "glow_level": 0.18,
         "intro": 6
       },
       "target": "Whole front gable"
@@ -40,9 +60,9 @@
       "params": {
         "colors": [
           "#0050ff",
-          "#ffffff",
+          "#a020ff",
           "#00c0ff",
-          "#8020ff"
+          "#40ffd0"
         ],
         "ribbon": "#ffffff",
         "background": "#6080ff"

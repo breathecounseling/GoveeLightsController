@@ -196,6 +196,65 @@ class TreeRenderTests(unittest.TestCase):
             self.assertLess((time.perf_counter() - t0) / 200 * 1000, 8.0)
 
 
+class ReviewFixTests(unittest.TestCase):
+    def setUp(self):
+        self.L = house()
+        self.idx = self.L.indices("Whole front gable")
+        self.geo = T.tree_geometry(self.L, self.idx)
+
+    def test_no_star_or_outline_light_before_ignition(self):
+        # the live engine starts layers at arbitrary clocks: bursts must not fire mid-intro
+        for c0 in range(0, 200, 7):
+            for seed in (2, 3, 4, 5, 7):
+                st = {}
+                for k in range(0, 64):               # up to 6.3 s; ignition at 0.82 * 8 = 6.56 s
+                    out = call(self.L, self.idx, {"seed": seed}, st, clock=c0 + k * 0.1)
+                    for i in self.geo["rest"] + self.geo["star"]:
+                        self.assertLess(max(out[i]), 0.02, (c0, seed, k))
+
+    def test_ignition_burst_decays_smoothly_past_intro_end(self):
+        for D in (1, 2, 3):
+            st, prev = {}, None
+            for k in range(0, int(D * 100) + 60):
+                c = 50 + k * 0.01
+                out = call(self.L, self.idx, {"intro": D, "burst_every": 0}, st, clock=c)
+                s = sum(sum(out[i]) for i in self.geo["star"])
+                if prev is not None and abs(k - D * 100) <= 3:     # across the end of the intro
+                    self.assertLess(abs(s - prev), 0.1, (D, k))
+                prev = s
+
+    def test_ornaments_follow_tree_brightness(self):
+        orn = T.ornaments(self.L, self.geo, 0.18, 7, 6)
+        bright = call(self.L, self.idx, {"intro": 0, "glints": 0, "level": 1.0}, {}, clock=20)
+        dim = call(self.L, self.idx, {"intro": 0, "glints": 0, "level": 0.3}, {}, clock=20)
+        for i in orn:
+            self.assertLess(max(dim[i]), max(bright[i]) * 0.5 + 1e-6)
+
+    def test_ornament_memo_is_bounded(self):
+        st = {}
+        for k in range(200):
+            call(self.L, self.idx, {"density": k / 400, "seed": k}, st, clock=1 + k * 0.05)
+        self.assertNotIn(("tree-orn",), [key[:1] for key in T.geometry._cache(self.L) if isinstance(key, tuple)])
+        self.assertIn("orn", st)
+
+    def test_presents_start_whole_at_target_edge(self):
+        fx = EFFECTS["presents"]
+        P = fx.resolve({"twinkle": 0, "glints": 0})
+        for zone in ("Porch", "Garage", "Garage peak"):
+            idx = self.L.indices(zone)
+            out = fx.fn(1.0, Ctx(self.L, idx, 1.0, 0.05, 120, {}), P, {})
+            self.assertEqual(len(out), self.L.n)
+            rib = P["ribbon"]
+            # default size 5: wrapping, wrapping, ribbon, wrapping, wrapping, gap
+            for q in (2, 8):
+                c = out[idx[q]]
+                self.assertAlmostEqual(c[0], rib[0] * P["level"], places=5)
+            self.assertLess(max(out[idx[5]]), 0.2)
+            self.assertNotEqual(out[idx[0]], out[idx[2]])
+            self.assertEqual(out[idx[0]], out[idx[1]])
+        self.assertEqual(fx.fn(1.0, Ctx(self.L, [], 1.0, 0.0, 120, {}), P, {}), [(0.0, 0.0, 0.0)] * self.L.n)
+
+
 class PresentsTests(unittest.TestCase):
     def test_presents(self):
         L = house()
@@ -221,8 +280,9 @@ class TreePresetTests(unittest.TestCase):
             with open(f"presets/{f}.json") as fh:
                 d = json.load(fh)
             names.add(d["name"])
-            self.assertEqual(d["layers"][0]["effect"], "tree")
-            self.assertEqual(d["layers"][0]["target"], "Whole front gable")
+            trees = [L for L in d["layers"] if L["effect"] == "tree"]
+            self.assertEqual(len(trees), 1)
+            self.assertEqual(trees[0]["target"], "Whole front gable")
             sc = Scene.from_dict(d)
             for k in range(0, 300, 7):
                 valid(self, sc.render(k / 20, L), L.n)

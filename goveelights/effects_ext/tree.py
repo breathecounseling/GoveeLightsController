@@ -3,7 +3,8 @@
     tree      the whole scene (frame effect, it remembers when it was lit):
               body + travelling garland + ornaments with glints + star on top,
               a "lighting the tree" intro and an optional periodic relight.
-    presents  wrapped boxes with ribbons for the porch under the tree.
+    presents  wrapped boxes with ribbons for the porch under the tree (frame effect:
+              boxes are counted from the start of the target, so they start whole).
 
 How the tree finds itself in the target
 ---------------------------------------
@@ -23,7 +24,7 @@ import math
 
 from .. import geometry
 from ..color import BLACK, hash01, lerp
-from ..effects import Param, effect, frame_effect, travel
+from ..effects import Param, frame_effect, travel
 from ..sparkle import envelope, glint, wobble
 
 TAU = 2 * math.pi
@@ -125,12 +126,16 @@ def tree_geometry(layout, idx: list[int]) -> dict:
     return out
 
 
-def ornaments(layout, geo: dict, density: float, seed: int, ncol: int) -> dict:
-    """Deterministic ornament bulbs -> colour index. Never two ornaments touching."""
-    key = ("tree-orn", id(geo), round(density, 4), seed, ncol)
-    c = geometry._cache(layout)
-    if key in c:
-        return c[key]
+def ornaments(layout, geo: dict, density: float, seed: int, ncol: int, state: dict | None = None) -> dict:
+    """Deterministic ornament bulbs -> colour index. Never two ornaments touching.
+    Only the latest selection is remembered (in the layer's frame state when given),
+    so modulating density or seed never grows a cache."""
+    density = round(max(0.0, density) * 100) / 100
+    key = (tuple(geo["body"]), density, seed, ncol)
+    memo = state if state is not None else geo
+    hit = memo.get("orn")
+    if hit is not None and hit[0] == key and hit[1] is layout:
+        return hit[2]
     px = layout.pixels
     chosen: dict[int, int] = {}
     pts: list[tuple[float, float]] = []
@@ -152,7 +157,7 @@ def ornaments(layout, geo: dict, density: float, seed: int, ncol: int) -> dict:
         if ncol > 1 and k == last:
             k = (k + 1) % ncol
         chosen[i] = last = k
-    c[key] = chosen
+    memo["orn"] = (key, layout, chosen)
     return chosen
 
 
@@ -167,13 +172,14 @@ TREE_PARAMS = [
           help="gentle per-bulb breathing of the tree body"),
     Param("shade", "number", 0.25, "Shade toward the bottom", 0, 1, 0.05,
           help="darker lower boughs, lighter tip, like light falling on a real tree"),
-    Param("garland", "color", "#ffa000", "Garland colour"),
+    Param("garland", "color", "#ff8c00", "Garland colour",
+          help="deep gold by default, so the paler, hotter star stands apart from it"),
     Param("garland_style", "choice", "strand", "Garland style",
           options=["strand", "swag", "none"],
           help="strand: runs along the wiring, row by row, back and forth; "
                "swag: diagonal drapes across the tree; none: no garland"),
-    Param("garland_width", "number", 3, "Garland width (bulbs)", 0.5, 10, 0.1),
-    Param("garland_spacing", "number", 14, "Garland spacing (bulbs)", 3, 120, 0.5,
+    Param("garland_width", "number", 2, "Garland width (bulbs)", 0.5, 10, 0.1),
+    Param("garland_spacing", "number", 20, "Garland spacing (bulbs)", 3, 120, 0.5,
           help="distance between garland strands; large = a single strand"),
     Param("speed", "number", 1.2, "Garland speed (bulbs/s)", -10, 10, 0.1,
           help="how fast the garland creeps along; negative reverses"),
@@ -185,13 +191,14 @@ TREE_PARAMS = [
           help="share of tree bulbs that are ornaments"),
     Param("glints", "number", 0.12, "Ornament glints per second", 0, 3, 0.01,
           help="how often each ornament catches the light"),
-    Param("star", "color", "#ffa820", "Star colour"),
-    Param("star_pulse", "number", 0.2, "Star pulse", 0, 1, 0.05, help="depth of the star's gentle breathing"),
+    Param("star", "color", "#ffd060", "Star colour",
+          help="keep it paler/whiter than the garland so the star reads as the brightest thing"),
+    Param("star_pulse", "number", 0.3, "Star pulse", 0, 1, 0.05, help="depth of the star's gentle breathing"),
     Param("burst_every", "number", 12, "Star burst every (s)", 0, 120, 1,
           help="the star flares and throws sparks onto the outline; 0 = never"),
-    Param("glow", "color", "#ff9a40", "Outline glow colour",
+    Param("glow", "color", "#ffb070", "Outline glow colour",
           help="the rest of the target (e.g. the gable outline) glows softly in this"),
-    Param("glow_level", "number", 0.3, "Outline glow", 0, 1, 0.01, help="0 = outline dark"),
+    Param("glow_level", "number", 0.18, "Outline glow", 0, 1, 0.01, help="0 = outline dark"),
     Param("halo", "number", 0.5, "Star halo", 0, 1, 0.05,
           help="the outline bulbs next to the star take on its glow"),
     Param("intro", "number", 8, "Lighting intro (s)", 0, 60, 0.5,
@@ -207,14 +214,16 @@ FADE_S = 2.5          # relight: how long the tree takes to go dark before relig
 
 def _timeline(clock: float, P: dict, state: dict) -> tuple[float | None, float]:
     """(seconds into the intro or None when it is over / disabled, overall dimmer)."""
+    D, R = P["intro"], P["relight"] * 60.0
     if "start" not in state or clock < state["start"] - 1e-6:
         state["start"] = clock
+        state["ignite_at"] = clock + 0.82 * D if D > 0 else -1e9
         state.pop("fade", None)
-    D, R = P["intro"], P["relight"] * 60.0
     if state.get("fade") is not None:
         age = clock - state["fade"]
         if age >= FADE_S:
             state["start"], state["fade"] = clock, None
+            state["ignite_at"] = clock + 0.82 * D if D > 0 else -1e9
         else:
             return None, 1.0 - _smooth(age / FADE_S)
     tau = clock - state["start"]
@@ -249,31 +258,33 @@ def tree(t, ctx, P, state):
     seed = P["seed"]
     info, s_of, ph = geo["info"], geo["s"], geo["ph"]
     ocols = P["ornament_colors"] or [(1.0, 0.0, 0.0)]
-    orn = ornaments(layout, geo, P["density"], seed, len(ocols))
+    orn = ornaments(layout, geo, P["density"], seed, len(ocols), state)
 
     # intro phases (fractions of the intro length)
     if intro is not None:
         x = intro / D
         front = x / 0.55 * 1.35 - 0.2          # body fill front, in tree heights
         star_on = _smooth((intro - 0.82 * D) / 0.15)
-        ignite = (x - 0.82) * D                # seconds since the star ignited
         glow_on = _smooth((x - 0.84) / 0.16)
     else:
-        front, star_on, ignite, glow_on = 9.0, 1.0, -1.0, 1.0
+        front, star_on, glow_on = 9.0, 1.0, 1.0
+    ignite = clock - state.get("ignite_at", -1e9)    # seconds since the star ignited
 
-    # star bursts: one per slot, jittered
+    # star bursts: one per slot, jittered, counted from when the tree was lit;
+    # none while the intro runs (the star ignites last, with its own big burst)
     B = P["burst_every"]
     burst_age = 1e9
-    if B > 0:
-        k = math.floor(clock / B)
+    if B > 0 and intro is None and dim >= 1.0:
+        bc = clock - state["start"] - max(0.0, D)      # measured from when the intro ended
+        k = math.floor(bc / B)
         for kk in (k, k - 1):
             st = kk * B + B * (0.3 + 0.5 * hash01(kk, seed, 61))
-            if clock >= st:
-                burst_age = min(burst_age, clock - st)
+            if kk >= 0 and bc >= st:
+                burst_age = min(burst_age, bc - st)
+    big = 1.0
     if 0 <= ignite < burst_age:
-        burst_age = ignite
+        burst_age, big = ignite, 1.5                 # the ignition burst is the big one
     burst = envelope(burst_age, 0.05, 0.7) if burst_age < 6 else 0.0
-    big = 1.5 if burst_age == ignite else 1.0        # the ignition burst is the big one
     has_star = bool(geo["star"])
     dist = geo["dist"]
     sparking = has_star and burst_age < 2.5
@@ -304,6 +315,7 @@ def tree(t, ctx, P, state):
     gspark = P["garland_sparkle"]
     grate = P["glints"]
     soft = 0.22
+    ov = min(1.0, lvl * 1.15)                        # ornaments follow the tree's brightness, a little brighter
     near_star, sc, halo = geo["near_star"], P["star"], P["halo"]
     for i in geo["body"]:
         r, h, u = info[i]
@@ -322,6 +334,8 @@ def tree(t, ctx, P, state):
 
         if i in orn:
             oc = ocols[orn[i] % len(ocols)]
+            ovs = ov * (1 - shade * 0.5 * (1 - h))
+            oc = (oc[0] * ovs, oc[1] * ovs, oc[2] * ovs)
             if intro is not None:
                 pop_t = D * (0.5 + 0.3 * (h * 0.7 + 0.3 * hash01(i, seed, 47)))
                 age = intro - pop_t
@@ -335,7 +349,7 @@ def tree(t, ctx, P, state):
         elif i in near_star:
             # the boughs right under the star catch its light (no garland over the star)
             if star_on > 0 and halo > 0:
-                c = lerp(c, sc, halo * 0.7 * (1 - near_star[i] / 1.8) * star_on)
+                c = lerp(c, sc, halo * 0.4 * (1 - near_star[i] / 1.8) * star_on)
         elif gstyle != "none":
             if gstyle == "swag":
                 q = px[i].x + r * 1.3 - tr
@@ -355,8 +369,9 @@ def tree(t, ctx, P, state):
         if intro is not None and front - (h * 0.85) < soft * 1.6:
             # the lighting front: a warm sparkle where the lights are just coming on
             e = max(0.0, 1 - abs(front - h * 0.85 - soft * 0.5) / (soft * 1.1))
-            e *= 0.5 + 0.5 * hash01(i, int(clock * 15), seed)
-            c = (c[0] + 0.8 * e, c[1] + 0.6 * e, c[2] + 0.25 * e)
+            hs = hash01(i, int(clock * 15), seed)
+            if hs > 0.6:                             # about 1 bulb in 3 flickers: twinkling, not a band
+                c = lerp(c, (1.0, 0.82, 0.55), 0.85 * e * (0.4 + 1.5 * (hs - 0.6)))
         if sparking:
             e = sparks(i) * 0.65
             if e > 0:
@@ -370,9 +385,9 @@ def tree(t, ctx, P, state):
         for i in star:
             tw = glint(i, clock, 0.8, 0.03, 0.25, seed + 2, 1)[0]
             b = min(1.0, burst * big)
-            v = pulse * (1 - b) + b
+            v = 0.82 * pulse * (1 - b) + b                 # rests below full: headroom for pulses and bursts
             c = (sc[0] * v, sc[1] * v, sc[2] * v)
-            hot = min(1.0, 0.55 * b + 0.4 * tw)
+            hot = min(1.0, 0.1 + 0.5 * b + 0.4 * tw)       # always a touch hotter than the garland
             c = (c[0] + (1 - c[0]) * hot, c[1] + (1 - c[1]) * hot, c[2] + (1 - c[2]) * hot * 0.75)
             out[i] = _clamp01((c[0] * star_on * dim, c[1] * star_on * dim, c[2] * star_on * dim))
 
@@ -395,37 +410,55 @@ def tree(t, ctx, P, state):
 
 
 # ------------------------------------------------------------------ presents
-@effect("presents", "Presents", [
-    Param("colors", "colors", ["#ff0000", "#00a000", "#1040ff", "#ff0060", "#ffa000"], "Wrapping paper"),
-    Param("ribbon", "color", "#ffd060", "Ribbon colour"),
-    Param("background", "color", "#ff8a30", help="warm glow between the presents"),
-    Param("glow", "number", 0.12, "Glow between presents", 0, 1, 0.01),
-    Param("size", "int", 4, "Present size (bulbs)", 2, 12, 1),
+@frame_effect("presents", "Presents", [
+    Param("colors", "colors", ["#ff0000", "#1040ff", "#ff0060", "#a020ff", "#00a000"], "Wrapping paper",
+          help="rich, saturated colours that differ from the ribbon and the glow"),
+    Param("ribbon", "color", "#fff0c0", "Ribbon colour", help="the centre bulb of each present"),
+    Param("background", "color", "#ff8a30", "Glow colour", help="warm glow in the gaps between the presents"),
+    Param("glow", "number", 0.12, "Glow between presents", 0, 1, 0.01, help="0 = gaps dark"),
+    Param("size", "int", 5, "Present size (bulbs)", 2, 12, 1,
+          help="odd sizes put the ribbon dead centre; even sizes get a two-bulb ribbon"),
     Param("level", "number", 0.75, "Brightness", 0.05, 1, 0.01),
     Param("twinkle", "number", 0.35, "Twinkle", 0, 1, 0.05, help="how much the wrapping shimmers"),
     Param("glints", "number", 0.3, "Ribbon glints per second", 0, 4, 0.05),
-    Param("seed", "int", 5, "Seed", 0, 9999, 1),
+    Param("seed", "int", 5, "Seed", 0, 9999, 1, help="which present gets which wrapping"),
 ], "A row of wrapped presents under the tree: blocks of coloured wrapping, each tied with a "
-   "glinting gold ribbon bulb, on a warm glow. Made for the porch under the front gable.",
+   "glinting pale-gold ribbon in its centre, on a warm glow. Boxes start whole at the edge of the "
+   "target. Made for the porch under the front gable.",
    group="Scenes")
-def presents(t, p, P):
-    size = max(2, P["size"])
+def presents(t, ctx, P, state):
+    n = len(ctx.layout.pixels)
+    out = [BLACK] * n
+    idx = [i for i in ctx.idx if 0 <= i < n]
+    if not idx:
+        return out
+    size = max(2, int(P["size"]))
     period = size + 1
-    k, j = divmod(p.ri, period)
-    bg = P["background"]
-    if j == size:                                       # the gap between presents
-        g = P["glow"] * (0.8 + 0.2 * wobble(p.i, t, 0.3, P["seed"]))
-        return (bg[0] * g, bg[1] * g, bg[2] * g)
     seed = P["seed"]
-    if j == size // 2:                                  # the ribbon
-        g = glint(p.i, t, P["glints"], 0.03, 0.35, seed, 1)[0] if P["glints"] > 0 else 0.0
-        c = P["ribbon"]
-        v = P["level"]
-        return _clamp01((c[0] * v + (1 - c[0] * v) * g, c[1] * v + (1 - c[1] * v) * g,
-                         c[2] * v + (1 - c[2] * v) * g * 0.8))
-    cols = P["colors"]
-    c = cols[int(hash01(k, seed, 9) * len(cols)) % len(cols)]
-    if k > 0 and len(cols) > 1 and c == cols[int(hash01(k - 1, seed, 9) * len(cols)) % len(cols)]:
-        c = cols[(cols.index(c) + 1) % len(cols)]
-    v = P["level"] * (1 - P["twinkle"] * 0.5 * (1 - wobble(p.i, t, 0.5, seed)))
-    return (c[0] * v, c[1] * v, c[2] * v)
+    lv, tw, gr = P["level"], P["twinkle"], P["glints"]
+    bg, gv, rb = P["background"], P["glow"], P["ribbon"]
+    cols = P["colors"] or [(1.0, 0.0, 0.0)]
+    nc = len(cols)
+    rib = {(size - 1) // 2, size // 2}           # centre bulb(s)
+    clock = ctx.clock
+
+    def wrap(k):
+        return int(hash01(k, seed, 9) * nc) % nc
+
+    for q, i in enumerate(idx):                 # numbered within the target, so boxes start whole
+        k, j = divmod(q, period)
+        if j == size:                            # the gap between presents
+            g = gv * (0.8 + 0.2 * wobble(i, clock, 0.3, seed))
+            out[i] = _clamp01((bg[0] * g, bg[1] * g, bg[2] * g))
+        elif j in rib:
+            g = glint(i, clock, gr, 0.03, 0.35, seed, 1)[0] if gr > 0 else 0.0
+            out[i] = _clamp01((rb[0] * lv + (1 - rb[0] * lv) * g, rb[1] * lv + (1 - rb[1] * lv) * g,
+                               rb[2] * lv + (1 - rb[2] * lv) * g * 0.8))
+        else:
+            ci = wrap(k)
+            if k > 0 and nc > 1 and ci == wrap(k - 1):
+                ci = (ci + 1) % nc
+            c = cols[ci]
+            v = lv * (1 - tw * 0.5 * (1 - wobble(i, clock, 0.5, seed)))
+            out[i] = _clamp01((c[0] * v, c[1] * v, c[2] * v))
+    return out
