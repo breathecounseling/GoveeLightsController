@@ -648,7 +648,7 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
   <p class="disc">Unofficial project, not affiliated with or endorsed by Govee. "Govee" is a trademark of its owner. It uses undocumented LAN commands; use at your own risk.</p>
 </div></div>
 <div class="scrim" id="scrim" onclick="closeSheet()"></div>
-<div class="sheet" id="sheet"><div class="grab"></div><h3><span id="sheetTitle"></span><button class="sm ghost" onclick="closeSheet()">Done</button></h3><div id="sheetBody"></div></div>
+<div class="sheet" id="sheet"><div class="grab"></div><h3><span id="sheetTitle"></span><button class="sm ghost" onclick="sheetDone()">Done</button></h3><div id="sheetBody"></div></div>
 <div id="toast"></div>
 
 <script src="/static/qrcode.js"></script>
@@ -685,6 +685,8 @@ function tabTo(t){
 document.querySelectorAll('#nav button').forEach(b => b.onclick = () => tabTo(b.dataset.t));
 function openSheet(title, body){ $('sheetTitle').textContent = title; const sb=$('sheetBody'); sb.innerHTML=''; if (typeof body === 'string') sb.innerHTML = body; else sb.appendChild(body); $('sheet').scrollTop=0; $('sheet').classList.add('on'); $('scrim').classList.add('on') }
 function closeSheet(){ $('sheet').classList.remove('on'); $('scrim').classList.remove('on') }
+// the sheet's own Done: on the bulb check it means "give the house back", not just "hide this"
+function sheetDone(){ if (document.getElementById('bcWalk') && BC) bcStop(); else closeSheet() }
 function segTo(v){
   document.querySelectorAll('#showSeg button').forEach(x => x.classList.toggle('on', x.dataset.v===v));
   ['lists','shows','sched','live'].forEach(k => $('v-'+k).style.display = v===k ? '' : 'none');
@@ -2221,6 +2223,7 @@ async function bcStart(mac, mode, extra = {}){
 async function bcAct(action, extra = {}){
   const r = await post('bulbs/check', {action, ...extra});
   if (r){ BC = r.check; bcDraw() } else { await loadBulbs(); bcDraw() }
+  return r;                       // null when it was refused (post has already said why)
 }
 async function bcStop(){
   await post('bulbs/check', {action: 'stop'});
@@ -2279,9 +2282,9 @@ function bcDraw(){
   on('back', () => bcAct('back')); on('next', () => bcAct('next'));
   on('find', () => bcAct('mode', {mode: 'single'}));
   on('groups', () => bcAct('mode', {mode: 'groups', at: v.bulb}));
-  on('dark', async () => { await bcAct('dark'); toast(`Bulb ${bn(v.bulb)} marked broken`) });
-  on('ok', async () => { await bcAct('ok'); toast(`Bulb ${bn(v.bulb)} cleared`) });
-  on('hung', async () => { await bcAct('rehung'); toast(`${bcRange(v.first, v.last)} marked as re-hung`) });
+  on('dark', async () => { if (await bcAct('dark')) toast(`Bulb ${bn(v.bulb)} marked broken`) });
+  on('ok', async () => { if (await bcAct('ok')) toast(`Bulb ${bn(v.bulb)} cleared`) });
+  on('hung', async () => { if (await bcAct('rehung')) toast(`${bcRange(v.first, v.last)} marked as re-hung`) });
   on('done', bcStop);
   on('remap', async () => { const s = {mac: v.mac, from: v.first, to: v.last, label: `${v.name} ${bcRange(v.first, v.last)}`};
     await post('bulbs/check', {action: 'stop'}); BC = null; clearInterval(bcTimer); mapWizard(s) });

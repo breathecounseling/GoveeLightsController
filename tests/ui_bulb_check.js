@@ -11,7 +11,8 @@ const { chromium } = require('playwright');
   try {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
     page.on('pageerror', e => out.errors.push('pageerror: ' + e.message));
-    page.on('console', m => { if (m.type() === 'error' && !/favicon/.test(m.text())) out.errors.push('console: ' + m.text()) });
+    let refusing = false;           // a mark the server refuses answers 400 on purpose
+    page.on('console', m => { if (m.type() === 'error' && !/favicon/.test(m.text()) && !(refusing && /400/.test(m.text()))) out.errors.push('console: ' + m.text()) });
     page.on('dialog', d => d.accept());
     await page.addInitScript(() => { try { localStorage.setItem('setupSkip', '1') } catch (e) {} });
     await page.goto(url, { waitUntil: 'load' });
@@ -108,6 +109,34 @@ const { chromium } = require('playwright');
     await page.click('#banners button:has-text("Done")');
     await page.waitForFunction(() => !/bulb check/.test(document.querySelector('#banners').textContent), null, { timeout: 8000 });
     out.steps.push('ended');
+
+    // the sheet's own Done (top right) gives the house back too, not just hides the sheet
+    await page.click('#nav button[data-t="more"]');
+    await page.waitForSelector('#bcRuns .bcr', { timeout: 8000 });
+    await page.click('#bcRuns .bcr:nth-child(2) button[data-a="walk"]');
+    await waitBig(/bulbs 1–10/);
+    await page.click('#sheet h3 button');
+    await page.waitForFunction(() => !document.querySelector('#sheet').classList.contains('on'));
+    await page.waitForTimeout(300);
+    if (!(await page.evaluate(async () => (await (await fetch('/api/status')).json()).bulb_check))) out.steps.push('header-done');
+
+    // a refused mark (too many on one run) never says "marked broken"
+    const eaves = await page.evaluate(() => BULBS.runs[0].mac);
+    const keep = await page.evaluate(() => BULBS.runs[0].dead);
+    const half = await page.evaluate(() => Math.floor(BULBS.runs[0].walk / 2));
+    await page.evaluate(async ([m, n]) => post('bulbs/dead', {mac: m, dead: [...Array(n).keys()]}), [eaves, half]);
+    await page.evaluate(([m, n]) => bcStart(m, 'single', {at: n}), [eaves, half]);
+    await waitBig(new RegExp('^Bulb ' + (half + 1) + '$'));
+    await page.evaluate(() => { window._toasts = []; new MutationObserver(() => _toasts.push($('toast').textContent)).observe($('toast'), {childList: true, characterData: true, subtree: true}) });
+    refusing = true;
+    await page.click('#bcWalk button[data-a="dark"]');
+    await page.waitForTimeout(700);
+    refusing = false;
+    out.texts.refused = await page.evaluate(() => _toasts);
+    await page.click('#bcWalk button[data-a="done"]');
+    await page.waitForFunction(() => !document.querySelector('#sheet').classList.contains('on'));
+    await page.evaluate(async ([m, d]) => post('bulbs/dead', {mac: m, dead: d}), [eaves, keep]);
+    out.steps.push('refused');
   } catch (e) {
     out.errors.push('flow: ' + e.message);
     if (shots) await browser.contexts()[0].pages()[0].screenshot({ path: `${shots}/failed.png` }).catch(() => {});

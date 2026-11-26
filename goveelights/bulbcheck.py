@@ -5,7 +5,8 @@ sections that were re-hung so camera mapping can redo just those.
 The check takes over the lights through Engine.takeover: the scene, shows, playlists and
 the schedule keep running underneath, untouched, and are on the lights again the moment
 the check ends. It ends by itself after IDLE_S without a tap (the phone went in a pocket),
-after MAX_S in all, when a scheduled show is due, or when the lights are switched off.
+after MAX_S in all, when a scheduled show is due, when the lights are switched off or
+stopped, or when the owner picks something to play. It can't start while a show plays.
 
 Config, per device entry:
   dead    [physical index, ...]  broken bulbs: kept dark and skipped (see layout.py)
@@ -158,6 +159,8 @@ class BulbCheck:
         e = self.ctl.engine
         if self.ctl.diag_active or self.ctl.map_state:
             raise ValueError("close diagnostics or camera mapping first")
+        if (self.ctl.interrupt or {}).get("show") and self.st is None:
+            raise ValueError("A show is playing. Try again after it ends.")
         if mac != "all" or mode != "sweep":
             r = self._run(mac)
             name = r.name
@@ -327,7 +330,7 @@ class BulbCheck:
         return sorted(cur)
 
     def _save_dead(self, d: dict, cur: set):
-        if len(cur) > max(0, int(d.get("pixel_count") or 0) // 2):
+        if len(cur) > max(0, len(self.bulbs(d)) // 2):          # half the bulbs you can see
             raise ValueError("that's more than half the run: check the box and its first connector instead")
         if cur:
             d["dead"] = sorted(cur)

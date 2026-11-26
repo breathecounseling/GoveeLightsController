@@ -228,6 +228,8 @@ class Engine:
             return False
         if frames is None:
             return False
+        if self.blackout:                         # Blackout wins over the check too
+            frames = {mac: [(0, 0, 0)] * len(fr) for mac, fr in frames.items()}
         self.last_colors = [_px(frames.get(p.mac), p.local) for p in self.layout.pixels]
         if self.live or self.takeover_live:
             for mac, frame in frames.items():

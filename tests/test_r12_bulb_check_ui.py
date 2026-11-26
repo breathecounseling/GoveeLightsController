@@ -39,7 +39,10 @@ class BulbCheckInTheBrowser(unittest.TestCase):
         self.assertEqual(out["errors"], [], out)
         self.assertEqual(out["overflow"], [])
         self.assertEqual(out["small"], [])
-        self.assertEqual(out["steps"], ["card", "walk", "marked", "back", "sweep", "gap", "remap", "banner", "ended"])
+        self.assertEqual(out["steps"], ["card", "walk", "marked", "back", "sweep", "gap", "remap", "banner", "ended",
+                                        "header-done", "refused"])
+        self.assertFalse(any("marked broken" in t for t in out["texts"]["refused"]), out["texts"]["refused"])
+        self.assertTrue(any(t.startswith("Error") for t in out["texts"]["refused"]), out["texts"]["refused"])
         self.assertIn("bulb check is on the lights", out["texts"]["banner"])
         self.assertIn("Bulb 11", out["texts"]["dead"])
         self.assertIn("bulbs 11–20", out["texts"]["rehung"])

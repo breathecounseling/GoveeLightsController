@@ -366,6 +366,7 @@ class Controller:
                     else:
                         self.interrupt = None             # Live off ends a show/celebration
         if not on:
+            self.bulbcheck.stop("lights off")         # it may have switched the boxes on itself
             with self.lock:
                 self.vqueue.clear()                   # lights off: waiting picks would play unseen later
         # a tap on Live always re-takes every box, in case the Govee app grabbed one
@@ -499,6 +500,8 @@ class Controller:
     def play_scene(self, d: dict, label: dict | None = None, fade: float = 0.0, manual: bool = True,
                    keep_playlist: bool = False, continuous: bool = False):
         scene = Scene.from_dict(d, self.user_palettes)
+        if manual:
+            self.bulbcheck.stop("you picked something")
         with self.lock:
             if manual:
                 self._manual()
@@ -548,6 +551,8 @@ class Controller:
         order = list(range(len(pl["items"])))
         if pl.get("shuffle"):
             random.shuffle(order)
+        if manual:
+            self.bulbcheck.stop("you picked something")
         with self.lock:
             if manual:
                 self._manual()
@@ -591,6 +596,7 @@ class Controller:
             self.set_live(True, manual=manual)
 
     def stop(self, manual: bool = True, release: bool = True):
+        self.bulbcheck.stop("stop")
         with self.lock:
             if manual:
                 self._manual()
@@ -787,6 +793,7 @@ class Controller:
         if not cues:
             raise ValueError(f"show {name!r} has no cues")
         if manual:
+            self.bulbcheck.stop("you picked something")
             with self.lock:
                 self._dusk_to_program(swap_only=True)    # the show returns to the program, not the dusk sky
             self._manual()

@@ -656,7 +656,12 @@ def _device_checks(ctl, now: datetime) -> list[dict]:
                           + ": the app can't poll WLED for health; check them in Devices if they stay dark"))
     nocount = [dv.get("name") or m for m, dv in devs.items() if not dv.get("pixel_count")]
     runs = list(getattr(ctl.engine.layout, "runs", []) or [])
-    lit = " · ".join(f"{r.name} {r.count - len([k for k in r.hidden if 0 <= k < r.count])}" for r in runs)
+    def _lit(r):                              # bulbs that light: not hidden, not marked broken
+        gone = {k for k in set(r.hidden) | set(getattr(r, "dead", ()) or ()) if 0 <= k < r.count}
+        return r.count - len(gone)
+    lit = " · ".join(f"{r.name} {_lit(r)}" for r in runs)
+    broken = sum(len([k for k in getattr(r, "dead", ()) or () if 0 <= k < r.count and k not in r.hidden])
+                 for r in runs)
     try:
         from .layout import _house_names
         house = set(_house_names(ctl.cfg))
@@ -682,9 +687,8 @@ def _device_checks(ctl, now: datetime) -> list[dict]:
         out.append(_check("counts", FAIL, "Bulb count unknown", ", ".join(nocount) + " won't light up",
                           "Count the bulbs in diagnostics", "devices"))
     else:
-        out.append(_check("counts", OK, "Bulb counts known", " · ".join(
-            f"{r.name} {r.count - len([k for k in r.hidden if 0 <= k < r.count])}" for r in runs) + " bulbs"
-            if runs else ""))
+        out.append(_check("counts", OK, "Bulb counts known", lit + " bulbs"
+                          + (f" ({broken} marked broken)" if broken else "") if runs else ""))
     from .firstrun import is_placeholder       # setup's straight line is not a placement
     flat = [r.name for r in runs if not r.geometry or is_placeholder(r.geometry, r.count)]
     if flat:

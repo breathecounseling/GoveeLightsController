@@ -42,7 +42,7 @@ LOCATIONS = {
               "zones": ()},
 }
 _PREV_KEYS = ("name", "pixel_count", "order", "geometry", "geometry_guess", "hidden", "enabled", "role",
-              "location", "cloud", "reversed", "follows")
+              "location", "cloud", "reversed", "follows", "dead", "rehung")
 
 def locations() -> list[dict]:
     return [{"id": k, "label": v["label"], "role": v["role"], "name": v["name"]} for k, v in LOCATIONS.items()]
@@ -169,6 +169,8 @@ def add_run(cfg, layout, mac: str, count, where: str, name: str = "", join: str 
         d.update({"name": nm, "pixel_count": count, "enabled": True, "role": loc["role"], "location": where,
                   "order": max([int(x.get("order", 0) or 0) for x in others.values()] + [-1]) + 1,
                   "geometry": guess_geometry(base, where, count), "hidden": [], "reversed": False})
+        d.pop("dead", None)                         # broken-bulb marks were for the old count
+        d.pop("rehung", None)
         d["geometry_guess"] = bool(d["geometry"])
         if output == "cloud":
             c = cloud or {}

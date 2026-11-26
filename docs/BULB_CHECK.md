@@ -37,9 +37,13 @@ yellowish in white, or the wrong colour altogether. Then walk that run to get it
   puts it straight back on the lights, at the point it has reached. Nothing restarts.
 * It gives the house back by itself after **4 minutes without a tap** (the phone went in a
   pocket), after 30 minutes in all, when **a scheduled show is due** (the show always wins),
-  when the lights are switched off, or when camera mapping or diagnostics start.
+  when the lights are switched off or stopped (also *Turn lights off* and *Release to Govee
+  app*), when you play something (a look, a list or a show), or when camera mapping or
+  diagnostics start. **Blackout** keeps the house dark during the check too.
+* It won't start while a show is playing: try again after the show ends.
 * If the lights were off when you started, they go off again afterwards.
-* Closing the sheet doesn't stop the check: a banner at the top says it's on, with **Done**.
+* **Done** at the top of the sheet ends the check too. Tapping outside the sheet only hides
+  it: a banner at the top then says the check is on, with **Done**.
 
 ## Bulbs marked broken
 
@@ -55,8 +59,12 @@ A marked bulb is kept **dark** and taken out of the strip that effects draw on:
 * Twinkles and glints pick their bulbs by number, so a different (equally random) set of
   bulbs twinkles after a marked one.
 * With nothing marked, every look plays exactly as before.
+* Marking even one bulb moves every later bulb (on later runs too) one step along the
+  strip, so the shows look very slightly different afterwards. If you want tonight's show
+  exactly as tested, do the marking tomorrow.
 
-Clear the mark once the bulb is replaced. More than half a run can't be marked: that's the
+Clear the mark once the bulb is replaced. More than half a run's bulbs (the ones you can
+see) can't be marked: that's the
 box, a connector or the power, not bulbs (see FOURTH_RUN.md's ladder checklist).
 
 In the config file, a run's entry gets `"dead": [11, 56]` (bulb numbers minus one, counted

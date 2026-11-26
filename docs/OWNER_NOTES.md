@@ -45,7 +45,9 @@ a red/green/blue/white colour test shows bulbs with a bad colour. Marked bulbs s
 the chases, words and the sleigh run straight past them. Sections you re-hung can be marked,
 gap-checked and re-mapped with the camera on their own. The check gives the house back by
 itself after 4 minutes without a tap, and always before a scheduled show (so a check at
-5:55 pm on Thanksgiving can't hold up the 6 pm show). Nothing is marked until you mark it.
+5:55 pm on Thanksgiving can't hold up the 6 pm show); it can't be started while a show
+plays. Nothing is marked until you mark it. Marking a bulb shifts the later bulbs one step,
+so tonight's show would look very slightly different: mark bulbs after Thanksgiving night.
 
 ## Project diary
 

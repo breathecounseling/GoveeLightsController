@@ -387,3 +387,128 @@ class BulbApi(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# =========================================================== review fixes
+class ReviewFixes(unittest.TestCase):
+    """The check never hides a show, always lets go when the owner says off or picks
+    something, honours Blackout, and the half-the-run guard counts visible bulbs."""
+
+    def rig(self, when=datetime(2026, 11, 26, 17, 0), extra=None):
+        r = Rig(self, when, extra or {"schedule": {"enabled": False}})
+        return r, r.ctl
+
+    def macs(self, ctl):
+        return {r.name: r.mac for r in ctl.engine.layout.runs}
+
+    def test_no_check_while_a_show_is_playing(self):
+        st = [{"show": "Thanksgiving tonight", "from": "18:00", "to": "21:00", "every": 60}]
+        r, ctl = self.rig(datetime(2026, 11, 26, 17, 59, 0), {"schedule": {"enabled": False}, "showtimes": st})
+        ctl.play_preset("warm-white", fade=0)
+        ctl.set_live(True)
+        r.tick(70)
+        self.assertEqual(ctl.status()["show"], "Thanksgiving tonight")
+        with self.assertRaises(ValueError) as cm:
+            ctl.bulbcheck.start(self.macs(ctl)["Eaves"], "groups")
+        self.assertIn("show is playing", str(cm.exception))
+        self.assertFalse(ctl.bulbcheck.active)
+        self.assertIsNone(ctl.engine.takeover)
+
+    def _started_dark(self):
+        r, ctl = self.rig()
+        self.assertFalse(ctl.engine.live)
+        ctl.bulbcheck.start(self.macs(ctl)["Peak"])
+        self.assertTrue(ctl.engine.output.started)
+        return r, ctl
+
+    def test_lights_off_ends_a_check_started_in_the_dark(self):
+        r, ctl = self._started_dark()
+        ctl.set_live(False)
+        self.assertFalse(ctl.bulbcheck.active)
+        self.assertIsNone(ctl.engine.takeover)
+        self.assertFalse(ctl.engine.output.started)
+
+    def test_stop_ends_a_check_started_in_the_dark(self):
+        r, ctl = self._started_dark()
+        ctl.stop()
+        self.assertFalse(ctl.bulbcheck.active)
+        self.assertFalse(ctl.engine.output.started)
+        self.assertIsNone(ctl.status()["bulb_check"])
+
+    def test_picking_something_ends_the_check(self):
+        r, ctl = self.rig()
+        ctl.set_live(True)
+        m = self.macs(ctl)["Eaves"]
+        ctl.bulbcheck.start(m)
+        ctl.play_preset("warm-white", fade=0)
+        self.assertFalse(ctl.bulbcheck.active)
+        self.assertIsNone(ctl.engine.takeover)
+        ctl.bulbcheck.start(m)
+        ctl.play_evolve("warm-white")
+        self.assertFalse(ctl.bulbcheck.active)
+        ctl.bulbcheck.start(m)
+        ctl.play_show("Thanksgiving tonight")
+        self.assertFalse(ctl.bulbcheck.active)
+        ctl.stop()
+        ctl.set_live(True)
+        ctl.cfg.data["playlists"] = {"P": {"items": [{"preset": "warm-white", "minutes": 5}]}}
+        ctl.bulbcheck.start(m)
+        ctl.play_playlist("P")
+        self.assertFalse(ctl.bulbcheck.active)
+
+    def test_the_schedule_moving_on_does_not_end_it(self):
+        r, ctl = self.rig()
+        ctl.set_live(True)
+        ctl.bulbcheck.start(self.macs(ctl)["Eaves"])
+        ctl.play_preset("warm-white", fade=0, manual=False)     # e.g. a playlist step
+        self.assertTrue(ctl.bulbcheck.active)
+        ctl.bulbcheck.stop()
+
+    def test_blackout_wins_over_the_check(self):
+        r, ctl = self.rig()
+        ctl.set_live(True)
+        e = ctl.engine
+        ctl.bulbcheck.start("all", "sweep", color="white")
+        e.tick()
+        self.assertIn(bulbcheck.WHITE, e.output.frames[self.macs(ctl)["Peak"]])
+        e.blackout = True
+        e.tick()
+        for fr in e.output.frames.values():
+            self.assertTrue(all(c == (0, 0, 0) for c in fr))
+        self.assertTrue(all(c == (0.0, 0.0, 0.0) for c in e.last_colors))
+        e.blackout = False
+        ctl.bulbcheck.stop()
+
+    def test_half_the_run_counts_visible_bulbs(self):
+        r, ctl = self.rig()
+        m = self.macs(ctl)["Accent"]                            # 108 bulbs, 60 visible
+        vis = ctl.bulbcheck.bulbs(ctl.cfg.devices[m])
+        self.assertEqual(len(vis), 60)
+        with self.assertRaises(ValueError):
+            ctl.bulbcheck.set_dead(m, vis[:31])
+        self.assertEqual(len(ctl.bulbcheck.set_dead(m, vis[:30])), 30)
+        ctl.bulbcheck.set_dead(m, [])
+
+    def test_tonight_count_leaves_out_broken_bulbs(self):
+        from goveelights import tonight
+        r, ctl = self.rig()
+        m = self.macs(ctl)["Eaves"]
+        ctl.bulbcheck.set_dead(m, [10, 11])
+        c = {c["id"]: c for c in tonight.build(ctl, datetime(2026, 11, 26, 17, 0).astimezone())["checks"]}
+        self.assertIn("Eaves 91", c["counts"]["detail"])
+        self.assertIn("2 marked broken", c["counts"]["detail"])
+
+    def test_taking_an_added_run_out_restores_its_marks(self):
+        from goveelights import addrun
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        c = Config(tmp / "c.json")
+        c.import_layout(ROOT / LAYOUT_FILE, create_missing=True)
+        new = "AA:BB:CC:DD:EE:FF:01:04"
+        c.upsert_discovered({"device": new, "sku": "H705E", "ip": "10.0.0.44", "source_ip": "10.0.0.44"})
+        before = copy.deepcopy(c.data)
+        addrun.add_run(c, Layout.from_config(c), new, 60, "garage")
+        c.device(new)["dead"] = [3]
+        c.device(new)["rehung"] = [[5, 9]]
+        addrun.remove_run(c, new)
+        self.assertEqual(c.data, before)
