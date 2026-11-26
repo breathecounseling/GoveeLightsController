@@ -1,0 +1,59 @@
+{
+  "name": "Summer evening",
+  "tags": [
+    "Seasonal",
+    "Summer"
+  ],
+  "layers": [
+    {
+      "effect": "gradient",
+      "opacity": 0.45,
+      "params": {
+        "colors": [
+          "#3010d0",
+          "#6020ff",
+          "#1830ff"
+        ],
+        "length": 80,
+        "speed": 1
+      }
+    },
+    {
+      "effect": "flag",
+      "target": "Peak",
+      "params": {
+        "colors": [
+          "#ff3000",
+          "#ff6a00",
+          "#ff9000",
+          "#ff2a60",
+          "#c020ff",
+          "#5020ff"
+        ],
+        "canton_rows": 0,
+        "wave": 0.2,
+        "wavelength": 14,
+        "speed": 1.5,
+        "intro": 0
+      }
+    },
+    {
+      "effect": "fireflies",
+      "target": [
+        "Eaves",
+        "Lower roofline"
+      ],
+      "blend": "lighten",
+      "params": {
+        "colors": [
+          "#c8ff40",
+          "#ffd040"
+        ],
+        "density": 0.08,
+        "life": 2.6,
+        "drift": 1.2,
+        "seed": 12
+      }
+    }
+  ]
+}

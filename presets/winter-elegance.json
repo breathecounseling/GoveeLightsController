@@ -1,0 +1,51 @@
+{
+  "name": "Winter elegance",
+  "tags": [
+    "Seasonal",
+    "Winter",
+    "Elegant"
+  ],
+  "layers": [
+    {
+      "effect": "shimmer",
+      "params": {
+        "colors": [
+          "#e8f0ff",
+          "#b8d0ff",
+          "#ffffff"
+        ],
+        "level": 0.3,
+        "width": 10,
+        "spacing": 90,
+        "flicker": 0.3,
+        "speed": 8,
+        "density": 2
+      }
+    },
+    {
+      "effect": "twinkle",
+      "target": "Peak",
+      "params": {
+        "colors": [
+          "#ffffff",
+          "#c8dcff"
+        ],
+        "background": "#4a5a7a",
+        "density": 0.22,
+        "duration": 1.4,
+        "seed": 19
+      }
+    },
+    {
+      "effect": "breathe",
+      "target": "Front gable outline",
+      "params": {
+        "colors": [
+          "#c8dcff"
+        ],
+        "period": 8,
+        "min": 0.55
+      }
+    }
+  ]
+}

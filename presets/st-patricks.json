@@ -1,0 +1,75 @@
+{
+  "name": "St. Patrick's Day",
+  "tags": [
+    "Holiday",
+    "St. Patrick's"
+  ],
+  "layers": [
+    {
+      "effect": "gradient",
+      "opacity": 0.7,
+      "params": {
+        "colors": [
+          "#00c020",
+          "#30ff40",
+          "#00a040",
+          "#60ff00"
+        ],
+        "length": 30,
+        "speed": 1
+      }
+    },
+    {
+      "effect": "twinkle",
+      "target": [
+        "Eaves",
+        "Lower roofline"
+      ],
+      "blend": "add",
+      "params": {
+        "colors": [
+          "#ffd040",
+          "#ffb000"
+        ],
+        "density": 0.07,
+        "duration": 1.2,
+        "seed": 17
+      }
+    },
+    {
+      "effect": "flag",
+      "target": "Peak",
+      "params": {
+        "colors": [
+          "#7000ff",
+          "#0040ff",
+          "#00c000",
+          "#ffe000",
+          "#ff7000",
+          "#ff0000"
+        ],
+        "canton_rows": 0,
+        "wave": 0.25,
+        "speed": 3,
+        "intro": 4
+      }
+    },
+    {
+      "effect": "glitter",
+      "target": "Porch",
+      "params": {
+        "colors": [
+          "#ffb000",
+          "#ffd040",
+          "#ff9000"
+        ],
+        "sparkle": "#ffffff",
+        "density": 1.2,
+        "length": 10,
+        "speed": 2,
+        "seed": 5,
+        "level": 0.7
+      }
+    }
+  ]
+}

@@ -44,6 +44,17 @@ PICTURES: dict[str, list[str]] = {
         "..112222211..",
         "...1111111...",
     ],
+    # carved to fit the triangle: the top rows are narrow (eyes on the second row,
+    # the nose under them, a toothy grin across the wide lower rows); '2' is the
+    # candle-lit face, '3' the stem, '4' the pumpkin's ribs
+    "jack-o-lantern": [
+        "....11311....",
+        "...1221221...",
+        "..141121141..",
+        ".11222222211.",
+        "1112121212111",
+        "1411141114111",
+    ],
     "present": [
         "....2.2.2....",
         ".....222.....",
@@ -69,6 +80,7 @@ PICTURE_COLORS = {
     "snowflake": ["#d0ecff"],
     "heart": ["#ff1040"],
     "pumpkin": ["#ff6000", "#ffd040", "#20a020"],
+    "jack-o-lantern": ["#ff3c00", "#ffb000", "#30c000", "#c02400"],
     "present": ["#e01020", "#ffd000"],
     "smile": ["#ffd000"],
 }
@@ -98,10 +110,13 @@ def text_bitmap(text: str) -> list[str]:
 def sample(bitmap: list[str], rnx: float, rny: float, cols_span: float = 1.0) -> str:
     """Character of the bitmap at run-relative (x 0..1 left→right, y 0..1 bottom→top)."""
     nrows = len(bitmap)
-    r = min(nrows - 1, max(0, int((1 - rny) * nrows - 1e-9)))     # top row first
+    # nearest bitmap row centre (top row first): a zigzag's rows are not evenly spaced
+    # (on the house the top two are half as far apart), and slicing the height into equal
+    # bands put both top rows in the same band, so the bitmap's second row never showed
+    r = min(nrows - 1, max(0, int(round((1 - rny) * (nrows - 1)))))
     width = len(bitmap[0])
     x = 0.5 + (rnx - 0.5) / cols_span
-    if x < 0 or x >= 1:
+    if x < 0 or x > 1:                      # x == 1 is the rightmost bulb: the last column
         return "."
     c = min(width - 1, int(x * width))
     return bitmap[r][c]

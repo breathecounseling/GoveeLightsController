@@ -1,0 +1,63 @@
+{
+  "name": "Broncos game day",
+  "tags": [
+    "Sports",
+    "Game day"
+  ],
+  "layers": [
+    {
+      "effect": "sequins",
+      "target": [
+        "Eaves",
+        "Lower roofline"
+      ],
+      "params": {
+        "colors": [
+          "#ff4a00",
+          "#1030ff"
+        ],
+        "spacing": 36,
+        "speed": 22,
+        "flash": 1,
+        "level": 0.7
+      }
+    },
+    {
+      "effect": "candy_cane",
+      "target": "Peak",
+      "params": {
+        "colors": [
+          "#ff4a00",
+          "#1030ff"
+        ],
+        "width": 3,
+        "speed": 8,
+        "axis": "x",
+        "blend": 0.2
+      }
+    },
+    {
+      "effect": "chase",
+      "target": "Front gable outline",
+      "params": {
+        "colors": [
+          "#ff4a00"
+        ],
+        "background": "#1030ff",
+        "spacing": 4,
+        "width": 2,
+        "speed": 12
+      }
+    },
+    {
+      "effect": "sparkle",
+      "blend": "add",
+      "opacity": 0.8,
+      "params": {
+        "color": "#ffffff",
+        "rate": 8,
+        "decay": 0.1
+      }
+    }
+  ]
+}

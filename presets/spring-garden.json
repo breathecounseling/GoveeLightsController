@@ -1,0 +1,69 @@
+{
+  "name": "Spring garden",
+  "tags": [
+    "Seasonal",
+    "Spring"
+  ],
+  "layers": [
+    {
+      "effect": "gradient",
+      "opacity": 0.6,
+      "params": {
+        "colors": [
+          "#30ff40",
+          "#00d070",
+          "#a0ff20"
+        ],
+        "length": 40,
+        "speed": 1.5
+      }
+    },
+    {
+      "effect": "twinkle",
+      "target": [
+        "Lower roofline",
+        "Peak"
+      ],
+      "params": {
+        "colors": [
+          "#ff3a8a",
+          "#ffd000",
+          "#a050ff",
+          "#ff6a30",
+          "#ffffff"
+        ],
+        "background": "#0c9020",
+        "density": 0.35,
+        "duration": 5,
+        "seed": 41
+      }
+    },
+    {
+      "effect": "fireflies",
+      "target": "Eaves",
+      "blend": "lighten",
+      "params": {
+        "colors": [
+          "#ff8ad0",
+          "#ffe060",
+          "#b080ff"
+        ],
+        "density": 0.05,
+        "life": 3,
+        "drift": 1.5,
+        "seed": 8
+      }
+    },
+    {
+      "effect": "breathe",
+      "target": "Front gable outline",
+      "params": {
+        "colors": [
+          "#ffc000"
+        ],
+        "period": 6,
+        "min": 0.6
+      }
+    }
+  ]
+}
