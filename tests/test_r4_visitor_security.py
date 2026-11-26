@@ -4,6 +4,7 @@ owner features get a turn between back-to-back picks, and a queued pick's wait c
 a show that is on."""
 import http.client
 import json
+import logging
 import sys
 import tempfile
 import threading
@@ -175,6 +176,21 @@ class Ipv6Http(unittest.TestCase):
         self.r.tick(2, schedule=False)
         s, st = self.req("GET", T + "state", "2001:db8::1234")
         self.assertTrue(st["you"]["playing"])
+
+
+# These tests make the app log errors on purpose (unreachable boxes, broken requests,
+# bad presets); keep those expected messages out of the test run's output.
+_QUIET = logging.NullHandler()
+
+
+def setUpModule():
+    logging.getLogger("goveelights").addHandler(_QUIET)
+    logging.getLogger("goveelights").propagate = False
+
+
+def tearDownModule():
+    logging.getLogger("goveelights").removeHandler(_QUIET)
+    logging.getLogger("goveelights").propagate = True
 
 
 if __name__ == "__main__":

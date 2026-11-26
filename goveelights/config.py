@@ -163,7 +163,7 @@ class Config:
 
     @staticmethod
     def auto_name(mac: str, d: dict) -> bool:
-        """True if a box still has the placeholder name discovery gave it ("H805A 2E80")."""
+        """True if a box still has the placeholder name discovery gave it ("H805A 1A2B")."""
         return d.get("name", "") == f"{d.get('sku') or 'Govee'} {mac.replace(':', '')[-4:]}"
 
     def save(self):
@@ -243,26 +243,64 @@ class Config:
             if any("geometry" in lay[m] for m in target):
                 for d in self.devices.values():      # an older map undo must not undo the import
                     d.pop("geometry_prev", None)
-            ren = {}
+            ren, misfits = {}, set()
+            foreign = any(target.get(m) != m for m in lay)     # not (all) this house's own boxes
             for src, mac in target.items():
                 entry = lay[src]
                 d = self.devices.setdefault(mac, copy.deepcopy(DEVICE_DEFAULTS))
+                # another house's box with a different bulb count: its shape and hidden
+                # bulbs would not fit yours, so only the name and order come across
+                misfit = bool(src != mac and d.get("pixel_count") and entry.get("pixel_count")
+                              and int(d["pixel_count"]) != int(entry["pixel_count"]))
+                if misfit:
+                    misfits.add(entry.get("name") or src)
+                    notes.append(f"layout run '{entry.get('name') or src}' has {entry['pixel_count']} bulbs, "
+                                 f"your box {d.get('name') or mac} {d['pixel_count']}: kept your box's shape")
                 for k in ("name", "order", "reversed", "hidden", "pixel_count", "geometry", "enabled"):
                     if k not in entry or (k == "name" and d.get("name") and not self.auto_name(mac, d)):
                         continue
                     if k == "pixel_count" and src != mac and d.get("pixel_count"):
                         continue                     # another house's box: your bulb count stays
+                    if misfit and k in ("hidden", "geometry"):
+                        continue
                     d[k] = entry[k]
                 if src != mac and entry.get("name") and d.get("name") != entry["name"]:
                     ren[entry["name"]] = d.get("name")
                 changed.append(d.get("name") or mac)
             if data.get("zones"):
                 new = {z["name"]: copy.deepcopy(z) for z in data["zones"]}
+                lay_name = {ren.get(n, n): n for n in (e.get("name") for e in lay.values()) if n}
                 for z in new.values():
                     for part in z.get("parts", []):
                         part["run"] = ren.get(part.get("run"), part.get("run"))    # your name for that box
+                if foreign:                          # another house's zones: only those that fit yours
+                    runs = {d.get("name") for d in self.devices.values()} | set(self.devices)
+                    count = {k: d.get("pixel_count") for m, d in self.devices.items() for k in (m, d.get("name"))}
+
+                    def _fits(pt):                   # the part's first bulb is on your box
+                        n = count.get(pt.get("run"))
+                        try:
+                            return not n or int(pt.get("from", 0)) < int(n)
+                        except (TypeError, ValueError):
+                            return False
+                    for nm, z in list(new.items()):
+                        parts = [pt for pt in z.get("parts", []) if isinstance(pt, dict)]
+                        lost = sorted({str(pt.get("run")) for pt in parts if pt.get("run") not in runs})
+                        odd = sorted({str(pt.get("run")) for pt in parts if lay_name.get(pt.get("run")) in misfits})
+                        if nm in runs:
+                            notes.append(f"skipped zone '{nm}' (one of your boxes has that name)")
+                        elif lost or not parts:
+                            notes.append(f"skipped zone '{nm}' (needs {', '.join(lost) or 'parts'})")
+                        elif odd:
+                            notes.append(f"skipped zone '{nm}' (made for a {', '.join(odd)} with another bulb count)")
+                        elif not any(_fits(pt) for pt in parts):
+                            notes.append(f"skipped zone '{nm}' (past the end of your boxes)")
+                        else:
+                            continue
+                        del new[nm]
                 self.data["zones"] = [z for z in self.data.get("zones", []) if z.get("name") not in new] + list(new.values())
-                changed.append(f"{len(new)} zones")
+                if new:
+                    changed.append(f"{len(new)} zones")
             self.save()
         return changed + notes
 

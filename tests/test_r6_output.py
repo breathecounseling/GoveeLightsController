@@ -3,6 +3,7 @@ that reboots between two health polls is re-taken, diag scans keep the source IP
 status() calls to one box both get the reply, a frame the protocol rejects only drops
 that box, and the release is sent a second time."""
 import base64
+import logging
 import threading
 import time
 import types
@@ -200,6 +201,21 @@ class SecondReleaseTests(unittest.TestCase):
         o.start()                                  # live again before the second pass
         time.sleep(1.6)
         self.assertEqual(lan.razer_after(t0), ["off"] * 3 + ["on"] * 3)
+
+
+# These tests make the app log errors on purpose (unreachable boxes, broken requests,
+# bad presets); keep those expected messages out of the test run's output.
+_QUIET = logging.NullHandler()
+
+
+def setUpModule():
+    logging.getLogger("goveelights").addHandler(_QUIET)
+    logging.getLogger("goveelights").propagate = False
+
+
+def tearDownModule():
+    logging.getLogger("goveelights").removeHandler(_QUIET)
+    logging.getLogger("goveelights").propagate = True
 
 
 if __name__ == "__main__":

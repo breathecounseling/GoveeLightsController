@@ -616,7 +616,7 @@ async function refresh(){
   if (s.interrupt) b.push(`<div class="banner">Playing <b>${esc(s.interrupt.label)}</b> ${s.interrupt.left < 86400 ? `(${fmtS(s.interrupt.left)} left), then back to what was on` : '(looping until you end it)'}. <button class="sm" onclick="post('interrupt/end').then(refresh)">End now</button></div>`);
   if (s.dim && s.dim < 0.99) b.push(`<div class="banner" style="background:#1e293b;border-color:var(--line)">Late-night dimming: ${Math.round(s.dim*100)}%</div>`);
   const sick = Object.entries(s.health||{}).filter(([,h]) => h.paused);
-  if (sick.length) b.push(`<div class="banner">Self-healing paused for ${esc(sick.map(x=>x[0]).join(', '))}: its status keeps changing on its own. Tell Claude!</div>`);
+  if (sick.length) b.push(`<div class="banner">Self-healing paused for ${esc(sick.map(x=>x[0]).join(', '))}: its status keeps changing on its own. Worth a bug report (include the Diagnostics page).</div>`);
   if (s.mapping) b.push(`<div class="banner">The camera-mapping pattern is running. <button class="sm" onclick="post('map/stop').then(refresh)">Stop it</button></div>`);
   if (s.diag_active) b.push(`<div class="banner">Diagnostics paused the effects. <button class="sm" onclick="post('diag/exit').then(refresh)">Resume effects</button></div>`);
   if (!s.runs.length) b.push(`<div class="banner">No runs have a confirmed bulb count. Open <a href="/diag">diagnostics</a>.</div>`);
@@ -1248,6 +1248,14 @@ function mixPanel(L, card){
       if (n==='all') cur = ['all']; else { cur = cur.filter(x => x!=='all'); cur = cur.includes(n) ? cur.filter(x=>x!==n) : [...cur, n]; if (!cur.length) cur = ['all'] }
       L.target = cur.length===1 ? cur[0] : cur; highlight(L.target); changed(true) };
     b.addEventListener('pointerenter', () => highlight(n)); tgBox.appendChild(b) });
+  const gone = tg.filter(n => n !== 'all' && !LAYOUT.targets.includes(n));
+  if (gone.length) {                       // a name this house doesn't have: say where it plays
+    const note = h(`<p class="help">${esc(gone.join(', '))} isn't on your house.</p>`); tgBox.after(note);
+    get('targets?' + gone.map(n => 'name=' + encodeURIComponent(n)).join('&')).then(r => {
+      const po = r.plays_on || {};
+      note.textContent = gone.map(n => `${n} → plays on: ${po[n] || 'a stand-in'}`).join(' · ') + '. Tap a place above to choose.';
+    }).catch(() => {});
+  }
   const blBox = el.querySelector('#bl');
   if (sel === 0) blBox.innerHTML = '<p class="help">This is the bottom layer, so there is nothing below it to blend with. Add a layer above it and pick that layer to try blend modes.</p>';
   else { const grid = h('<div class="blendc"></div>'); blBox.appendChild(h('<p class="help" style="margin-top:0">Each preview is your whole scene with this layer blended that way.</p>')); blBox.appendChild(grid);
@@ -2031,8 +2039,11 @@ async function openSetup(st){
   $('suLeague').innerHTML = Object.entries(leagues).map(([v, l]) => opt(v, l, v === (t0.league || 'nfl'))).join('');
   $('suTeam').value = t0.team || '';
   $('suCity').innerHTML = '<option value="">…or pick a nearby city</option>' + SU.cities.map((c, k) => `<option value="${k}">${esc(c.name)}</option>`).join('');
-  if (SU.location){ $('suLat').value = SU.location[0]; $('suLon').value = SU.location[1] }
-  $('suSched').checked = true;
+  $('suLat').value = SU.location ? SU.location[0] : ''; $('suLon').value = SU.location ? SU.location[1] : '';
+  SU.lat0 = $('suLat').value; SU.lon0 = $('suLon').value;      // only a changed location is saved
+  // a new house starts with the schedule ticked; running setup again shows (and keeps) yours
+  SU.sched0 = SU.has_layout ? !!SU.schedule_enabled : true;
+  $('suSched').checked = SU.sched0;
   drawSetup();
 }
 function closeSetup(skip){
@@ -2094,15 +2105,19 @@ async function setupFinish(){
   $('suDone').disabled = true;
   try {
     if (boxes.length && !await post('setup/layout', {boxes})) return;
-    const sch = {};
-    if (la !== '') Object.assign(sch, {lat: round2(+la), lon: round2(+lo)});
-    if ($('suSched').checked && (la !== '' || SU.location)) Object.assign(sch, {enabled: true, on: 'sunset'});
+    const sch = {}, on = $('suSched').checked;
+    if (la !== '' && (String(la) !== String(SU.lat0) || String(lo) !== String(SU.lon0))) Object.assign(sch, {lat: round2(+la), lon: round2(+lo)});
+    if (on && !SU.schedule_enabled && (la !== '' || SU.location)) Object.assign(sch, {enabled: true, on: 'sunset'});
+    else if (!on && SU.schedule_enabled) sch.enabled = false;
     if (Object.keys(sch).length && !await post('schedule', {schedule: sch})) return;
     const team = $('suTeam').value.trim().toUpperCase();
     if (team && EXTRAS && EXTRAS.game) {
       const t = {league: $('suLeague').value, team};
-      if (!(EXTRAS.game.teams ||= []).some(x => x.league === t.league && x.team === t.team)) EXTRAS.game.teams.push(t);
-      if (!await post('game', {value: EXTRAS.game})) return;
+      if (!(EXTRAS.game.teams ||= []).some(x => x.league === t.league && x.team === t.team)) {
+        EXTRAS.game.teams.push(t);
+        EXTRAS.game.enabled = true;                  // a team followed here is meant to celebrate
+        if (!await post('game', {value: EXTRAS.game})) return;
+      }
     }
     store.set('setupSkip', '');
     closeSetup(false);

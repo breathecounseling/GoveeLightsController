@@ -95,11 +95,41 @@ def role_of(name) -> str | None:
     return ROLE_OF.get(str(name).strip().lower()) if isinstance(name, str) else None
 
 
+def _house_names(cfg) -> list[str]:
+    """Run and zone names of the house layout file (layouts/house.json, which only the
+    original house has) when it is this config's house: those names were always meant to
+    stay dark when missing, never to play on a stand-in."""
+    try:
+        from .config import HOUSE_LAYOUT
+        if not HOUSE_LAYOUT.exists():
+            return []
+        import json
+        data = json.loads(HOUSE_LAYOUT.read_text(encoding="utf-8"))
+        devs = data.get("devices") or {}
+        if not isinstance(devs, dict) or not set(devs) & set(cfg.devices):
+            return []
+        out = [str(e.get("name")) for e in devs.values() if isinstance(e, dict) and e.get("name")]
+        out += [str(z.get("name")) for z in data.get("zones") or [] if isinstance(z, dict) and z.get("name")]
+        return out
+    except (OSError, ValueError, AttributeError, TypeError):
+        return []
+
+
 class Layout:
-    def __init__(self, runs: list[Run], zones: list[dict] | None = None, aliases: dict | None = None):
+    def __init__(self, runs: list[Run], zones: list[dict] | None = None, aliases: dict | None = None,
+                 dark=()):
         self.runs = runs
         self.zone_specs = zones or []
         self.aliases = {str(k): v for k, v in aliases.items()} if isinstance(aliases, dict) else {}
+        # names the config knows but that light nothing right now: boxes that are switched
+        # off or have no bulb count yet, every configured zone and every run a zone names
+        # (even after that box was renamed). A layer aimed at one of these stays dark, as
+        # it always did; only names this house has never heard of play on a stand-in.
+        self.dark = {str(n) for n in dark or () if n}
+        for z in self.zone_specs:
+            if isinstance(z, dict):
+                self.dark |= {str(z["name"])} if z.get("name") else set()
+                self.dark |= {str(pt["run"]) for pt in z.get("parts") or [] if isinstance(pt, dict) and pt.get("run")}
         self._targets: dict = {}
         self._layer_targets: dict = {}
         self.pixels: list[Pixel] = []
@@ -193,6 +223,11 @@ class Layout:
             return True
         return isinstance(name, str) and (name in self.zones or self.run(name) is not None)
 
+    def known(self, name) -> bool:
+        """has(), or the config knows the name although it lights nothing right now (a
+        switched-off box, a zone whose box was renamed): such a layer stays dark."""
+        return self.has(name) or (isinstance(name, str) and name in self.dark)
+
     def missing(self, target) -> list[str]:
         """The names in a layer target that this layout has no run or zone for."""
         names = target if isinstance(target, list) else [target]
@@ -226,7 +261,7 @@ class Layout:
     def substitute(self, name) -> list[str]:
         """What plays for a target name this layout doesn't have (see ROLES above); []
         when nothing fits (the layer then falls back to "*" or the whole house)."""
-        if self.has(name):
+        if self.known(name):
             return [name]
         return self._alias(name) or self._by_role(name)
 
@@ -244,18 +279,19 @@ class Layout:
         if hit is not None:
             return hit
         out = self.indices(target)
-        miss = self.missing(target)
-        if miss:
-            names = target if isinstance(target, list) else [target]
+        names = target if isinstance(target, list) else [target]
+        if any(not self.known(nm) for nm in names):
             sub = [s for nm in names for s in self.substitute(nm)]
             out = self.indices(sub) if sub else []
-            if not out:
-                out = self.indices(self.fallback())
+            if not out and not any(isinstance(nm, str) and nm in self.dark for nm in names):
+                out = self.indices(self.fallback())     # a known-but-dark name keeps it dark
         self._layer_targets[key] = out
         return out
 
     def plays_on(self, name) -> str:
         """Human-readable: where a missing target name plays instead."""
+        if not self.has(name) and self.known(name):
+            return "nothing (that box is switched off, renamed or not counted yet)"
         sub = self.substitute(name)
         return ", ".join(sub) if sub else "the " + ("whole house" if self.fallback() == ["all"] else
                                                    ", ".join(self.fallback()))
@@ -268,18 +304,20 @@ class Layout:
 
     @classmethod
     def from_config(cls, cfg) -> "Layout":
-        runs = []
+        runs, dark = [], []
         for mac, d in sorted(cfg.devices.items(), key=lambda kv: kv[1].get("order", 0)):
             if d.get("enabled", True) is False:
+                dark += [mac, d.get("name")]
                 continue
             count = d.get("pixel_count")
             if not count:
+                dark += [mac, d.get("name")]
                 continue   # count not confirmed yet: not part of the strip
             runs.append(Run(mac=mac, name=d.get("name") or mac, count=int(count),
                             reverse=bool(d.get("reversed")), hidden=set(d.get("hidden") or []),
                             geometry=d.get("geometry") or [],
                             trim=tuple(float(v) for v in d["trim"]) if d.get("trim") else None))
-        return cls(runs, cfg.data.get("zones", []), cfg.data.get("target_aliases"))
+        return cls(runs, cfg.data.get("zones", []), cfg.data.get("target_aliases"), dark + _house_names(cfg))
 
     def summary(self) -> str:
         lines = [f"virtual strip: {self.n} visible bulbs, x {self.minx:.1f}..{self.maxx:.1f}, y {self.miny:.1f}..{self.maxy:.1f}"]

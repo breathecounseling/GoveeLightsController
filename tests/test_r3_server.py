@@ -1,6 +1,7 @@
 """Regression tests for the round-3 server fixes (request smuggling, API validation,
 output start resilience, per-/64 rate limits)."""
 import json
+import logging
 import socket
 import tempfile
 import threading
@@ -232,6 +233,21 @@ class RateKeyTests(unittest.TestCase):
             headers = Message()
         R.headers["Cf-Connecting-IP"] = "2001:db8:5:6::77"
         self.assertEqual(Auth.rate_key(Auth.client_ip(R)), "2001:db8:5:6::/64")
+
+
+# These tests make the app log errors on purpose (unreachable boxes, broken requests,
+# bad presets); keep those expected messages out of the test run's output.
+_QUIET = logging.NullHandler()
+
+
+def setUpModule():
+    logging.getLogger("goveelights").addHandler(_QUIET)
+    logging.getLogger("goveelights").propagate = False
+
+
+def tearDownModule():
+    logging.getLogger("goveelights").removeHandler(_QUIET)
+    logging.getLogger("goveelights").propagate = True
 
 
 if __name__ == "__main__":

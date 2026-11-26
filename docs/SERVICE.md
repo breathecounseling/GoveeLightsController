@@ -42,7 +42,9 @@ The log is `goveelights.log` in the project folder.
 ## macOS (launchd)
 
 1. Copy the example agent and set your folder and Python path in it
-   (`which python3` shows the path):
+   (`which python3` shows the path; `python3 --version` must say 3.10 or newer, which
+   the `/usr/bin/python3` from Apple's command line tools often doesn't: install Python
+   from python.org or Homebrew):
 
    ```sh
    cp docs/examples/goveelights.plist ~/Library/LaunchAgents/

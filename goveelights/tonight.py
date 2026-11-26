@@ -631,7 +631,8 @@ def _device_checks(ctl, now: datetime) -> list[dict]:
         out.append(_check("counts", OK, "Bulb counts known", " · ".join(
             f"{r.name} {r.count - len([k for k in r.hidden if 0 <= k < r.count])}" for r in runs) + " bulbs"
             if runs else ""))
-    flat = [r.name for r in runs if not r.geometry]
+    from .firstrun import is_placeholder       # setup's straight line is not a placement
+    flat = [r.name for r in runs if not r.geometry or is_placeholder(r.geometry, r.count)]
     if flat:
         out.append(_check("layout", WARN, "Not placed on the house", ", ".join(flat) +
                           ": 2D effects (tree, text, ripples) won't line up", "Map the bulbs with your camera", "map"))
@@ -757,11 +758,18 @@ def _target_checks(ctl, prog, names: Names, cfg: dict, preset_list) -> list[dict
         lvl, head = (FAIL if _house_layout_file() else WARN, f"Tonight's program aims at parts your layout doesn't have: "
                            f"{', '.join(names.preset(x) for x in tn[:3])}") if tn else (
             WARN, f"{len(dark)} preset{'s' if len(dark) > 1 else ''} aim at parts your layout doesn't have")
-        instead = "; ".join(f"{t} plays on {layout.plays_on(t)}" for t in miss[:4])
-        fix, jump = (("Tap to re-add the house layout's zones", "house") if _house_layout_file() else
-                     ("Add zones with those names, or set target_aliases in the config (README: Presets)", ""))
+        # on any other house, presets written for the original one adapt by design: when
+        # every such part has a stand-in of the same kind on this house, that is fine
+        adapted = (not _house_layout_file() and hasattr(layout, "known")
+                   and all(not layout.known(t) and layout.substitute(t) for t in miss))
+        if adapted:
+            lvl, head = OK, "Presets adapted to your house"
+        instead = "; ".join(f"{t} plays on {layout.plays_on(t)}" for t in miss[:6]) + ("…" if len(miss) > 6 else "")
+        fix, jump = (("Tap to re-add the house layout's zones", "house") if _house_layout_file() else ("", "") if adapted else
+                     ("Name a run or zone after the part (e.g. one with 'porch' or 'gable' in its name), "
+                      "or set target_aliases in the config (README: Presets on your house)", ""))
         out.append(_check("targets", lvl, head,
-                          f"They aim at {', '.join(miss[:6])}, which your layout doesn't have"
+                          f"They aim at {', '.join(miss[:6])}{'…' if len(miss) > 6 else ''}, which your layout doesn't have"
                           + ("" if tn else f" ({', '.join(names.preset(x) for x in sorted(dark)[:4])}"
                              + ("…" if len(dark) > 4 else "") + ")") + f". For now: {instead}",
                           fix, jump))

@@ -89,9 +89,12 @@ roofline. After setup each box is a straight line. To get the real shape:
 * **Zones** are named parts of the house (for example *Porch* = bulbs 0-40 of *Roof*).
   Layers can target a run or a zone. A layout file can set zones, hidden bulbs and shapes
   in one go: see [`layouts/examples/gable-house.json`](layouts/examples/gable-house.json)
-  and import it with `python -m goveelights layout import <file>`. A layout made for other
-  boxes is mapped onto yours by run name, then by order; it never adds boxes that weren't
-  found on your network.
+  for the format, and import your own file with `python -m goveelights layout import <file>`.
+  The example is a reference for one particular gable house, not something to import onto
+  a different one. A layout made for other boxes is mapped onto yours by run name, then by
+  order; it never adds boxes that weren't found on your network, a box whose bulb count
+  differs from the file keeps its own shape and hidden bulbs, and zones for runs you don't
+  have (or named like one of your runs) are skipped.
 * Preview any preset on a layout file without lights:
   `python3 tools/preview.py christmas-tree --layout layouts/examples/gable-house.json`.
 
@@ -299,7 +302,8 @@ what is below what). They are plug-ins in `goveelights/effects_ext/`:
   fireworks*.
 * *Haunted house* (ghosts with dark eyes drift across) and *Halloween pumpkin* (a
   jack-o'-lantern face with candle flicker).
-* *Thanksgiving harvest* and a team game-day look (*Broncos game day*; copy it for your team).
+* *Thanksgiving harvest*, and *Game day* in white and gold for any team (*Broncos game day*
+  is one team's version: copy it and set your team's colours).
 * *Winter elegance*, *Spring garden* and *Summer evening*.
 
 Preview any effect or preset on the house without lights:
@@ -428,7 +432,7 @@ Razer tab and note what happens.
 ## Under the hood: the effects engine
 
 ```
-python -m goveelights layout import layouts/examples/gable-house.json   # geometry, hidden bulbs, zones
+python -m goveelights layout import my-house.json           # geometry, hidden bulbs, zones
 python -m goveelights layout                              # show the virtual strip
 python -m goveelights effects -v                          # list effects and their params
 python -m goveelights play candy-cane                     # a preset from presets/
@@ -476,10 +480,14 @@ Ctrl+C stops playback and hands the lights back to the Govee app.
 ## Testing without hardware
 
 ```
-python tools/fake_govee.py --counts 96,108                      # simulated boxes on 127.0.0.2/.3
-python -m goveelights                                           # then "Add by IP" 127.0.0.2
-python -m unittest discover -s tests
+python3 tools/fake_govee.py --counts 96,108                     # simulated boxes on 127.0.0.2/.3
+python3 -m goveelights                                          # then "Add by IP" 127.0.0.2
+python3 -m unittest discover -s tests
 ```
+
+On macOS only `127.0.0.1` exists on the loopback interface, so add one alias per fake box
+first: `sudo ifconfig lo0 alias 127.0.0.2 up` and `sudo ifconfig lo0 alias 127.0.0.3 up`
+(they go away at the next restart). On Windows use `py` or `python` in place of `python3`.
 
 ## Layout
 

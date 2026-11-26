@@ -311,6 +311,8 @@ def scroll_text(t, ctx, P, state):
         extra.pop("accent", None)
         extra.pop("dim", None)
     _score_events(state, extra, P, dt)
+    if not D["cells"]:                                  # no zigzag to write on (a flat run)
+        return _flat_marquee(frame, ctx, P, msg, extra, clock, travel(t, P))
     copies = _update_copies(state, P, D, msg, extra, sign, tr, cw, dt)
 
     # ---- celebration when our score goes up; a short dip when theirs does
@@ -395,6 +397,37 @@ def scroll_text(t, ctx, P, state):
             if flash:                                   # the top row strobes in the team colour
                 c = lerp(c, scale(fcol, 0.25 + 0.75 * (strobe / flash)), min(1.0, flash * 2.0))
             frame[i] = c
+    return frame
+
+
+def _flat_marquee(frame, ctx, P, msg, extra, clock, tr):
+    """A target with no rows to write letters on (a straight run): the message goes by
+    as a one-row marquee instead, each font column a bulb lit in its letter's colour
+    (brighter where the letter is denser), so the layer still shows something."""
+    bm = font.layout(msg)
+    bg = P["background"]
+    px = ctx.layout.pixels
+    order = sorted(ctx.idx, key=lambda i: (px[i].x, px[i].i))
+    if not bm.width:
+        for i in order:
+            frame[i] = bg
+        return frame
+    lcols = _letter_colours(bm, P, clock, extra)
+    pal = P["colors"] or [WHITE]
+    cw = max(0.5, float(P.get("size", 1.2) or 1.2))
+    period = bm.width + max(1, int(P.get("gap", 10) or 0))
+    br = P["brightness"]
+    for k, i in enumerate(order):
+        c = int(math.floor((k + tr) / cw)) % period
+        bits = bm.cols[c] if c < bm.width else 0
+        if not bits:
+            frame[i] = bg
+            continue
+        col = lcols[bm.letter[c]] if bm.letter[c] >= 0 else None
+        if col is None or P["color_mode"] == "flow":
+            col = palette(pal, k / max(1, len(order)) * 0.6 - clock * 0.08)
+        dens = bin(bits).count("1") / font.ROWS
+        frame[i] = lerp(bg, scale(col, br), 0.45 + 0.55 * dens)
     return frame
 
 

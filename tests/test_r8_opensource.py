@@ -170,8 +170,10 @@ class ExistingConfigKeepsItsHouse(_Denver, unittest.TestCase):
     def test_read_only_file_still_loads_with_the_old_values(self):
         p = _tmp(self) / "govee_config.json"
         p.write_text("{}")
-        with mock.patch("goveelights.config.write_json", side_effect=PermissionError("locked")):
+        with mock.patch("goveelights.config.write_json", side_effect=PermissionError("locked")), \
+                self.assertLogs("goveelights.config", "WARNING") as lg:
             c = Config(p)
+        self.assertIn("could not save", lg.output[0])
         self.assertEqual(c.data["schedule"]["lat"], self.LAT)
 
 
@@ -193,9 +195,17 @@ class CalendarTeamRule(unittest.TestCase):
         self.assertEqual((r["from"], r["to"], r["days"]), ("labor-day+6", "thanksgiving-1", [6]))
         rules, skipped = self.names([{"league": "nfl", "team": "KC"}])
         self.assertNotIn("Broncos Sundays", rules)
-        self.assertIn("game-day", skipped["KC Sundays"])          # no generic look installed
-        rules, _ = cal.build(ALL_IDS + ["game-day"], SHOWS, [{"league": "nfl", "team": "KC"}])["rules"], None
-        self.assertIn("KC Sundays", [r["name"] for r in rules])
+        self.assertEqual(rules["KC Sundays"]["program"], {"evolve": "game-day", "minutes": 6})
+        self.assertFalse([s for s in skipped if "Sundays" in s])
+
+    def test_every_nfl_team_gets_its_sundays(self):
+        for team in ("ARI", "ATL", "BAL", "BUF", "CAR", "CHI", "CIN", "CLE", "DAL", "DEN", "DET", "GB",
+                     "HOU", "IND", "JAX", "KC", "LV", "LAC", "LAR", "MIA", "MIN", "NE", "NO", "NYG",
+                     "NYJ", "PHI", "PIT", "SF", "SEA", "TB", "TEN", "WSH"):
+            rules, skipped = self.names([{"league": "nfl", "team": team}])
+            hit = [r for n, r in rules.items() if n.endswith("Sundays")]
+            self.assertEqual(len(hit), 1, (team, skipped))
+            self.assertIn(hit[0]["program"]["evolve"], ALL_IDS)
 
     def test_junk_teams(self):
         rules, skipped = self.names(["junk", {"league": "nfl"}, {"league": "nfl", "team": "  "}, None])
@@ -397,7 +407,27 @@ class ImportOntoOtherBoxes(unittest.TestCase):
         self.assertEqual(c.devices["AA:BB:CC:DD:EE:FF:00:00"]["pixel_count"], 90)
         self.assertEqual(c.devices["AA:BB:CC:DD:EE:FF:00:01"]["pixel_count"], 108)
         self.assertTrue(any("-> your box" in x for x in out), out)
-        self.assertTrue(Layout.from_config(c).zones["Whole front gable"])
+        L = Layout.from_config(c)
+        self.assertTrue(L.zones["Zigzag top half"])                       # Peak's zones fit (same count)
+        self.assertNotIn("Whole front gable", L.zones)                    # Eaves' don't: 90 bulbs, not 96
+        self.assertEqual(c.devices["AA:BB:CC:DD:EE:FF:00:00"]["geometry"], [])
+        self.assertTrue(c.devices["AA:BB:CC:DD:EE:FF:00:01"]["geometry"])
+        self.assertTrue(any("kept your box's shape" in x for x in out), out)
+
+    def test_a_different_house_keeps_its_own_shape(self):
+        """The example imported onto a two-run ranch (150 + 80 bulbs): no stranger's
+        geometry or hidden bulbs, no zones for runs it hasn't got or named like its runs."""
+        c = self.discovered(2)
+        firstrun.straight_layout(c, [{"mac": "AA:BB:CC:DD:EE:FF:00:00", "name": "Front roof", "pixel_count": 150},
+                                     {"mac": "AA:BB:CC:DD:EE:FF:00:01", "name": "Garage", "pixel_count": 80}])
+        before = copy.deepcopy(c.devices)
+        out = c.import_layout(self.EX)
+        for m, d in c.devices.items():
+            self.assertEqual((d["name"], d["pixel_count"], d["hidden"], d["geometry"]),
+                             (before[m]["name"], before[m]["pixel_count"], before[m]["hidden"], before[m]["geometry"]))
+        self.assertEqual(c.data["zones"], [])
+        self.assertIn("skipped zone 'Garage' (one of your boxes has that name)", out)
+        self.assertTrue(any(x.startswith("skipped zone 'Porch' (needs Accent") for x in out), out)
 
     def test_your_names_are_kept_and_zones_follow_them(self):
         c = self.discovered(3)
@@ -475,6 +505,35 @@ class FirstRun(unittest.TestCase):
                                       "straight": True}])
         self.assertEqual(c.devices["AA:BB:CC:DD:EE:FF:00:00"]["geometry"], [[0, 0.0, 0.0], [9, 9.0, 0.0]])
 
+    def test_running_setup_again_keeps_what_it_was_not_given(self):
+        c = Config(_tmp(self) / "c.json")
+        for k in range(2):
+            c.upsert_discovered({"device": f"AA:BB:CC:DD:EE:FF:00:{k:02X}", "sku": "H805A", "ip": f"10.0.0.{k + 1}"})
+        a, b = "AA:BB:CC:DD:EE:FF:00:00", "AA:BB:CC:DD:EE:FF:00:01"
+        c.devices[a].update(reversed=True, pixel_count=50)
+        c.devices[b].update(enabled=False, pixel_count=30)
+        firstrun.straight_layout(c, [{"mac": a, "name": "Roof", "pixel_count": 50},     # what the app sends
+                                     {"mac": b, "name": "Tree", "pixel_count": 30}])
+        self.assertIs(c.devices[a]["reversed"], True)
+        self.assertIs(c.devices[b]["enabled"], False)
+        firstrun.straight_layout(c, [{"mac": a, "name": "Roof", "pixel_count": 50, "reversed": False},
+                                     {"mac": b, "name": "Tree", "pixel_count": 30, "enabled": True}])
+        self.assertIs(c.devices[a]["reversed"], False)
+        self.assertIs(c.devices[b]["enabled"], True)
+
+    def test_the_straight_line_counts_as_not_placed(self):
+        c = Config(_tmp(self) / "c.json")
+        c.upsert_discovered({"device": "AA:BB:CC:DD:EE:FF:00:00", "sku": "H805A", "ip": "10.0.0.1"})
+        c.upsert_discovered({"device": "AA:BB:CC:DD:EE:FF:00:01", "sku": "H805A", "ip": "10.0.0.2"})
+        firstrun.straight_layout(c, [{"mac": "AA:BB:CC:DD:EE:FF:00:00", "name": "A", "pixel_count": 40},
+                                     {"mac": "AA:BB:CC:DD:EE:FF:00:01", "name": "B", "pixel_count": 20}])
+        for d in c.devices.values():
+            self.assertTrue(firstrun.is_placeholder(d["geometry"], d["pixel_count"]))
+        for m, d in json.loads((ROOT / LAYOUT_FILE).read_text())["devices"].items():
+            self.assertFalse(firstrun.is_placeholder(d["geometry"], d["pixel_count"]), d["name"])
+        for junk in (None, [], [[0, 0, 0]], [[0, 0, 0], [9, 9, 1]], [[0, 0, 0], [9, 5, 0]], "x", [[0, "a", 0], [1, 1, 0]]):
+            self.assertFalse(firstrun.is_placeholder(junk), junk)
+
     def test_bad_input(self):
         c = Config(_tmp(self) / "c.json")
         c.upsert_discovered({"device": "AA:BB:CC:DD:EE:FF:00:00", "sku": "H805A", "ip": "10.0.0.1"})
@@ -520,6 +579,170 @@ class ExportChecks(unittest.TestCase):
         exec(ex.NEUTRAL_LEGACY, ns)                              # noqa: S102 - our own constant
         self.assertEqual(set(ns["LEGACY_DEFAULTS"]), set(LEGACY_DEFAULTS))
         self.assertTrue(all(v is None for v in ns["LEGACY_DEFAULTS"].values()))
+
+
+# ------------------------------------------------------------- review fixes
+def _preset_targets():
+    out = []
+    for pid in ALL_IDS:
+        d = json.loads((ROOT / "presets" / f"{pid}.json").read_text())
+        for x in d.get("layers") or [] if isinstance(d.get("layers"), list) else []:
+            t = x.get("target", "all")
+            if t not in out:
+                out.append(t)
+    return out
+
+
+class KnownNamesStayDark(unittest.TestCase):
+    """A box switched off (or renamed away from the names its zones use) lights nothing,
+    as before: only names the house has never heard of play on a stand-in."""
+    def cfg(self):
+        c = Config(_tmp(self) / "c.json")
+        c.import_layout(ROOT / LAYOUT_FILE, create_missing=True)
+        return c
+
+    def test_switching_a_box_off_keeps_its_layers_dark(self):
+        targets = _preset_targets()
+        for off in (None, "Eaves", "Peak", "Accent"):
+            c = self.cfg()
+            for d in c.devices.values():
+                if d["name"] == off:
+                    d["enabled"] = False
+            L = Layout.from_config(c)
+            self.assertEqual([t for t in targets if L.layer_indices(t) != L.indices(t)], [], off)
+            if off:
+                self.assertEqual(L.layer_indices(off), [])
+                self.assertIn("nothing", L.plays_on(off))
+                self.assertEqual(L.missing(off), [off])          # Tonight still reports it
+
+    def test_no_bulb_count_and_renamed_box_stay_dark(self):
+        c = self.cfg()
+        acc = next(m for m, d in c.devices.items() if d["name"] == "Accent")
+        c.devices[acc]["pixel_count"] = None
+        L = Layout.from_config(c)
+        self.assertEqual(L.layer_indices("Accent"), [])
+        self.assertEqual(L.layer_indices("Porch"), [])
+        c = self.cfg()
+        c.devices[acc]["name"] = "H805A 1A2B"                    # renamed: the zones lose their run
+        L = Layout.from_config(c)
+        self.assertEqual(L.layer_indices("Porch"), [])           # a zone the config knows
+        self.assertEqual(L.layer_indices("Accent"), [])          # a run the zones name
+        self.assertEqual(L.layer_indices(["Porch", "Peak"]), L.indices("Peak"))
+
+    def test_unknown_names_still_find_a_stand_in(self):
+        c = self.cfg()
+        L = Layout.from_config(c)
+        self.assertEqual(L.layer_indices("Tree"), L.indices("Peak"))
+        self.assertEqual(L.layer_indices("Nonsense"), list(range(L.n)))
+
+
+class TextOnAFlatHouse(unittest.TestCase):
+    def ranch(self):
+        return Layout([Run("a", "Front roof", 150, geometry=[[0, 0, 0], [149, 149, 0]]),
+                       Run("b", "Garage", 80, geometry=[[0, 152, 0], [79, 231, 0]])])
+
+    def test_text_presets_show_something(self):
+        L = self.ranch()
+        for pid in ("text-go-broncos", "text-happy-new-year", "text-merry-christmas", "text-scoreboard"):
+            d = json.loads((ROOT / "presets" / f"{pid}.json").read_text())
+            frames = _scene_frames(d, L, 30)
+            mean = sum(max(c) for f in frames for c in f) / (len(frames) * L.n)
+            self.assertGreater(mean, 0.1, pid)
+            self.assertGreater(len({tuple(f) for f in frames}), 1, pid)     # it moves
+
+    def test_a_single_text_layer_marquees_along_the_run(self):
+        L = self.ranch()
+        sc = Scene.from_dict({"layers": [{"effect": "text", "params": {"text": "HI", "speed": 4, "sparkle": 0}}]})
+        f = sc.render(0.0, L)
+        lit = [i for i, c in enumerate(f) if max(c) > 0.05]
+        self.assertTrue(lit)
+        self.assertLess(len(lit), L.n)                           # letters and gaps, not a flood
+
+
+class TonightOnANewHouse(_Denver, unittest.TestCase):
+    NOW = _dt.datetime(2026, 12, 10, 15, 0)
+
+    def rig(self):
+        from test_integration import SCH, Rig
+        return Rig(self, self.NOW.astimezone(), {"schedule": SCH})
+
+    def checks(self, r):
+        return {c["id"]: c for c in tonight.build(r.ctl, self.NOW.astimezone())["checks"]}
+
+    def test_setup_straight_line_is_not_mapped(self):
+        r = self.rig()
+        self.assertEqual(self.checks(r)["layout"]["level"], tonight.OK)
+        boxes = [{"mac": m, "name": d["name"], "pixel_count": d["pixel_count"], "straight": True}
+                 for m, d in sorted(r.ctl.cfg.devices.items(), key=lambda kv: kv[1].get("order", 0))]
+        firstrun.straight_layout(r.ctl.cfg, boxes)
+        r.ctl.build_engine()
+        c = self.checks(r)["layout"]
+        self.assertEqual((c["level"], c["jump"]), (tonight.WARN, "map"))
+
+    def test_stand_ins_on_another_house_are_fine(self):
+        r = self.rig()
+        r.ctl.cfg.data["zones"] = []
+        r.ctl.cfg.data["target_aliases"] = {"*": "Eaves", "porch": "Accent"}
+        r.ctl.build_engine()
+        with mock.patch.object(tonight, "_house_layout_file", lambda: False), \
+                mock.patch("goveelights.layout._house_names", lambda cfg: []):
+            r.ctl.build_engine()
+            r.ctl._dark_cache = None
+            c = self.checks(r)["targets"]
+            self.assertEqual(c["level"], tonight.OK, c)
+            self.assertEqual(c["jump"], "")
+            r.ctl.cfg.data["target_aliases"] = {}
+            r.ctl.build_engine()
+            c = self.checks(r)["targets"]
+            self.assertEqual(c["level"], tonight.WARN, c)        # some play on the whole house
+            listed = c["detail"].split("They aim at ")[1].split(", which")[0].rstrip("…").split(", ")
+            for t in listed:
+                self.assertIn(f"{t} plays on", c["detail"])       # every name listed is explained
+
+
+class CommandLine(unittest.TestCase):
+    def test_config_before_or_after_the_command(self):
+        from goveelights import cli
+        for argv in (["--config", "X", "layout"], ["-v", "--config=X", "effects"], ["--config", "X", "play", "p"]):
+            self.assertTrue(cli._leading_options_then_subcommand(argv), argv)
+        for argv in (["--config", "X"], ["--port", "8080"], ["--config", "X", "--port", "1"]):
+            self.assertFalse(cli._leading_options_then_subcommand(argv), argv)
+        d = _tmp(self)
+        ex = str(ROOT / LAYOUT_FILE)
+        for k, argv in enumerate((["--config", str(d / "a.json"), "layout", "import", ex],
+                                  ["layout", "--config", str(d / "b.json"), "import", ex])):
+            with mock.patch("sys.stdout", new=__import__("io").StringIO()), mock.patch("logging.basicConfig"):
+                cli.main(argv)
+            self.assertTrue((d / ("ab"[k] + ".json")).exists(), argv)
+
+
+class ExportBuiltinChecks(unittest.TestCase):
+    def test_builtin_checks_come_from_the_owner_files(self):
+        ex = _load_export()
+        d = _tmp(self)
+        (d / "goveelights").mkdir()
+        (d / "layouts").mkdir()
+        (d / "goveelights" / "legacy_defaults.py").write_text(
+            "LEGACY_DEFAULTS = {'schedule.lat': 12.3456, 'schedule.lon': -98.7654, 'game.teams': None}\n")
+        (d / "layouts" / "house.json").write_text(json.dumps({"devices": {"AA:BB:CC:DD:EE:FF:A1:B2": {}}}))
+        pats = ex.builtin_checks(d)
+        (d / "layouts" / "house.json").unlink()
+        (d / "goveelights" / "legacy_defaults.py").unlink()
+        for name, text, bad in (("a.txt", "near 12.34 and 98.76", True), ("b.txt", "at 12.35, -98.77", True),
+                                ("c.txt", "12.3 and 98.7 and 112.345", False), ("d.txt", "box H805A FFA1B2", True),
+                                ("e.txt", "id ends A1B2!", True), ("f.txt", "ends FF:A1:B2", True),
+                                ("g.txt", "A1B2C3 is longer", False), ("h.txt", "net " + "192.168." + "14.7", True),
+                                ("i.txt", "see " + "claude" + ".ai/code/x", True), ("j.txt", "192.168.1.4", False)):
+            (d / name).write_text(text)
+            self.assertEqual(bool(ex.scan(d, [], pats)), bad, text)
+            (d / name).unlink()
+        self.assertEqual(len(ex.builtin_checks(_tmp(self))), len(ex._FIXED))   # a public copy: fixed ones only
+
+    def test_a_missing_denylist_stops_the_export(self):
+        ex = _load_export()
+        with self.assertRaises(SystemExit) as e:
+            ex.build(_tmp(self) / "out", _tmp(self) / "nope.txt")
+        self.assertIn("--no-denylist", str(e.exception))
 
 
 if __name__ == "__main__":

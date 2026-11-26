@@ -46,6 +46,8 @@
 python3 tools/export_public.py /tmp/public-export --force
 ```
 
-It needs `tools/private_denylist.txt` (gitignored, local only) and fails if any private
-detail is left. Then create a NEW repository from the export (single commit); never push
+It needs `tools/private_denylist.txt` (gitignored, local only; it stops without one unless
+you pass `--no-denylist`) and fails if any private detail is left. Built in, with or
+without the denylist: the earlier default location (from `legacy_defaults.py`), fragments
+of the device ids in `layouts/house.json`, the home subnet and session links. Then create a NEW repository from the export (single commit); never push
 this repository's history.

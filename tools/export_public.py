@@ -1,7 +1,7 @@
 """Build a clean, publishable copy of this project (no history, no personal details).
 
     python3 tools/export_public.py <empty target dir> [--denylist tools/private_denylist.txt]
-                                   [--force] [--no-tests]
+                                   [--no-denylist] [--force] [--no-tests]
 
 What it does:
   1. Extracts the git-tracked files at HEAD (uncommitted changes and untracked files,
@@ -14,9 +14,13 @@ What it does:
          some text                     (must simply not appear: fails if it does)
          re:<regex>                    (a pattern that must not appear)
      Blank lines and lines starting with # are ignored.
-  5. FAILS if any denylist entry, or any MAC-like device id other than the obvious
-     placeholders (AA:BB:CC:DD:EE:FF:.., 00:00:..), is still found in any file, text or
-     binary (HTML, images and .pyc included).
+     The denylist is required: without it the export stops, unless --no-denylist says
+     you really mean to rely on the built-in checks alone.
+  5. FAILS if any denylist entry, any built-in check (builtin_checks: the earlier default
+     location from legacy_defaults.py at two or more decimals, fragments of the device ids
+     in layouts/house.json, the home subnet, session links), or any MAC-like device id
+     other than the obvious placeholders (AA:BB:CC:DD:EE:FF:.., 00:00:..) is still found
+     in any file, text or binary (HTML, images and .pyc included).
   6. Runs the test suite in the exported tree (skip with --no-tests).
   7. Prints the next steps: a brand-new repository with a single commit. Never push this
      repository's history, which still holds everything the export leaves out.
@@ -75,6 +79,61 @@ def read_denylist(path: Path) -> tuple[list[tuple[str, str]], list[str], list[st
     return repl, plain, regexes
 
 
+# Built-in checks that run with or without a denylist. The values come from the files
+# that hold them in this repository (read before the export neutralises or drops them),
+# so this file itself never spells out a private detail; the fixed patterns are split so
+# that this file does not match them either.
+_FIXED = [
+    re.escape(".".join(["192", "168", "14"]) + "."),                # the home network
+    re.escape("claude" + ".ai/code"),                                # session links
+    "session" + "_" + "[0-9A-Za-z]{16,}",                            # session ids
+]
+
+
+def _coord_pattern(v) -> str | None:
+    """A regex for a coordinate written with 2 or more decimals (truncated or rounded)."""
+    try:
+        v = abs(float(v))
+    except (TypeError, ValueError):
+        return None
+    whole, frac = f"{v:.6f}".split(".")
+    alts = {f"{whole}.{frac[:2]}", f"{v:.2f}"}
+    return r"(?<![0-9])(?:" + "|".join(re.escape(a) for a in sorted(alts)) + ")"
+
+
+def builtin_checks(root: Path = ROOT) -> list[str]:
+    """Regexes that must never appear in the export: the fixed patterns plus the earlier
+    default location (goveelights/legacy_defaults.py) and the last 4 and 6 hex digits of
+    each device id in layouts/house.json, when those files are in `root`."""
+    out = list(_FIXED)
+    leg = root / LEGACY_FILE
+    if leg.exists():
+        ns: dict = {}
+        try:
+            exec(compile(leg.read_text(encoding="utf-8"), str(leg), "exec"), ns)   # noqa: S102 - our own file
+        except Exception:                                                        # noqa: BLE001
+            ns = {}
+        d = ns.get("LEGACY_DEFAULTS") or {}
+        for k in ("schedule.lat", "schedule.lon"):
+            pat = _coord_pattern(d.get(k)) if d.get(k) is not None else None
+            if pat:
+                out.append(pat)
+    house = root / "layouts" / "house.json"
+    if house.exists():
+        import json
+        try:
+            ids = list((json.loads(house.read_text(encoding="utf-8")).get("devices") or {}))
+        except (ValueError, AttributeError):
+            ids = []
+        for mac in ids:
+            raw = re.sub(r"[^0-9A-Fa-f]", "", str(mac))
+            if len(raw) >= 6:
+                pairs = [raw[-6:-4], raw[-4:-2], raw[-2:]]
+                out.append(r"(?<![0-9A-Fa-f])" + re.escape(raw[-4:]) + r"(?![0-9A-Fa-f])")
+                out.append(r"(?<![0-9A-Fa-f])(?:" + re.escape(raw[-6:]) + "|" + "[:-]".join(pairs) + r")(?![0-9A-Fa-f])")
+    return out
+
+
 def scrub_text(text: str, repl: list[tuple[str, str]]) -> str:
     for a, b in repl:
         text = re.sub(re.escape(a), lambda _m, b=b: b, text, flags=re.I)
@@ -115,10 +174,15 @@ def extract_head(target: Path):
             tf.extractall(target)
 
 
-def build(target: Path, denylist: Path) -> list[str]:
-    """Extract, drop, neutralise and scrub. Returns notes; raises SystemExit on a leak."""
+def build(target: Path, denylist: Path | None) -> list[str]:
+    """Extract, drop, neutralise and scrub. Returns notes; raises SystemExit on a leak.
+    denylist None: built-in checks only (--no-denylist)."""
     notes = []
+    if denylist is not None and not denylist.exists():
+        raise SystemExit(f"export FAILED: no denylist at {denylist}. Write one (see the top of "
+                         "tools/export_public.py), or pass --no-denylist to rely on the built-in checks only")
     extract_head(target)
+    builtin = builtin_checks(target)            # before the owner files are dropped or neutralised
     for rel in DROP:
         p = target / rel
         if p.exists():
@@ -126,9 +190,11 @@ def build(target: Path, denylist: Path) -> list[str]:
             notes.append(f"dropped {rel}")
     (target / LEGACY_FILE).write_text(NEUTRAL_LEGACY, encoding="utf-8")
     notes.append(f"neutral {LEGACY_FILE}")
-    repl, plain, regexes = read_denylist(denylist)
-    if not denylist.exists():
-        notes.append(f"WARNING: no denylist at {denylist}: only device ids are checked")
+    repl, plain, regexes = read_denylist(denylist) if denylist is not None else ([], [], [])
+    if denylist is None:
+        notes.append("WARNING: --no-denylist: only the built-in checks and device ids are checked")
+    regexes = regexes + builtin
+    notes.append(f"{len(builtin)} built-in check(s)")
     changed = 0
     for p in _files(target):
         data = p.read_bytes()
@@ -149,6 +215,7 @@ def build(target: Path, denylist: Path) -> list[str]:
             print(f"  LEAK {rel}:{line}: {what}", file=sys.stderr)
         raise SystemExit(f"export FAILED: {len(hits)} private detail(s) remain in {target} (see above)")
     notes.append("no denylist hits, no device ids")
+    build.checks = ([a for a, _ in repl] + plain, regexes)      # for the scan after the tests
     return notes
 
 
@@ -183,6 +250,8 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("target", help="directory to create (must be empty or missing; see --force)")
     ap.add_argument("--denylist", default=str(DENYLIST))
+    ap.add_argument("--no-denylist", action="store_true",
+                    help="build without a denylist (built-in checks only); not recommended")
     ap.add_argument("--force", action="store_true", help="delete the target directory first")
     ap.add_argument("--no-tests", action="store_true")
     a = ap.parse_args(argv)
@@ -194,13 +263,14 @@ def main(argv=None) -> int:
             raise SystemExit(f"{target} is not empty (use --force to replace it)")
         shutil.rmtree(target)
     target.mkdir(parents=True, exist_ok=True)
-    for n in build(target, Path(a.denylist)):
+    for n in build(target, None if a.no_denylist else Path(a.denylist)):
         print(" ", n)
+    literals, regexes = build.checks
     if not a.no_tests:
         print("running the test suite in the export...")
         if run_tests(target):
             raise SystemExit("export FAILED: the test suite does not pass in the exported tree")
-        hits = scan(target, [x for x, _ in read_denylist(Path(a.denylist))[0]] + read_denylist(Path(a.denylist))[1])
+        hits = scan(target, literals, regexes)
         if hits:
             raise SystemExit(f"export FAILED: the test run left private details behind: {hits[:5]}")
     print(f"export OK: {target}")

@@ -287,7 +287,12 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                 if path == "/api/setup":           # first-run setup: what is still missing
                     return self._json(firstrun.state(ctl.cfg))
                 if path == "/api/targets":         # presets aimed at runs/zones this layout lacks
-                    return self._json(tonight.missing_targets(ctl))
+                    out = tonight.missing_targets(ctl)
+                    L = getattr(ctl.engine, "layout", None)
+                    if q.get("name") and L is not None and hasattr(L, "plays_on"):
+                        # ?name=X&name=Y: where those layer targets play on this house
+                        out["plays_on"] = {n: (n if L.has(n) else L.plays_on(n)) for n in q["name"][:20]}
+                    return self._json(out)
                 if path == "/api/extras":
                     from .live import LEAGUES
                     from .pictures import PICTURES
@@ -637,7 +642,9 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
 
 def main(argv=None):
     import argparse
-    ap = argparse.ArgumentParser(prog="python -m goveelights", description="Govee lights effects creator")
+    from .cli import COMMANDS_HELP
+    ap = argparse.ArgumentParser(prog="python -m goveelights", description="Govee lights effects creator",
+                                 epilog=COMMANDS_HELP, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--config")
     ap.add_argument("--port", type=int)
     ap.add_argument("--bind-ip", help="this PC's address on the lights network (if discovery finds nothing)")

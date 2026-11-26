@@ -250,9 +250,29 @@ def cmd_service(uninstall=False):
     return 0
 
 
+SUBCOMMANDS = ("play", "effects", "layout")
+COMMANDS_HELP = """commands (python -m goveelights <command> --help for each):
+  serve (the default)        the app: phone page, schedule, shows
+  play <preset|effect>       play a preset or effect from the command line
+  effects [-v]               list the effects
+  layout [import <file>]     show the virtual strip, or import a layout file
+  diag                       the diagnostics page on its own
+  set-password               allow remote access with a password
+  install-service / uninstall-service, install-startup / uninstall-startup  (Windows)
+Options such as --config may come before or after the command."""
+
+
+def _leading_options_then_subcommand(argv) -> bool:
+    """`--config X layout import F`: options first, then one of SUBCOMMANDS."""
+    k = 0
+    while k < len(argv) and argv[k].startswith("-"):
+        k += 1 if argv[k] in ("-v", "--verbose") or "=" in argv[k] else 2
+    return k < len(argv) and argv[k] in SUBCOMMANDS
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
-    if not argv or argv[0].startswith("-") or argv[0] == "serve":
+    if not argv or (argv[0].startswith("-") and not _leading_options_then_subcommand(argv)) or argv[0] == "serve":
         from .app_server import main as app_main
         return app_main(argv[1:] if argv and argv[0] == "serve" else argv)
     if argv[0] == "diag":
@@ -275,11 +295,14 @@ def main(argv=None):
     if argv[0] in ("install-startup", "uninstall-startup"):
         return cmd_install_startup(uninstall=argv[0] == "uninstall-startup")
 
-    ap = argparse.ArgumentParser(prog="python -m goveelights")
+    ap = argparse.ArgumentParser(prog="python -m goveelights", epilog=COMMANDS_HELP,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--config")
     ap.add_argument("-v", "--verbose", action="store_true")
+    common = argparse.ArgumentParser(add_help=False)          # the same options after the command
+    common.add_argument("--config", default=argparse.SUPPRESS, help="config file (default govee_config.json)")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    pp = sub.add_parser("play", help="play a preset or effect on the lights")
+    pp = sub.add_parser("play", help="play a preset or effect on the lights", parents=[common])
     pp.add_argument("preset", help="preset file, preset name from presets/, or effect name")
     pp.add_argument("--set", action="append", metavar="KEY=VALUE",
                     help="override a param, e.g. --set speed=5 --set colors=#ff0000,#00ff00 (N.key for layer N)")
@@ -289,9 +312,9 @@ def main(argv=None):
     pp.add_argument("--terminal", action="store_true", help="show a live colour preview in the terminal")
     pp.add_argument("--dry-run", action="store_true", help="don't touch the lights (use with --terminal)")
     pp.add_argument("--bind-ip")
-    pe = sub.add_parser("effects", help="list effects (-v for params)")
+    pe = sub.add_parser("effects", help="list effects (-v for params)", parents=[common])
     pe.add_argument("-v", "--verbose", action="store_true")
-    pl = sub.add_parser("layout", help="show the virtual strip, or import a layout file")
+    pl = sub.add_parser("layout", help="show the virtual strip, or import a layout file", parents=[common])
     pl.add_argument("action", nargs="?", default="show", choices=["show", "import"])
     pl.add_argument("file", nargs="?")
     a = ap.parse_args(argv)

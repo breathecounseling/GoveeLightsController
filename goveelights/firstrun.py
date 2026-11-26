@@ -60,13 +60,16 @@ def straight_layout(cfg, boxes: list) -> list[str]:
         n = int(b.get("pixel_count") or 0)
         if not 1 <= n <= 255:
             raise ValueError(f"{name}: bulb count must be 1..255")
-        clean.append((b["mac"], name, n, bool(b.get("reversed")), bool(b.get("straight"))))
+        # only what the entry says changes: running setup again on a house that is already
+        # set up must not flip reversed boxes or switch boxes back on
+        keep = {k: bool(b[k]) for k in ("reversed", "enabled") if k in b}
+        clean.append((b["mac"], name, n, keep, bool(b.get("straight"))))
     done = []
     with cfg.lock:
         x = 0.0
-        for order, (mac, name, n, rev, straight) in enumerate(clean):
+        for order, (mac, name, n, keep, straight) in enumerate(clean):
             d = cfg.devices[mac]
-            d.update({"name": name, "pixel_count": n, "order": order, "enabled": True, "reversed": rev})
+            d.update({"name": name, "pixel_count": n, "order": order, **keep})
             if straight or not d.get("geometry"):
                 d["geometry"] = [[0, x, 0.0], [n - 1, x + n - 1, 0.0]]
                 d.pop("geometry_prev", None)
@@ -74,3 +77,17 @@ def straight_layout(cfg, boxes: list) -> list[str]:
             done.append(name)
         cfg.save()
     return done
+
+
+def is_placeholder(geometry, count=None) -> bool:
+    """A box's geometry is the straight line straight_layout gives it (not placed on the
+    house yet): two knots at height 0, one bulb spacing apart."""
+    try:
+        if not isinstance(geometry, list) or len(geometry) != 2:
+            return False
+        (i0, x0, y0), (i1, x1, y1) = geometry
+        n = int(i1) + 1 if count is None else int(count)
+        return (int(i0) == 0 and int(i1) == n - 1 and float(y0) == 0.0 == float(y1)
+                and abs(float(x1) - float(x0) - (n - 1)) < 1e-9)
+    except (TypeError, ValueError):
+        return False

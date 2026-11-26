@@ -2,7 +2,9 @@
 <!--
   launchd agent for GoveeLightsController (macOS). See docs/SERVICE.md.
   1. Replace /Users/you/GoveeLightsController (three places) with your folder, and
-     /usr/bin/python3 with the output of `which python3` if it differs.
+     /opt/homebrew/bin/python3 with the output of `which python3` (Intel Macs with
+     Homebrew: /usr/local/bin/python3). It must be Python 3.10 or newer: the
+     /usr/bin/python3 that comes with the Xcode tools is 3.9 on many Macs.
   2. cp docs/examples/goveelights.plist ~/Library/LaunchAgents/
   3. launchctl load ~/Library/LaunchAgents/goveelights.plist
   Stop: launchctl unload ~/Library/LaunchAgents/goveelights.plist
@@ -13,7 +15,7 @@
   <key>Label</key><string>io.github.goveelightscontroller</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/bin/python3</string>
+    <string>/opt/homebrew/bin/python3</string>
     <string>-m</string>
     <string>goveelights</string>
     <string>serve</string>
