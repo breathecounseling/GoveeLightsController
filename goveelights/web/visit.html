@@ -167,7 +167,8 @@ function drawYou(){
   if (!y || !S.on){ box.hidden = true; return }
   box.hidden = false; box.classList.toggle('now', !!y.playing);
   box.textContent = y.playing ? `🎉 Your pick “${y.name}” is on the house right now!`
-    : y.position <= 1 && y.wait < 5 ? `Your pick “${y.name}” is up next. Watch the house! 👀`
+    : y.wait == null ? `Your pick “${y.name}” is #${y.position} in line. It plays after the light show. ✨`
+    : y.position <= 1 && y.wait < 5 ?`Your pick “${y.name}” is up next. Watch the house! 👀`
     : `Your pick “${y.name}” is #${y.position} in line, about ${Math.max(1, Math.round(y.wait/60))} min to go. Hang tight! ✨`;
 }
 
