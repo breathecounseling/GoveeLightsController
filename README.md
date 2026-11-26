@@ -35,10 +35,41 @@ and exponential decay, run white-hot and cool into the bulb's own colour, and bl
 neighbouring bulbs; the base shimmers underneath. **62 palettes** in categories (Classic,
 Warm, Cool, Nature, Neon, Elegant, Soft, Holidays), tuned for LEDs.
 
+**House scenes** (picker group *Scenes*, *Physics*, *Weather*, *Text*). These effects know the
+shape of the house (`goveelights/geometry.py`: zigzag rows, peaks, the gable apex, slopes,
+what is below what). They are plug-ins in `goveelights/effects_ext/`:
+* **Christmas tree:** the zigzag is the tree and the gable apex is its star. A garland winds
+  along the wiring order, ornaments glint, the star pulses and bursts. A *lighting* intro
+  lights the tree from the trunk up, then the star, and can repeat every few minutes.
+  Presets: Christmas tree, Golden tree, Icy tree, Tree lighting ceremony, Spooky tree, Presents.
+* **Roller coaster:** balls of light ride the roofline under real gravity. They speed up
+  downhill, crest the gables, and a chain lift keeps them going.
+  **Sparks & embers:** sparks pour off the apex, slide down the slopes, fall through the air
+  and land glowing on the porch line.
+* **Porch fireworks:** shells rise from the porch, burst in the gable and fall with drag and
+  crackle. Includes a finale mode.
+  **Snow that piles up:** flakes land on whatever is below them, so the porch and flat eaves
+  slowly fill with snow (and melt if you want).
+* **Scrolling text** on the zigzag (5-row pixel font, anti-aliased scrolling). The source can
+  be your own text, the clock, the live game score or "N days to Christmas".
+* **Sky at dusk:** the house faces east, so the sunset is behind the roof as seen from the
+  street. This colours the house like the sky at this moment (real sun position), then settles
+  into night colours. **Depth cascade** FX makes any layer fall from the roof to the porch or
+  ripple from the apex. **Mirror at the apex** FX mirrors any layer around the gable peak.
+* **Evolve** (Play → ⟳ on a card): plays a preset and every few minutes crossfades into a fresh
+  variation of it (small, related changes), so the house never looks quite the same twice.
+* **Smoothness:** motion is anti-aliased between bulbs, dark fades are dithered so they don't
+  step, and each run has a colour-match trim (More → Output → Colour match, with a white test)
+  so the three boxes show the same white.
+
+Preview any effect or preset on the house without lights:
+`python tools/preview.py christmas-tree --seconds 8 --out preview` writes `preview.html`/`.png`.
+
 **Camera mapping** (More → Map the bulbs with your camera): the lights blink a binary ID
-code (8 bits + parity, each bit shown with its inverse, so ambient light and auto-exposure
-don't matter). You record ~25 s with the phone's normal camera, and the page decodes the
-video on the phone. Nothing is uploaded. Measured positions are fitted into the layout
+code (10 bits + parity, each bit shown with its inverse, so ambient light and auto-exposure
+don't matter; one cycle is 13.5 s). Pick **Dim** blink brightness so neighbouring bulbs
+don't glow together on camera. You record ~30 s with the phone's normal camera, and the page
+decodes the video on the phone. Nothing is uploaded. Measured positions are fitted into the layout
 (scale from the real bulb spacing, rotation and offset fitted), short gaps are
 interpolated, and only the area you pick is updated. Undo restores the previous shape.
 
