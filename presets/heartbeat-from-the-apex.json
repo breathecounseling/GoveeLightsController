@@ -1,0 +1,36 @@
+{
+  "name": "Heartbeat from the apex",
+  "tags": [
+    "Holiday"
+  ],
+  "layers": [
+    {
+      "effect": "solid",
+      "params": {
+        "color": "#48000c"
+      },
+      "target": "all"
+    },
+    {
+      "effect": "heartbeat",
+      "params": {
+        "colors": ["#ff1030", "#ff1030", "#ffffff"],
+        "bpm": 56,
+        "decay": 0.2
+      },
+      "target": "all",
+      "blend": "add",
+      "fx": [
+        {
+          "type": "cascade",
+          "params": {
+            "mode": "from apex",
+            "delay": 1.4,
+            "curve": 1.0,
+            "depth_fade": 0.35
+          }
+        }
+      ]
+    }
+  ]
+}

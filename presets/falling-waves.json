@@ -1,0 +1,69 @@
+{
+  "name": "Falling waves",
+  "tags": [
+    "Ambient",
+    "Holiday"
+  ],
+  "layers": [
+    {
+      "effect": "solid",
+      "params": {
+        "color": "#001c60"
+      },
+      "target": "all"
+    },
+    {
+      "effect": "wave",
+      "params": {
+        "color": "#30c8ff",
+        "color2": "#000000",
+        "wavelength": 16,
+        "sharpness": 5,
+        "speed": -4,
+        "axis": "y"
+      },
+      "target": "Whole front",
+      "blend": "lighten",
+      "fx": [
+        {
+          "type": "cascade",
+          "params": {
+            "mode": "height-down",
+            "delay": 1.2,
+            "curve": 0.5,
+            "depth_fade": 0.2
+          }
+        }
+      ]
+    },
+    {
+      "effect": "wave",
+      "params": {
+        "color": "#30c8ff",
+        "color2": "#000000",
+        "wavelength": 16,
+        "sharpness": 5,
+        "speed": -4,
+        "axis": "y"
+      },
+      "target": [
+        "North wall",
+        "South gable",
+        "Garage peak"
+      ],
+      "blend": "lighten",
+      "fx": [
+        {
+          "type": "cascade",
+          "params": {
+            "mode": "height-down",
+            "delay": 1.2,
+            "curve": 0.5,
+            "depth_fade": 0.2
+          }
+        }
+      ],
+      "opacity": 0.6
+    }
+  ]
+}

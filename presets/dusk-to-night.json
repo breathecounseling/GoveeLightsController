@@ -1,0 +1,16 @@
+{
+  "name": "Dusk to night",
+  "tags": [
+    "Ambient"
+  ],
+  "layers": [
+    {
+      "effect": "dusk",
+      "params": {
+        "clouds": 0.4,
+        "sun_glow": 0.7,
+        "stars": 0.12
+      }
+    }
+  ]
+}
