@@ -300,7 +300,7 @@ function render(){
   // device list
   const dl = S.devices.map(x=>`<div class="card"><div class="row" style="justify-content:space-between">
      <input value="${esc(x.name)}" onchange="act('device',{mac:'${x.mac}',name:this.value})" style="flex:1;font-weight:700">
-     <button onclick="act('identify',{mac:'${x.mac}'})">Identify</button><button onclick="check('${x.mac}',this)">Check</button></div>
+     <button onclick="act('identify',{mac:'${x.mac}'})">Identify</button><button onclick="act('turn',{mac:'${x.mac}',on:true})">On</button><button onclick="act('turn',{mac:'${x.mac}',on:false})">Off</button><button onclick="check('${x.mac}',this)">Check</button></div>
      <div class="kv" style="margin-top:8px"><b>IP</b><span>${esc(x.ip)}${x.reported_ip?` <span class=warn>(device reports ${esc(x.reported_ip)})</span>`:''}</span><b>MAC</b><span class="mono">${esc(x.mac)}</span><b>SKU</b><span>${esc(x.sku)}</span>
      <b>Firmware</b><span class="mono">${esc(Object.entries(x.firmware||{}).map(([k,v])=>k.replace('Version','')+' '+v).join(', '))}</span>
      <b>Seen</b><span>${x.seen_ago==null?'<span class=warn>not this session</span>':x.seen_ago+' s ago'}</span>

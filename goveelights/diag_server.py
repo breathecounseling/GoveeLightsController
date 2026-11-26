@@ -98,9 +98,9 @@ class App:
                 s.disable(repeats=2)
             st = self.lan.status(ip)
             was_on = (st or {}).get("onOff", 1)
-            for _ in range(3):
-                self.lan.send(ip, p.turn_msg(False)); time.sleep(0.6)
-                self.lan.send(ip, p.turn_msg(True)); time.sleep(0.6)
+            for _ in range(3):                    # slow enough for boxes that fade in/out
+                self.lan.send(ip, p.turn_msg(False)); time.sleep(1.0)
+                self.lan.send(ip, p.turn_msg(True)); time.sleep(1.2)
             if not was_on:
                 self.lan.send(ip, p.turn_msg(False))
             if was_rt:

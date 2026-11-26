@@ -40,7 +40,10 @@ class Streamer:
     # --------------------------------------------------------- realtime
     def enable(self, repeats: int = 3, spacing: float = 0.5):
         """Issue #404: a single enable right after power-on is sometimes
-        ignored, so it is repeated a few times."""
+        ignored, so it is repeated a few times. A box that is switched off
+        ignores realtime frames, so it is switched on first."""
+        self.lan.send(self.ip, p.turn_msg(True))
+        time.sleep(0.3)
         for i in range(repeats):
             self.lan.send_razer(self.ip, p.razer_enable_packet(True))
             if i < repeats - 1:
