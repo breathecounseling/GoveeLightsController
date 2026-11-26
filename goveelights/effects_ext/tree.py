@@ -199,6 +199,11 @@ TREE_PARAMS = [
     Param("glow", "color", "#ffb070", "Outline glow colour",
           help="the rest of the target (e.g. the gable outline) glows softly in this"),
     Param("glow_level", "number", 0.18, "Outline glow", 0, 1, 0.01, help="0 = outline dark"),
+    Param("pre_glow", "number", 0, "Outline glow while lighting", 0, 1, 0.05,
+          help="share of the outline glow already on while the tree lights (0 = outline dark "
+               "until the star ignites)"),
+    Param("ignite_flash", "number", 0, "Ignition flash", 0, 1, 0.05,
+          help="when the star ignites the whole outline flashes white for a moment"),
     Param("halo", "number", 0.5, "Star halo", 0, 1, 0.05,
           help="the outline bulbs next to the star take on its glow"),
     Param("intro", "number", 8, "Lighting intro (s)", 0, 60, 0.5,
@@ -393,6 +398,8 @@ def tree(t, ctx, P, state):
 
     # ---- outline glow, star halo, burst sparks
     gl, glv = P["glow"], P["glow_level"]
+    glow_on = max(glow_on, P["pre_glow"])
+    flash = P["ignite_flash"] * envelope(ignite, 0.04, 0.5) if 0 <= ignite < 4 else 0.0
     for i in geo["rest"]:
         v = glv * (0.85 + 0.15 * wobble(i, clock, 0.3, seed))
         c = (gl[0] * v, gl[1] * v, gl[2] * v)
@@ -405,6 +412,8 @@ def tree(t, ctx, P, state):
             e = sparks(i)
             if e > 0:
                 c = (c[0] + (1 - c[0]) * e, c[1] + (0.9 - c[1]) * e, c[2] + (0.55 - c[2]) * e)
+        if flash > 0:
+            c = lerp(c, (1.0, 0.95, 0.85), flash)
         out[i] = _clamp01((c[0] * dim, c[1] * dim, c[2] * dim))
     return out
 

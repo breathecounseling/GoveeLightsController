@@ -2,28 +2,9 @@
   "name": "Spooky tree",
   "tags": ["Halloween"],
   "layers": [
-    {
-      "effect": "twinkle",
-      "params": {"colors": ["#c060ff"], "background": "#8000ff", "density": 0.18, "duration": 3.0, "seed": 11},
-      "target": ["North wall", "Front eave", "South wall", "Garage", "Garage peak"],
-      "blend": "normal",
-      "opacity": 0.55
-    },
-    {
-      "effect": "fireflies",
-      "params": {"colors": ["#40ff00", "#80ff20"], "density": 0.06, "life": 1.6, "drift": 1, "seed": 13},
-      "target": ["North wall", "Front eave", "South wall", "Garage", "Garage peak"],
-      "blend": "lighten"
-    },
-    {
-      "effect": "tree",
-      "params": {"body": "#5000d0", "body2": "#8000ff", "level": 0.8, "shimmer": 0.45, "shade": 0.15, "garland": "#ff4a00", "garland_style": "strand", "speed": -1.5, "garland_sparkle": 0.6, "ornament_colors": ["#40ff00", "#ff0000", "#40ff00", "#ffb000"], "density": 0.16, "glints": 0.3, "star": "#ffb000", "burst_every": 9, "glow": "#8000ff", "glow_level": 0.12, "intro": 3},
-      "target": "Whole front gable"
-    },
-    {
-      "effect": "presents",
-      "params": {"colors": ["#ff4a00", "#6000ff", "#40ff00"], "ribbon": "#ffb000", "background": "#8000ff"},
-      "target": "Porch"
-    }
+    {"effect": "twinkle", "params": {"colors": ["#c060ff"], "background": "#8000ff", "density": 0.18, "duration": 3.0, "seed": 11}, "target": ["North wall", "Front eave", "South wall", "Garage", "Garage peak"], "blend": "normal", "opacity": 0.55},
+    {"effect": "fireflies", "params": {"colors": ["#40ff00"], "density": 0.06, "life": 1.6, "drift": 1, "seed": 13}, "target": ["North wall", "Front eave", "South wall", "Garage", "Garage peak"], "blend": "lighten"},
+    {"effect": "tree", "params": {"body": "#40ff00", "body2": "#20c000", "level": 0.85, "shimmer": 0.45, "shade": 0.15, "garland": "#ff4a00", "garland_style": "strand", "speed": -1.5, "garland_sparkle": 0.6, "ornament_colors": ["#9000ff", "#ff4a00", "#c000ff", "#ff6a00"], "density": 0.16, "glints": 0.3, "star": "#ffa000", "burst_every": 9, "glow": "#ff4a00", "glow_level": 0.6, "intro": 3}, "target": "Whole front gable"},
+    {"effect": "presents", "params": {"colors": ["#ff4a00", "#6000ff", "#40ff00"], "ribbon": "#ffb000", "background": "#8000ff"}, "target": "Porch"}
   ]
 }

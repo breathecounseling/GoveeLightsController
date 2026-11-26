@@ -158,6 +158,18 @@ def _vnoise(x: float, y: float, seed: int) -> float:
     return top + (bot - top) * fy
 
 
+def _vivid(c: Color, amount: float) -> Color:
+    """Saturate c by `amount` (0..1) at the same brightness, keeping its hue."""
+    hi, lo = max(c), min(c)
+    if amount <= 0 or hi <= 1e-6 or hi - lo <= 1e-6:
+        return c
+    s = (hi - lo) / hi
+    s2 = s + (1.0 - s) * amount
+    lo2 = hi * (1.0 - s2)
+    k = (hi - lo2) / (hi - lo)                       # stretch away from the brightest channel
+    return (hi - (hi - c[0]) * k, hi - (hi - c[1]) * k, hi - (hi - c[2]) * k)
+
+
 GLOW = H("#ffa818")
 STAR = H("#e8eeff")
 STAR_WINDOW, STAR_FADE = 30.0, 3.0
@@ -177,6 +189,9 @@ STAR_WINDOW, STAR_FADE = 30.0, 3.0
     Param("speed", "number", 0.6, "Cloud drift (bulbs/s)", -10, 10, 0.1, help="negative drifts the other way"),
     Param("sun_glow", "number", 0.6, "Sunset glow", 0, 1, 0.05,
           help="warm afterglow low on the side of the house where the sun went down"),
+    Param("vivid", "number", 0, "Vivid colours", 0, 1, 0.05,
+          help="pushes the dusky pinks and mauves between the gold and the blue toward pure magenta "
+               "and violet (muted mixes look salmon on LEDs); 0 = natural sky"),
     Param("stars", "number", 0.12, "Stars", 0, 0.5, 0.01, help="share of the upper bulbs that twinkle once it's dark"),
     Param("star_height", "number", 0.35, "Stars from height", 0, 1, 0.05,
           help="stars only above this height (0 = the porch and flat eaves get stars too)"),
@@ -208,6 +223,9 @@ def dusk(t, p, P):
         v = 0.65 * _vnoise(x, p.y * 0.3, 7) + 0.35 * _vnoise(x * 2.3 + 5.1, p.y * 0.6, 11)
         k = 1 - cl + cl * (0.35 + 1.15 * v)
         c = (c[0] * k, c[1] * k, c[2] * k)
+    vv = P["vivid"]
+    if vv > 0:
+        c = _vivid(c, vv)
     wn = sky["night"]
     st = P["stars"]
     if wn > 0 and st > 0 and h > P["star_height"]:

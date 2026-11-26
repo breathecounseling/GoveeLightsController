@@ -7,7 +7,7 @@
     {
       "effect": "solid",
       "params": {
-        "color": "#800010"
+        "color": "#200004"
       },
       "target": "all"
     },
@@ -16,18 +16,40 @@
       "params": {
         "colors": ["#ff1030", "#ff0060"],
         "bpm": 56,
-        "decay": 0.2
+        "decay": 0.22
       },
       "target": "all",
-      "blend": "add",
+      "blend": "lighten",
       "fx": [
         {
           "type": "cascade",
           "params": {
             "mode": "from apex",
-            "delay": 0.3,
+            "delay": 0.5,
             "curve": 1.0,
-            "depth_fade": 0.35
+            "depth_fade": 0.45
+          }
+        }
+      ]
+    },
+    {
+      "effect": "heartbeat",
+      "params": {
+        "colors": ["#ff80a0"],
+        "bpm": 56,
+        "strength": 0,
+        "decay": 0.07
+      },
+      "target": "all",
+      "blend": "lighten",
+      "fx": [
+        {
+          "type": "cascade",
+          "params": {
+            "mode": "from apex",
+            "delay": 0.5,
+            "curve": 1.0,
+            "depth_fade": 0.45
           }
         }
       ]
