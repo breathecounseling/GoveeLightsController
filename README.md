@@ -177,7 +177,9 @@ your own subdomain; the app adds its own password, lockout and CSRF protection).
 password under More → Security, or with `python -m goveelights set-password`.
 
 **Run in the background on Windows:** for always-on, `python -m goveelights install-service`
-(admin PowerShell; starts at boot with no login, restarts if it stops). The lighter option is `python -m goveelights install-startup`, which adds a hidden launcher to your Startup folder. The app then starts at login with no window and logs to
+(admin PowerShell; starts at boot with no login, restarts if it stops; it also adds
+firewall rules for UDP 4002 and the web port on Private networks, because the boot task
+never gets a firewall prompt). The lighter option is `python -m goveelights install-startup`, which adds a hidden launcher to your Startup folder. The app then starts at login with no window and logs to
 `goveelights.log`. `python -m goveelights uninstall-startup` removes it.
 
 ## Run it (Windows)
@@ -187,7 +189,9 @@ password under More → Security, or with `python -m goveelights set-password`.
 3. Double-click `start.bat`, or run `python -m goveelights` in this folder. (The Phase 1
    tool alone: `python -m goveelights diag`.)
 4. When Windows Firewall asks, allow Python on **Private networks**. Discovery replies
-   arrive on UDP 4002, so blocking them means no devices show up.
+   arrive on UDP 4002, so blocking them means no devices show up. That answer covers
+   `python.exe` only: the hidden login launcher runs `pythonw.exe`, so if it finds no
+   devices add the port rules below.
 5. Open the URL it prints (e.g. `http://192.168.1.50:8080/`) on your phone, on the same network as the PC.
 
 ### Phone page never loads ("connection aborted" / spins for minutes)

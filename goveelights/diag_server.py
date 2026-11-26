@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import signal
 import socket
 import sys
@@ -13,11 +14,20 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from . import protocol as p
+from . import winconsole
 from .config import Config
 from .lan import GoveeLan
 from .streamer import Streamer
 
 log = logging.getLogger("goveelights")
+
+
+class Server(ThreadingHTTPServer):
+    daemon_threads = True
+    # On Windows SO_REUSEADDR lets a second copy bind the same port; refuse instead.
+    allow_reuse_address = os.name != "nt"
+
+
 WEB = Path(__file__).resolve().parent / "web"
 BLACK = (0, 0, 0)
 
@@ -347,12 +357,12 @@ def main(argv=None):
     a = ap.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if a.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
+    winconsole.disable_quickedit()
     cfg = Config(a.config) if a.config else Config()
     app = App(cfg, a.bind_ip or "")
     host = cfg.data["server"].get("host", "0.0.0.0")
     port = a.port or cfg.data["server"].get("port", 8080)
-    srv = ThreadingHTTPServer((host, port), make_handler(app))
-    srv.daemon_threads = True
+    srv = Server((host, port), make_handler(app))
 
     done = threading.Event()
 
@@ -368,6 +378,7 @@ def main(argv=None):
     signal.signal(signal.SIGTERM, shutdown)
     if hasattr(signal, "SIGBREAK"):          # Windows console close / Ctrl+Break
         signal.signal(signal.SIGBREAK, shutdown)
+    winconsole.on_console_close(shutdown)    # closing the window ends us before SIGBREAK runs
 
     app.scan()
     threading.Thread(target=lambda: (time.sleep(1.5), app.scan()), daemon=True).start()

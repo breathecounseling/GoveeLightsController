@@ -27,6 +27,8 @@ import time
 from collections import deque
 from pathlib import Path
 
+from .config import write_json
+
 PROXY_HEADERS = ("cf-connecting-ip", "x-forwarded-for", "forwarded", "x-real-ip", "cf-ray")
 COOKIE = "lights_session"
 ITER = 240_000
@@ -65,14 +67,7 @@ class Auth:
             self._mtime = m
 
     def _save(self):
-        tmp = self.path.with_suffix(".tmp")
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(self.data, f, indent=1)
-        os.replace(tmp, self.path)
-        try:
-            os.chmod(self.path, 0o600)
-        except OSError:
-            pass
+        write_json(self.path, self.data, mode=0o600, indent=1)
         self._mtime = self.path.stat().st_mtime
 
     def refresh(self):
