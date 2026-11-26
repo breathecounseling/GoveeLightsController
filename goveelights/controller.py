@@ -255,6 +255,7 @@ class Controller:
         self.weather: dict = {}
         self.games: dict = {}                       # "league:team" -> latest game info
         self._pending: list = []                    # delayed celebrations [(at, kind, colors)]
+        self._last_td: dict = {}                    # "league:team" -> when its last touchdown was seen
         self._events_done: set = set()
         self._last_reminder = time.time()   # no "days to go" reminder the moment it starts
         self._forced_weather: dict = {}             # test overlays {kind: until}
@@ -825,6 +826,9 @@ class Controller:
         owns = (it.get("show") or {}).get("owns")
         return bool(owns) and owns - self.ANCHOR_WINDOW <= now < owns + self.OWNS_AFTER
 
+    WIN_HOLD_S = 3600.0          # a win while the lights are off waits this long for lights-on
+    EXTRA_POINT_S = 300.0        # a 1-2 point update this soon after our touchdown is its extra point
+
     def _pending_tick(self, now: float, force_live: bool = False):
         """Start the delayed celebrations that are due. A running show pauses for one and
         then carries on; a pinned moment (New Year's) holds them until it is over."""
@@ -837,7 +841,9 @@ class Controller:
                 self._pending.remove(item)
                 _, kind, colors = item
                 d, secs = shows.celebration(kind, colors)
-                self.start_interrupt(d, secs, d["name"], force_live=force_live, resume_show=True)
+                if (not self.start_interrupt(d, secs, d["name"], force_live=force_live, resume_show=True)
+                        and kind == "win" and not self.engine.live and now - item[0] < self.WIN_HOLD_S):
+                    self._pending.append(item)        # a win in daylight: celebrate it at lights-on
 
     def _show_owns(self, ts: float) -> bool:
         """A running show has its own countdown pinned to (about) this moment."""
@@ -1344,17 +1350,31 @@ class Controller:
             self.games[key] = {**prev, "error": str(e)}
             return 30 if prev.get("state") == "in" else 300       # one blip mid-game: retry soon
         prev = self.games.get(key)
-        self.games[key] = {**game, "polled": time.time()} if game else {"state": "none", "team": team}
+        now = time.time()
+        self.games[key] = {**game, "polled": now} if game else {"state": "none", "team": team}
         if not game:
             return 1800
         delay = float(self.cfg.data.get("game", {}).get("delay", 30))
-        if prev and prev.get("id") == game["id"] and prev.get("state") in ("in", "post"):
-            delta = game["score"] - prev.get("score", 0)
+        kick = livedata._kickoff(game)
+        # "pre" too: a score already on the board at the first poll after kickoff counts
+        if prev and prev.get("id") == game["id"] and prev.get("state") in ("pre", "in", "post"):
+            delta = game["score"] - int(prev.get("score") or 0)
             if delta > 0 and game["state"] == "in":
-                self._pending.append((time.time() + delay, live.classify(league, delta), game["colors"]))
-            if prev.get("state") == "in" and game["state"] == "post" and game["score"] > game["opp_score"]:
-                self._pending.append((time.time() + delay, "win", game["colors"]))
-        return 15 if game["state"] == "in" else 300
+                kind = live.classify(league, delta)
+                after_td = now - self._last_td.get(key, float("-inf")) <= self.EXTRA_POINT_S
+                if not (kind == "score" and delta <= 2 and after_td and league in ("nfl", "college-football")):
+                    if kind == "touchdown":           # (the kick or two-point try after it is part of it)
+                        self._last_td[key] = now
+                    self._pending.append((now + delay, kind, game["colors"]))
+            # a win, unless it is old news (the PC slept through the game and woke a day later)
+            if (prev.get("state") == "in" and game["state"] == "post" and game["score"] > game["opp_score"]
+                    and (kick is None or now - kick <= livedata.KICKOFF_MAX)):
+                self._pending.append((now + delay, "win", game["colors"]))
+        if game["state"] == "in":
+            return 15
+        if game["state"] == "pre" and kick is not None and -3 * 3600 < now - kick and kick - now <= 600:
+            return 60                                 # kickoff is close (or late): don't miss the start
+        return 300
 
     SCOREBOARD_FRESH = 120.0        # an in-progress game polled longer ago than this is not shown
 

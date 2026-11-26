@@ -429,8 +429,11 @@ def _build(ctl, now: datetime, password_set) -> dict:
                 games_out.append({"team": v.get("team", team), "state": v.get("state"), "text": txt,
                                   "kickoff": kick.isoformat(timespec="minutes")})
                 if v.get("state") == "pre" and kick >= now:
+                    lit = bool(g.get("when_lights_off")) or bool(prog and on <= kick < off)
                     at(kick, f"Kickoff: {v.get('team', team)} vs {v.get('opponent', '?')}", "game",
-                       "celebrations when they score")
+                       "celebrations when they score" if lit else
+                       "the lights are off then: no score celebrations (a win waits up to an hour for "
+                       "lights-on; Game day → Celebrate even when the lights are off)")
             elif v.get("error") and not v.get("id"):
                 games_out.append({"team": team, "state": "error", "text": "couldn't reach the scores"})
             elif (kick and v.get("state") == "pre" and now < kick
