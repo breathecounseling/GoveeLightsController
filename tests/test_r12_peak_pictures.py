@@ -131,6 +131,31 @@ class PeakPicturePresets(unittest.TestCase):
                     cols = sc.render(t, L)
                     self.assertTrue(all(0.0 <= c <= 1.0 for px in cols for c in px))
 
+    def test_apex_follows_the_brightness_sliders(self):
+        # the star's and the ornament's top bulb (over the zigzag) dims with Picture
+        # brightness, and goes dark with the trim at 0 ("0 = dark")
+        from goveelights.effects_ext.showpieces import _apex
+        L = layout(HOUSE if HOUSE.exists() else EXAMPLE)
+        idx = list(range(L.n))
+        top = _apex(L, idx, 1)
+        self.assertTrue(top)
+        for s in ("star", "ornament"):
+            with self.subTest(style=s):
+                def at(**kw):
+                    d = {"layers": [{"effect": "peak_picture", "params": dict(style=s, **kw)}]}
+                    return render(d, L, 5)[-1][top[0]]
+                full = at(level=1.0, trim_level=0.7)
+                dim = at(level=0.2, trim_level=0.7)
+                self.assertLessEqual(max(dim), max(full) * 0.2 + 1e-6)
+                self.assertGreater(max(dim), 0.0)
+                self.assertEqual(max(at(level=0.2, trim_level=0)), 0.0)
+
+    def test_present_only_slider_says_so(self):
+        spec = {p.name: p for p in EFFECTS["peak_picture"].params}
+        self.assertIn("Present only", spec["cycle"].label)
+        self.assertIn("Peak", EFFECTS["peak_picture"].description)
+        self.assertIn("six rows", EFFECTS["peak_picture"].description)
+
     @unittest.skipUnless(HOUSE.exists(), "the owner's layout is not in this copy")
     @unittest.skipUnless(sys.platform.startswith("linux"), "frame hashes were recorded on Linux")
     def test_owner_frame_hashes(self):
@@ -176,6 +201,15 @@ class PeakPicturesShowAndCalendar(unittest.TestCase):
             self.assertGreaterEqual(len(pics), 2, name)
             self.assertLess(len(pics), len(items) / 2 + 1, "the pictures share the evening")
             self.assertTrue(all(a != b for a, b in zip(items, items[1:])))
+
+    def test_joy_waits_until_it_has_been_seen_from_the_street(self):
+        # JOY stays in the Peak pictures show (last cue) but not in the Christmas Day rotation
+        sch, pls, sts = self._calendar(date(2026, 11, 26))
+        items = [i["preset"] for i in pls["Holiday: Christmas Day"]["items"]]
+        self.assertNotIn("peak-joy", items)
+        self.assertIn("peak-snowman", items)
+        cues = [c["preset"] for c in shows_builtin.BUILTIN_SHOWS["Peak pictures"]["cues"]]
+        self.assertEqual(cues[-1], "peak-joy")
 
 
 if __name__ == "__main__":

@@ -395,13 +395,15 @@ def _trim(style, i, d, f, T, g, seed):
     Param("trim_level", "number", 0.7, "Trim brightness", 0, 1, 0.01,
           help="the eaves, porch and garage: a trim that goes with the picture (0 = dark)"),
     Param("speed", "number", 1.0, "Animation speed", 0.25, 3, 0.05),
-    Param("cycle", "number", 18, "Present opens every (s)", 8, 60, 1,
-          help="present: the time to untie, open, shine and wrap again"),
+    Param("cycle", "number", 18, "Present only: opens every (s)", 8, 60, 1,
+          help="only used by the present: the time to untie, open, shine and wrap again"),
     Param("seed", "int", 8, "Seed", 0, 9999, 1),
 ], "The Peak as a little picture screen for December: a wreath with a bow, a snowman, a "
    "gingerbread house, a present that unwraps itself, a winter star, a swinging ornament, "
    "Rudolph with his blinking nose, or JOY. Everything else in the target (the eaves, porch, "
-   "garage) gets a trim that goes with the picture. Leave the target as the whole house.",
+   "garage) gets a trim that goes with the picture. Leave the target as the whole house. "
+   "Made for a Peak with six rows of zigzag; on a different zigzag the picture still "
+   "lights but may look squashed or cut off.",
    group="Scenes")
 def peak_picture(t, ctx, P, st):
     L = ctx.layout
@@ -469,6 +471,7 @@ def peak_picture(t, ctx, P, st):
     if tl > 0:
         for i, d, f in geo["rest"]:
             frame[i] = _sc(_trim(style, i, d, f, T, g, seed), tl)
-    for i in _apex(L, idx, 1) if style in ("star", "ornament") and cv["rest"] else []:
-        frame[i] = (1.0, 0.95, 0.8) if style == "star" else _sc(GOLD, 1.0)
+    if tl > 0 and style in ("star", "ornament") and cv["rest"]:
+        for i in _apex(L, idx, 1):                 # the bulb crowning the picture
+            frame[i] = _sc((1.0, 0.95, 0.8) if style == "star" else GOLD, lvl)
     return _clamp(frame, idx)
