@@ -1,0 +1,16 @@
+{
+  "name": "Give thanks",
+  "tags": ["Holiday", "Thanksgiving", "Text"],
+  "layers": [
+    {
+      "effect": "candlelight",
+      "params": {"level": 0.6, "waver": 0.25, "swell_every": 0}
+    },
+    {
+      "effect": "text",
+      "target": "Peak",
+      "params": {"text": "GIVE THANKS", "colors": ["#ffb000", "#ff4a00"], "color_mode": "words",
+                 "background": "#1a0400", "speed": 4.0, "size": 1.4, "sparkle": 0.15, "border": "glow", "border_color": "#ff7a10"}
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "name": "Orange crush",
+  "tags": ["Sports", "Game day"],
+  "layers": [
+    {
+      "effect": "candy_cane",
+      "target": "all",
+      "params": {"colors": ["#ff4a00", "#1a40ff"], "width": 5, "speed": 6, "blend": 0.15}
+    },
+    {
+      "effect": "fan",
+      "target": "Whole front gable",
+      "params": {"style": "sunburst", "colors": ["#ff4a00"], "ray2": "#1a40ff", "hub": "#ffffff",
+                 "feathers": 7, "speed": 1.0, "intro": 2.5, "level": 0.95, "glow": "#1a40ff", "glow_level": 0.6}
+    },
+    {
+      "effect": "sparkle",
+      "blend": "add",
+      "opacity": 0.6,
+      "params": {"rate": 6, "decay": 0.12}
+    }
+  ]
+}

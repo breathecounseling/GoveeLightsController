@@ -1,0 +1,11 @@
+{
+  "name": "Sleigh grand tour",
+  "tags": ["Holiday", "Christmas"],
+  "layers": [
+    {
+      "effect": "sleigh_tour",
+      "params": {"speed": 14, "background": "#001278", "stars": 1.1, "sparkle": 1.6, "trail": 3.0,
+                 "trail_level": 0.75, "dust": 0.6}
+    }
+  ]
+}

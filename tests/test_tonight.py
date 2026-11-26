@@ -25,7 +25,7 @@ from goveelights.controller import PresetStore  # noqa: E402
 
 ALL_IDS = [p["id"] for p in PresetStore(Path("presets")).list()]
 HOLIDAY = ("valentines", "st-patricks", "easter", "july-4th", "thanksgiving", "halloween-", "broncos-game-day",
-           "winter-elegance", "spring-", "summer-")
+           "winter-elegance", "spring-", "summer-", "turkey-", "harvest-", "gratitude-", "text-give-thanks")
 IDS = [i for i in ALL_IDS if not i.startswith(HOLIDAY)]     # the core looks, without the holiday track
 SHOWS = list(shows_builtin.BUILTIN_SHOWS)
 TEAMS = [{"league": "nfl", "team": "DEN"}]                  # the team with its own game-day look
@@ -115,7 +115,9 @@ class CalendarTests(_Denver, unittest.TestCase):
         progs = {r["name"]: r["program"] for r in c["rules"]}
         self.assertEqual(progs["Valentine's week"], {"playlist": "Holiday: Valentine's"})
         self.assertEqual(progs["July 4th week"], {"playlist": "Holiday: July 4th"})
-        self.assertEqual(progs["Thanksgiving"]["evolve"], "thanksgiving-harvest")
+        self.assertEqual(progs["Thanksgiving"], {"playlist": "Holiday: Thanksgiving"})
+        tg = [i["preset"] for i in c["playlists"]["Holiday: Thanksgiving"]["items"]]
+        self.assertEqual(tg[:2], ["turkey-fan", "thanksgiving-harvest"])
         self.assertEqual(progs["Easter week"]["evolve"], "easter-pastels")
         self.assertEqual(progs["Broncos Sundays"]["evolve"], "broncos-game-day")
         hall = [i["preset"] for i in c["playlists"]["Holiday: Halloween"]["items"]]
@@ -161,7 +163,7 @@ class CalendarTests(_Denver, unittest.TestCase):
         self.assertEqual(st3, st2)
         self.assertEqual(len(sch2["rules"]), n)
         self.assertEqual(st3[0], sts[0])
-        self.assertEqual(sum(1 for s in st3 if s.get("calendar")), 2)
+        self.assertEqual(sum(1 for s in st3 if s.get("calendar")), 4)
         self.assertIn("Mine", pls2)
         stripped = cal.strip(sch2, pls2, st3)
         self.assertEqual(stripped[0]["rules"], user)
@@ -418,7 +420,11 @@ class ApiTests(_Denver, unittest.TestCase):
         self.assertEqual([s["name"] for s in pv["shadows"]], ["Christmas", "Halloween"])
         self.assertEqual(pv["rules"][0]["name"], "Thanksgiving")              # date order: on now (26 Nov 2026)
         self.assertTrue(pv["rules"][0]["now"])
-        self.assertEqual({s["show"] for s in pv["showtimes"]}, {"Santa's coming", "New Year's Eve countdown"})
+        self.assertEqual({s["show"] for s in pv["showtimes"]}, {"Santa's coming", "New Year's Eve countdown",
+                                                               "Thanksgiving tonight", "Christmas on the roofline"})
+        xm = next(s for s in pv["showtimes"] if s["show"] == "Christmas on the roofline")
+        self.assertEqual(xm["dates"], "Nov 27 – Dec 23, Dec 25 – Dec 30")
+        self.assertEqual(xm["time"], "6:00 pm–9:00 pm")
         res = post("calendar/apply", {"disable": [0], "enable": True})
         self.assertTrue(res["ok"])
         saved = json.loads(Path(r.tmp, "cfg.json").read_text())
@@ -431,7 +437,7 @@ class ApiTests(_Denver, unittest.TestCase):
         self.assertIn("Holiday: Christmas", saved["playlists"])
         self.assertIn("Christmas", saved["playlists"])                       # the user's playlist stays
         self.assertEqual(saved["showtimes"][0], {"show": "Christmas show", "from": "18:00", "to": "18:00"})
-        self.assertEqual(len(saved["showtimes"]), 3)
+        self.assertEqual(len(saved["showtimes"]), 5)
         t = get("tonight")
         self.assertEqual(t["program_why"], "holiday calendar: Thanksgiving")
         self.assertIn("thanksgiving", t["headline"].lower())
@@ -439,7 +445,7 @@ class ApiTests(_Denver, unittest.TestCase):
         res2 = post("calendar/apply", {})                                     # a second tap
         saved2 = json.loads(Path(r.tmp, "cfg.json").read_text())
         self.assertEqual(saved2["schedule"]["rules"], sch["rules"])
-        self.assertEqual(len(saved2["showtimes"]), 3)
+        self.assertEqual(len(saved2["showtimes"]), 5)
         self.assertEqual(res2["rules"], res["rules"])
         self.assertEqual(post("calendar/remove", {})["reenabled"], ["Christmas"])
         saved3 = json.loads(Path(r.tmp, "cfg.json").read_text())

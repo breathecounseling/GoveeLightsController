@@ -1,0 +1,12 @@
+{
+  "name": "Hail Mary",
+  "tags": ["Sports", "Game day"],
+  "layers": [
+    {
+      "effect": "falling_star",
+      "params": {"every": 4, "speed": 16, "tail": 10, "head": "#ffa060", "tail_color": "#ff4a00",
+                 "burst_colors": ["#ff4a00", "#ffffff", "#1a40ff"], "burst": 1.4, "sparks": 1.5,
+                 "background": "#000a48", "stars": 0.3, "seed": 21}
+    }
+  ]
+}

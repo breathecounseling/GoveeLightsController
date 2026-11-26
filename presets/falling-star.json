@@ -1,0 +1,10 @@
+{
+  "name": "Falling star",
+  "tags": ["Holiday", "Christmas"],
+  "layers": [
+    {
+      "effect": "falling_star",
+      "params": {"every": 4.5, "background": "#001070", "stars": 1.0, "burst": 1.2}
+    }
+  ]
+}

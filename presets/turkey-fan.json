@@ -1,0 +1,15 @@
+{
+  "name": "Turkey fan",
+  "tags": ["Holiday", "Thanksgiving"],
+  "layers": [
+    {
+      "effect": "candlelight",
+      "params": {"color": "#ff8a30", "color2": "#ff5a00", "level": 0.55, "waver": 0.3, "swell_every": 0, "star": "#ff9a40", "seed": 4}
+    },
+    {
+      "effect": "fan",
+      "target": "Whole front gable",
+      "params": {"style": "turkey", "intro": 5, "speed": 0.5, "glow": "#ffa040", "glow_level": 0.5}
+    }
+  ]
+}

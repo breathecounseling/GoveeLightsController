@@ -1754,9 +1754,16 @@ class Controller:
             if st["from"] != spec["from"]:
                 was = tonight.fmt_time(datetime.combine(today, sched._hm(spec["from"])))
                 about = (about.replace(was, when) + f" (moved from {was}: your lights come on after it)").strip()
-            sts.append({"show": st["show"], "date": st.get("date", ""), "time": when,
-                        "dates": calendar_builtin.fmt_range(calendar_builtin.next_range(
-                            {"from": st["date"], "to": st["date"]}, today)) if st.get("date") else "every day",
+            if st.get("date"):
+                dates = calendar_builtin.fmt_range(calendar_builtin.next_range(
+                    {"from": st["date"], "to": st["date"]}, today))
+            elif st.get("dates"):
+                dates = calendar_builtin.fmt_dates(st["dates"], today)
+                if st.get("from") != st.get("to"):
+                    when += "–" + tonight.fmt_time(datetime.combine(today, sched._hm(st["to"])))
+            else:
+                dates = "every day"
+            sts.append({"show": st["show"], "date": st.get("date", ""), "time": when, "dates": dates,
                         "about": about, "forced": not st.get("only_when_on", True)})
         return {"rules": rules, "showtimes": sts, "skipped": cal["skipped"],
                 "playlists": {n: names.program_detail({"playlist": n}) for n in cal["playlists"]},
