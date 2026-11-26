@@ -602,6 +602,8 @@ def fizz(t, p, P):
     Param("density", "number", 0.06, "Fireflies per bulb /s", 0.005, 1, 0.005),
     Param("life", "number", 2.2, "Glow length (s)", 0.3, 8, 0.1),
     Param("drift", "number", 2.0, "Drift (bulbs)", 0, 8, 0.5),
+    Param("snap", "number", 0.0, "Snap on", 0, 1, 0.05,
+          help="0 = fade in as slowly as out; 1 = flash on almost at once, then fade slowly"),
     Param("seed", "int", 12, "Seed", 0, 9999, 1),
 ], "Soft glowing points that fade in, drift a little and fade out.")
 def fireflies(t, p, P):
@@ -618,7 +620,9 @@ def fireflies(t, p, P):
         f = age / P["life"]
         if f > 1:
             continue
-        env = math.sin(math.pi * f) ** 2
+        pk = 0.5 - 0.42 * P["snap"]                       # when the glow peaks (0.5: symmetric)
+        env = (math.sin(0.5 * math.pi * f / pk) if f < pk
+               else math.sin(0.5 * math.pi * (1.0 - f) / (1.0 - pk))) ** 2
         center = j + (hash01(j, k, P["seed"], 2) - 0.5) * 2 * P["drift"] * f
         v = env * max(0.0, 1 - abs(p.i - center))
         if v > 0:
@@ -648,6 +652,13 @@ def paint(t, p, P):
     return c if c is not None else P["background"]
 
 
+def _lubdub(u: float) -> float:
+    """A heartbeat over one period (0..1): a strong beat, a softer one just after, rest."""
+    a = math.exp(-((u - 0.06) / 0.05) ** 2)
+    b = 0.7 * math.exp(-((u - 0.26) / 0.06) ** 2)
+    return max(a, b)
+
+
 @effect("picture", "Picture", [
     Param("image", "choice", "tree", options=list(PICTURES)),
     Param("colors", "colors", [], help="leave empty for the picture's own colours"),
@@ -655,9 +666,14 @@ def paint(t, p, P):
     Param("width", "number", 1.0, "Width", 0.4, 1.5, 0.05),
     Param("pulse", "number", 0.0, "Pulse", 0, 1, 0.05),
     Param("period", "number", 2.0, "Pulse speed (s)", 0.3, 10, 0.1),
+    Param("beat", "number", 0.0, "Heartbeat", 0, 1, 0.05,
+          help="the picture swells and shrinks from its centre, lub-dub, once per pulse period"),
 ], "A small picture (tree, star, heart, pumpkin…) drawn on the zigzag. Target the Peak.")
 def picture(t, p, P):
-    ch = pic_sample(PICTURES[P["image"]], p.rnx, p.rny, P["width"])
+    w = P["width"]
+    if P["beat"] > 0:
+        w *= 1.0 - P["beat"] * 0.3 * (1.0 - _lubdub((t / P["period"]) % 1.0))
+    ch = pic_sample(PICTURES[P["image"]], p.rnx, p.rny, w)
     if ch == ".":
         return P["background"]
     cols = P["colors"] or [hex_to_rgb(h) for h in PICTURE_COLORS.get(P["image"], ["#ffffff"])]

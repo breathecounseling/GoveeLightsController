@@ -186,6 +186,15 @@ def _sn_setup(ctx, st, P):
     # the highest rooflines get nearly all the shooting stars; lower ones the odd one
     hi = max((s[2] for s in sky), default=0.0)
     st["tracks"] = [(pth, ap, w * math.exp(-(hi - top) / 2.0)) for pth, ap, top, w in sky]
+    # ---- the zigzag (if any): some shooting stars can streak diagonally down across its rows
+    zz = [i for row in _zigzag(L, idx) for i in row]
+    st["zz"] = [(i, px[i].x, px[i].y) for i in zz]
+    if zz:
+        ys = [px[i].y for i in zz]
+        top = max(ys)
+        crown = [px[i].x for i in zz if px[i].y >= top - 0.35]
+        st["zz_box"] = (sum(crown) / len(crown), top, min(ys),
+                        (max(px[i].x for i in zz) - min(px[i].x for i in zz)) / 2.0)
     st["meteors"] = []                                 # the tracks changed: old meteors are void
 
 
@@ -204,7 +213,23 @@ def _sn_stars(st, idx, share, seed):
 
 def _sn_spawn(st, rng, P, clock, delay=0.0, avoid=None):
     tracks = st["tracks"]
-    if not tracks or len(st["meteors"]) >= SN_MAX_METEORS:
+    if len(st["meteors"]) >= SN_MAX_METEORS:
+        return None
+    # the rng is only drawn on for this when the option is on, so other paths never change
+    if P["zigzag"] > 0 and st.get("zz") and (not tracks or rng.random() < P["zigzag"]):
+        ax, top, bot, half = st["zz_box"]
+        d = 1 if rng.random() < 0.5 else -1
+        x0 = ax - d * (0.15 + 0.35 * rng.random()) * half      # start up near the apex ...
+        dx, dy = d * 1.0, -(0.38 + 0.3 * rng.random())          # ... and streak down across the rows
+        n = math.hypot(dx, dy)
+        ux, uy = dx / n, dy / n
+        ln = 1.5 * (top - bot + 0.8) / -uy                      # still burning as it leaves the bottom row
+        m = {"k": -1, "x0": x0, "y0": top + 0.4, "ux": ux, "uy": uy, "len": max(3.0, ln),
+             "v": P["shooting_speed"] * (0.55 + 0.2 * rng.random()),
+             "b": 0.9 + 0.1 * rng.random(), "t0": clock + delay, "apex": None}
+        st["meteors"].append(m)
+        return m
+    if not tracks:
         return None
     tot = sum(w for _, _, w in tracks)
     r, k = rng.random() * tot, 0
@@ -268,6 +293,9 @@ def _sn_env(x: float, length: float) -> float:
           help="the tail turns from the head colour to this as it fades; keep it pale so it reads"),
     Param("doubles", "number", 0.25, "Doubles", 0, 1, 0.05,
           help="chance that a second shooting star follows the first moments later"),
+    Param("zigzag", "number", 0.0, "Across the zigzag", 0, 1, 0.05,
+          help="share of shooting stars that streak diagonally down across the zigzag rows instead "
+               "of along the roofline (when the target has a zigzag)"),
     Param("seed", "int", 3, "Seed", 0, 9999, 1, help="which bulbs are stars, and the shooting stars' paths"),
 ], "A calm deep-blue night over the house: sparse stars twinkle softly, each at its own pace, "
    "while the sky drifts slowly between blue and indigo. Every few seconds a shooting star "
@@ -335,6 +363,10 @@ def starry_night(t, ctx, P, st):
         hc, tc, tail = P["shooting_color"], P["tail_color"], P["tail"]
         keep = []
         for m in st["meteors"]:
+            if m["k"] < 0:
+                if _sn_diag(frame, st, m, clock, hc, tc, tail):
+                    keep.append(m)
+                continue
             if m["k"] >= len(st["tracks"]):
                 continue
             pth = st["tracks"][m["k"]][0]
@@ -371,6 +403,44 @@ def starry_night(t, ctx, P, st):
                 frame[i] = (max(a[0] * k, c[0]), max(a[1] * k, c[1]), max(a[2] * k, c[2]))
         st["meteors"] = keep[-SN_MAX_METEORS:]
     return _clamp(frame, idx)
+
+
+def _sn_diag(frame, st, m, clock, hc, tc, tail) -> bool:
+    """A shooting star streaking diagonally down across the zigzag rows: every zigzag bulb
+    near the line behind the head lights, so the streak reads across several rows.
+    Returns False once it has burnt out."""
+    age = clock - m["t0"]
+    x = age * m["v"]
+    ln, mb = m["len"], m["b"]
+    if x > ln + tail + 2.0:
+        return False
+    if age <= 0:
+        return True
+    ux, uy = m["ux"], m["uy"]
+    hx, hy = m["x0"] + ux * x, m["y0"] + uy * x
+    e_head = _sn_env(x, ln) * mb
+    for i, px_, py_ in st["zz"]:
+        rx, ry = px_ - hx, py_ - hy
+        dd = -(rx * ux + ry * uy)                   # distance behind the head (negative: ahead)
+        if dd < -SN_HEAD_W or dd > tail or dd > x:
+            continue
+        perp = abs(rx * uy - ry * ux)
+        if perp >= 0.85:
+            continue
+        g = min(1.0, 1.6 * (1.0 - perp / 0.85))
+        if dd < 0:
+            w = e_head * (1.0 + dd / SN_HEAD_W) ** 2 * g
+            c = (hc[0] * w, hc[1] * w, hc[2] * w)
+        else:
+            wh = e_head * math.exp(-dd / 0.8) * g
+            u = dd / tail
+            wt = _sn_env(x - dd, ln) * mb * (1.0 - u) * 0.9 * g
+            tcol = lerp(hc, tc, min(1.0, u))
+            c = (hc[0] * wh + tcol[0] * wt, hc[1] * wh + tcol[1] * wt, hc[2] * wh + tcol[2] * wt)
+        a = frame[i]
+        k = 1.0 - 0.6 * min(1.0, max(c) * 1.5)
+        frame[i] = (max(a[0] * k, c[0]), max(a[1] * k, c[1]), max(a[2] * k, c[2]))
+    return True
 
 
 # ====================================================================== gift wrap

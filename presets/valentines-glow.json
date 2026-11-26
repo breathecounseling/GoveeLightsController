@@ -7,7 +7,7 @@
   "layers": [
     {
       "effect": "gradient",
-      "opacity": 0.6,
+      "opacity": 0.85,
       "params": {
         "colors": [
           "#ff0030",
@@ -20,6 +20,22 @@
       }
     },
     {
+      "effect": "wave",
+      "target": [
+        "Eaves",
+        "Lower roofline"
+      ],
+      "blend": "lighten",
+      "opacity": 0.9,
+      "params": {
+        "color": "#ff40a0",
+        "color2": "#000000",
+        "wavelength": 45,
+        "sharpness": 1.5,
+        "speed": 3
+      }
+    },
+    {
       "effect": "picture",
       "target": "Peak",
       "params": {
@@ -27,9 +43,10 @@
         "colors": [
           "#ff0018"
         ],
-        "background": "#701048",
-        "pulse": 0.25,
-        "period": 3.5
+        "background": "#260070",
+        "width": 0.95,
+        "beat": 1.0,
+        "period": 1.1
       }
     },
     {
