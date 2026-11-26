@@ -152,6 +152,18 @@ def rule_matches(r: dict, d: date) -> bool:
     return False
 
 
+def showtime_on_night(st: dict, night: date) -> bool:
+    """Does a showtime run on the evening that began on `night`? Its date (an "MM-DD"
+    or a list) wins over its weekdays (the UI hides the weekdays once a date is set).
+    The after-midnight part of a window that crosses midnight belongs to that evening."""
+    dates = st.get("date") or st.get("dates")
+    dates = [dates] if isinstance(dates, str) else dates if isinstance(dates, list) else None
+    if dates:
+        return night.strftime("%m-%d") in dates
+    days = st.get("days") if isinstance(st.get("days"), list) else None
+    return not days or night.weekday() in days
+
+
 def matching_rule(d: date, sch: dict) -> dict | None:
     return next((r for r in sch.get("rules", []) if rule_matches(r, d)), None)
 

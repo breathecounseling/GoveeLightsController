@@ -162,21 +162,15 @@ def showtime_times(st: dict, start: datetime, end: datetime) -> list[datetime]:
     lo, hi = a.hour * 60 + a.minute, b.hour * 60 + b.minute
     mins = [(lo + k * every) % 1440 for k in range(1440 // every + 1)
             if k * every <= ((hi - lo) % 1440)]
-    dates = st.get("date") or st.get("dates")
-    dates = [dates] if isinstance(dates, str) else dates if isinstance(dates, list) else None
-    days = st.get("days") if isinstance(st.get("days"), list) else None
     out = []
-    d = start.date() - timedelta(days=1)
+    d = start.date() - timedelta(days=1)              # d is the evening each firing belongs to
     while d <= end.date():
-        for m in sorted(set(mins)):
-            t = datetime(d.year, d.month, d.day, m // 60, m % 60).astimezone()
-            if not (start <= t < end):
-                continue
-            if days and t.weekday() not in days:
-                continue
-            if dates and t.strftime("%m-%d") not in dates:
-                continue
-            out.append(t)
+        if sched.showtime_on_night(st, d):
+            for m in sorted(set(mins)):
+                day = d + timedelta(days=1) if lo > hi and m < lo else d   # after midnight: the next day
+                t = datetime(day.year, day.month, day.day, m // 60, m % 60).astimezone()
+                if start <= t < end:
+                    out.append(t)
         d += timedelta(days=1)
     return sorted(set(out))
 
@@ -440,7 +434,7 @@ def _build(ctl, now: datetime, password_set) -> dict:
     else:
         plan["weather"] = {"enabled": False}
     v = getattr(ctl, "vcfg", None) or cfg.get("visitor") or {}
-    plan["visitor"] = {"enabled": bool(v.get("enabled")), "only_when_on": v.get("only_when_on", True) is not False}
+    plan["visitor"] = {"enabled": bool(v.get("enabled"))}
 
     dm = sch.get("dim") or {}
     plan["dim"] = None

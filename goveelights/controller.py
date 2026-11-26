@@ -593,11 +593,7 @@ class Controller:
             lo, hi = a.hour * 60 + a.minute, b.hour * 60 + b.minute
             # the after-midnight part of a window that crosses midnight belongs to the evening it began
             night = now - timedelta(days=1) if lo > hi and mins <= hi else now
-            dates = stt.get("date") or stt.get("dates")      # optional "MM-DD" (or a list): e.g. only on 12-31
-            if dates:                                       # a date wins over weekdays (the UI hides them)
-                if night.strftime("%m-%d") not in ([dates] if isinstance(dates, str) else dates):
-                    continue
-            elif stt.get("days") and night.weekday() not in stt["days"]:
+            if not sched.showtime_on_night(stt, night.date()):   # optional date(s) "MM-DD", else weekdays
                 continue
             every = max(5, int(stt.get("every", 60)))
             inside = lo <= mins <= hi if lo <= hi else (mins >= lo or mins <= hi)     # may cross midnight
@@ -682,7 +678,7 @@ class Controller:
         return self.cfg.data.setdefault("visitor", {})
 
     def _visitor_on(self) -> bool:
-        return bool(self.engine.live and not self.engine.blackout or not self.vcfg.get("only_when_on", True))
+        return bool(self.engine.live and not self.engine.blackout)     # a pick never switches the house on
 
     def visitor_state(self, client: str = "") -> dict:
         v = self.vcfg
@@ -752,7 +748,7 @@ class Controller:
         self._vprune(now)
         if pid not in v.get("presets", []):
             raise ValueError("that one isn't available")
-        if v.get("only_when_on", True) and not self.engine.live or self.engine.blackout:
+        if not self._visitor_on():                       # it would only wait, unseen, and expire
             raise ValueError("The lights are off right now. Come back this evening!")
         cd = float(v.get("cooldown", 60))
         if now - self._vlast.get(client, 0) < cd:
@@ -1442,13 +1438,18 @@ class Controller:
                           "program_detail": names.program_detail(r["program"]),
                           "about": cal["notes"].get(r["name"], ""), "off_time": r.get("off_time"), "priority": k})
         rules.sort(key=lambda x: (x["start"] or "9999", x["priority"]))
-        sts = [{"show": st["show"], "date": st.get("date", ""), "time": tonight.fmt_time(
-                    datetime.combine(today, sched._hm(st["from"]))),
-                "dates": calendar_builtin.fmt_range(calendar_builtin.next_range(
-                    {"from": st["date"], "to": st["date"]}, today)) if st.get("date") else "every day",
-                "about": cal["notes"].get("show:" + st["show"], ""), "forced": not st.get("only_when_on", True)}
-               for st in cal["showtimes"]]
-        merged = calendar_builtin.merge(cal, sch, cfg.get("playlists") or {}, [], ids)[0]
+        merged, _, fitted = calendar_builtin.merge(cal, sch, cfg.get("playlists") or {}, [], ids)
+        sts = []
+        for spec, st in zip(cal["showtimes"], fitted):     # the times "Add" will install (moved after lights-on)
+            about = cal["notes"].get("show:" + st["show"], "")
+            when = tonight.fmt_time(datetime.combine(today, sched._hm(st["from"])))
+            if st["from"] != spec["from"]:
+                was = tonight.fmt_time(datetime.combine(today, sched._hm(spec["from"])))
+                about = (about.replace(was, when) + f" (moved from {was}: your lights come on after it)").strip()
+            sts.append({"show": st["show"], "date": st.get("date", ""), "time": when,
+                        "dates": calendar_builtin.fmt_range(calendar_builtin.next_range(
+                            {"from": st["date"], "to": st["date"]}, today)) if st.get("date") else "every day",
+                        "about": about, "forced": not st.get("only_when_on", True)})
         return {"rules": rules, "showtimes": sts, "skipped": cal["skipped"],
                 "playlists": {n: names.program_detail({"playlist": n}) for n in cal["playlists"]},
                 "shadows": calendar_builtin.shadows(sch, cal, today),

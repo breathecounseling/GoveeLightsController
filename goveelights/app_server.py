@@ -23,6 +23,7 @@ from .fx import FX
 from .modulation import SHAPES
 from .palettes import BUILTIN, all_palettes, categories
 from .scene import BLEND_INFO, BLENDS
+from . import calendar_builtin
 from . import schedule as sched
 from . import shows_builtin
 
@@ -509,6 +510,8 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                 validate_schedule(merged)
                 with cfg.lock:
                     cfg.data["schedule"] = {**cfg.data.get("schedule", {}), **b["schedule"]}
+                    if cfg.data.get("showtimes"):          # the calendar's Santa show stays after lights-on
+                        cfg.data["showtimes"] = calendar_builtin.refit(cfg.data["showtimes"], cfg.data["schedule"])
                     cfg.save()
                 ctl.resume_schedule()
                 return {"ok": True}

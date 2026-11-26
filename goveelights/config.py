@@ -31,7 +31,7 @@ DEFAULTS = {
     "showtimes": [],
     "visitor": {"enabled": False, "presets": ["festive-glitter", "candy-cane", "fireworks", "winter-sparkle",
                                              "rainbow-roofline", "glitter-ball"],
-                "seconds": 60, "cooldown": 90, "max_queue": 5, "sparkle": True, "only_when_on": True,
+                "seconds": 60, "cooldown": 90, "max_queue": 5, "sparkle": True,
                 "title": "Pick the lights!", "message": "Happy holidays!"},
     "zones": [],
     "playlists": {

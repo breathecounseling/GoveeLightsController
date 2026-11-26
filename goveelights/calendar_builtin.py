@@ -235,6 +235,13 @@ def _fit_showtime(st: dict, sch: dict, today: date | None = None) -> dict:
     return st
 
 
+def refit(showtimes: list, sch: dict, today: date | None = None) -> list:
+    """The calendar's one-shot showtimes moved again for a changed schedule (a later on
+    time would otherwise leave Santa's show due while the lights are still off)."""
+    return [_fit_showtime(copy.deepcopy(st), sch, today) if isinstance(st, dict) and st.get(TAG) else st
+            for st in showtimes or []]
+
+
 def reenable(sch: dict) -> list[str]:
     """Switch back on the user's rules that installing the calendar switched off."""
     back = []
