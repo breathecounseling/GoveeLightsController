@@ -80,6 +80,24 @@ section{display:none}section.on{display:block}
 .bcw .bcsw{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
 .bcw .bcsw button{min-height:64px;font-weight:700;font-size:17px}
 .bcw .bcsw button.on{outline:3px solid var(--blue)}
+/* Match the runs */
+.mt button,.mt summary{min-height:44px}
+.mtsw{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px}
+.mtsw button{display:flex;align-items:center;gap:7px;padding:6px 8px;font-size:13px;min-width:0}
+.mtsw button i{flex:none;width:18px;height:18px;border-radius:50%;border:1px solid #0006}
+.mtsw button.on{background:#1e3a5f;border-color:var(--blue)}
+.mtbar{display:flex;gap:4px;height:22px;margin:2px 0 4px}
+.mtbar span{flex:1;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#000c;font-weight:600;overflow:hidden;white-space:nowrap}
+.mtr{border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px;background:var(--p2)}
+.mtr .hd2{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.mtr .hd2 i{flex:none;width:22px;height:22px;border-radius:50%;border:1px solid #0006}
+.mtr .hd2 small{color:var(--dim);font-size:12px}
+.mtr .nb{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.mtr .nb button{font-size:13.5px;padding:6px 8px}
+.mtr details{margin-top:6px}
+.mtr summary{display:flex;align-items:center;font-size:13px;color:var(--dim);cursor:pointer}
+.mtr .knob{grid-template-columns:84px 1fr 44px}
+.mtend{margin-top:4px}
 /* cards */
 .card{background:var(--p1);border:1px solid var(--line);border-radius:var(--r);padding:12px;margin-bottom:12px}
 h2{font-size:15px;margin:2px 0 10px;display:flex;align-items:center;gap:8px}
@@ -500,11 +518,14 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
     <p class="help">Makes 2D effects (ripples, sweeps, pictures, fire rising) line up with the real roofline. The lights blink a code, you film them for ~25 seconds, and your phone works out where every bulb is. Nothing is uploaded.</p>
     <div class="row"><button class="pri grow" onclick="mapWizard()">Start mapping</button><button onclick="post('map/undo').then(r=>r&&(toast(r.restored?'Previous layout restored':'Nothing to undo'), reloadLayout()))">Undo last</button></div>
   </div>
-  <div class="card">
-    <h2>Colour-match the runs</h2>
-    <p class="help">Different runs can tint slightly differently. Show plain white on everything, then lower red, green or blue on any run that looks off until they all match (for example, less blue for a warmer white).</p>
-    <div class="row" style="margin-bottom:8px"><button id="wtBtn" onclick="whiteTest()">Show white on all runs</button></div>
-    <div id="trims"></div>
+  <div class="card mt" id="matchCard">
+    <h2>Match the runs</h2>
+    <p class="help">Runs of different ages can show the same colour a little differently. Pick a colour to show it on every run at once, look from the street, then nudge any run that looks off. Your changes apply to every look and show.</p>
+    <div class="mtsw" id="mtSw"></div>
+    <div class="mtbar" id="mtBar"></div>
+    <p class="help" id="mtNote"></p>
+    <div id="mtRuns"></div>
+    <div class="row wrap mtend"><button id="mtStop" class="grow" onclick="matchStop()">Stop the test</button><button class="grow" onclick="matchResetAll()">Reset all runs</button></div>
   </div>
   <div class="card">
     <h2><span class="sp">Palettes</span><button class="sm" onclick="editPalette(null)">+ New</button></h2>
@@ -681,6 +702,7 @@ function tabTo(t){
   if (t === 'shows') loadTonight();
   if (t === 'holo') loadHolo();
   if (t === 'more'){ loadFourth(); loadBulbs() }
+  else if (MT.on) matchStop();                       // leaving More ends the colour test
 }
 document.querySelectorAll('#nav button').forEach(b => b.onclick = () => tabTo(b.dataset.t));
 function openSheet(title, body){ $('sheetTitle').textContent = title; const sb=$('sheetBody'); sb.innerHTML=''; if (typeof body === 'string') sb.innerHTML = body; else sb.appendChild(body); $('sheet').scrollTop=0; $('sheet').classList.add('on'); $('scrim').classList.add('on') }
@@ -805,7 +827,7 @@ async function refresh(){
   document.querySelectorAll('#palChips .pals .pal').forEach(el => el.classList.toggle('on', el.dataset.p === (s.master.palette||'')));
   const di = s.runs.map(r => `<b>${esc(r.name)}</b><span>${r.visible}/${r.count} ${r.kind === 'wled' ? 'pixels · WLED' : 'bulbs'} · ${esc(r.ip||'no IP')}${r.kind === 'wled' ? ` <button class="sm bad" onclick="removeWled('${esc(r.mac)}','${esc(r.name)}')">Remove</button>` : ''}</span>`).join('');
   if ($('devInfo')._h !== di) $('devInfo').innerHTML = $('devInfo')._h = di;
-  schedStatus(); liveStatus(); drawTrims();
+  schedStatus(); liveStatus(); drawMatch();
   if ($('featStrip')._k !== JSON.stringify(tonightIds(s))) drawFeatured();      // tonight's program changed
   if (document.activeElement !== $('dthEn')) $('dthEn').checked = s.dither !== false;
 }
@@ -822,7 +844,7 @@ const tapGoesLive = s => !!s && !s.live && !s.phone_only && !s.diag_active && !s
 function headerNow(s){
   const p = s.playing, it = s.interrupt, el = $('hdNow'), b = $('stopBtn');
   /* The time left goes in the small line (which has room) so the ellipsis on a long name never hides it. */
-  const name = it ? String(it.label || '').replace(/^Show:\s*/, '') : p ? p.name : (s.live ? 'Nothing playing' : 'Lights off');
+  const name = it ? String(it.label || '').replace(/^Show:\s*/, '') : p ? p.name : (s.live ? (s.match ? 'Colour test' : 'Nothing playing') : 'Lights off');
   if (el.textContent !== name) el.textContent = name;
   const mode0 = s.blackout ? 'blackout' : s.live ? 'live' : 'phone only';
   const sub = it && it.left < 86400 ? fmtS(it.left) + ' left · ' + mode0 : 'House Lights · ' + mode0;
@@ -2438,20 +2460,111 @@ function drawCloud(){
 }
 
 // ------------------------------------------------------------- colour match
-let whiteOn = false;
-let whiteT = null;
-function whiteTest(){ whiteOn = !whiteOn; post('pad', {action:'white', on: whiteOn}); clearInterval(whiteT);
-  if (whiteOn) whiteT = setInterval(() => post('pad', {action:'white', on: true}), 60000);     // server holds it 120 s
-  $('wtBtn').textContent = whiteOn ? 'Stop white test' : 'Show white on all runs'; $('wtBtn').classList.toggle('pri', whiteOn) }
-function drawTrims(){
-  const box = $('trims'); if (!box || box._drawn === JSON.stringify(ST.runs.map(r => r.mac))) return;
-  box._drawn = JSON.stringify(ST.runs.map(r => r.mac)); box.innerHTML = '';
-  ST.runs.forEach(r => { const tr = r.trim || [1,1,1];
-    const el = h(`<div style="margin-bottom:10px"><b style="font-size:13px">${esc(r.name)}</b>${['Red','Green','Blue'].map((c,k) => `<div class="knob"><label>${c}</label><input type="range" min="0.4" max="1" step="0.01" value="${tr[k]}" data-k="${k}"><output>${Math.round(tr[k]*100)}%</output></div>`).join('')}</div>`);
-    const send = debounce(() => post('trim', {mac: r.mac, trim: [...el.querySelectorAll('input')].map(i => +i.value)}), 120);
-    el.querySelectorAll('input').forEach(i => i.oninput = () => { i.nextElementSibling.textContent = Math.round(i.value*100)+'%'; send() });
+/* More -> Match the runs: one test colour on every run (an overlay, so what was playing comes
+   back when it stops), one-tap nudges per run, finer sliders under "Fine-tune". */
+const MT_SW = [['warm','Warm white','#ffb46b'],['cool','Cool white','#ffffff'],['red','Red','#ff0000'],
+               ['green','Green','#00ff00'],['blue','Blue','#0000ff'],['gold','Gold','#ffa000']];
+const MT = {on: null, ping: null, cal: {}};
+const MT_ID = {brightness:1, gain:[1,1,1], gamma:1, fade:0};
+function mtCal(r){ return MT.cal[r.mac] || r.cal || MT_ID }
+/* roughly how this run shows the test colour (the bar and dots), so a nudge visibly lands */
+function mtRgb(hex, c){                               // as the engine does it: gain x brightness, then the run's gamma
+  const v = [1,3,5].map(i => parseInt(hex.substr(i,2),16)/255), k = c.brightness * (1 - (c.fade || 0) / 2);   // fade: the mid-run value
+  return v.map((x,j) => Math.round(255 * Math.min(1, x*c.gain[j]*k) ** c.gamma));
+}
+function mtShade(hex, c){ return 'rgb(' + mtRgb(hex, c).join(',') + ')' }
+/* readable label text on a swatch: dark on light colours, white on deep blue or red */
+function mtInk(hex, c){ const [r,g,b] = mtRgb(hex, c).map(x => (x/255) ** 2.2); return 0.2126*r + 0.7152*g + 0.0722*b > 0.18 ? '#000c' : '#fff' }
+function mtWords(c){
+  const w = [], [r,g,b] = c.gain;
+  if (c.brightness < 0.995) w.push(Math.round(c.brightness*100) + '% bright');
+  if (b < r - 0.005) w.push('warmer'); else if (r < b - 0.005) w.push('cooler');
+  else if (g < 0.995 || r < 0.995) w.push('colour adjusted');
+  if (c.gamma !== 1) w.push('mid-tones ' + (c.gamma > 1 ? 'deeper' : 'lighter'));
+  if (c.fade > 0) w.push('far end evened');
+  return w.length ? w.join(' · ') : 'as it came';
+}
+async function matchColor(key){
+  document.querySelectorAll('#mtSw button').forEach(b => b.classList.toggle('on', b.dataset.k === key));   // show the tap at once
+  const waking = !MT.on && !(ST && ST.live);
+  if (waking) $('mtNote').textContent = 'Switching the lights on… this takes a few seconds.';
+  MT.pend = key;                                     // stays highlighted while the reply is on its way
+  const r = await post('match', {action: MT.on ? 'color' : 'start', color: key}).finally(() => { if (MT.pend === key) MT.pend = null });
+  if (!r) { if (waking) $('mtNote').textContent = ''; drawMatch(true); return }
+  MT.on = r.color; MT.t = Date.now(); clearInterval(MT.ping);
+  MT.ping = setInterval(() => post('match', {action:'ping'}).then(x => { if (x && !x.on) matchEnded() }), 30000);
+  $('mtNote').textContent = r.blackout ? 'Blackout is on, so the lights stay dark. End the blackout to see the colour.'
+    : r.took_lights ? 'The lights were off: they switched on for the test and go off again when you stop.'
+    : 'What was playing comes back when you stop (or by itself after 3 minutes).';
+  drawMatch(true);
+}
+function matchEnded(){ MT.on = null; clearInterval(MT.ping); MT.ping = null; $('mtNote').textContent = ''; drawMatch(true) }
+function matchStop(){ if (!MT.on) return; post('match', {action:'stop'}); matchEnded() }
+async function matchCal(body){
+  const r = await post('calibrate', body); if (!r) return;
+  MT.cal = r.cal; drawMatch(true);
+  if (r.note) toast(r.note);
+}
+function matchResetAll(){ if (confirm('Put every run back to how it came?')) matchCal({reset:'all'}) }
+function drawMatch(force){
+  const box = $('mtRuns'); if (!box || !ST.runs) return;
+  if (!force && ST.match === null && MT.on && Date.now() - (MT.t || 0) > 5000) matchEnded();   // ended on the server (a show began, timed out)
+  if (ST.match && !MT.on) MT.on = ST.match.color;                      // opened on a second phone
+  if (!force) ST.runs.forEach(r => { if (r.cal) MT.cal[r.mac] = r.cal });
+  const shown = MT.pend || MT.on;
+  const sw = MT_SW.find(s => s[0] === (shown || 'warm'));
+  const sig = JSON.stringify([shown, MT.on, ST.runs.map(r => [r.mac, r.name, mtCal(r)])]);
+  if (box._sig === sig) return;
+  $('mtSw').innerHTML = MT_SW.map(([k,n,c]) => `<button data-k="${k}" class="${shown===k?'on':''}" onclick="matchColor('${k}')"><i style="background:${c}"></i>${n}</button>`).join('');
+  $('mtBar').innerHTML = ST.runs.map(r => `<span style="background:${mtShade(sw[2], mtCal(r))};color:${mtInk(sw[2], mtCal(r))}">${esc(r.name)}</span>`).join('');
+  $('mtStop').style.display = MT.on ? '' : 'none';
+  /* mid-drag: just the colours. A rebuild would replace the slider under the finger (iPhones
+     don't focus a range input on touch, so the _drag flag set on pointerdown is what counts). */
+  const dragging = [...box.querySelectorAll('.mtr input')].some(i => i._drag)
+    || (box.contains(document.activeElement) && document.activeElement.type === 'range');
+  if (dragging) {
+    box.querySelectorAll('.mtr').forEach(el => { const r = ST.runs.find(x => x.mac === el.dataset.mac); if (!r) return;
+      el.querySelector('.hd2 i').style.background = mtShade(sw[2], mtCal(r)); el.querySelector('.hd2 small').textContent = `${r.visible} bulbs · ${mtWords(mtCal(r))}` });
+    return;
+  }
+  box._sig = sig;
+  const open = new Set([...box.querySelectorAll('details[open]')].map(d => d.dataset.mac));
+  box.innerHTML = '';
+  ST.runs.forEach(r => { const c = mtCal(r), m = esc(r.mac);
+    const knob = (lab, f, k, lo, hi, st, val, fmt) => `<div class="knob"><label>${lab}</label><input type="range" min="${lo}" max="${hi}" step="${st}" value="${val}" data-f="${f}" data-k="${k}"><output>${fmt(val)}</output></div>`;
+    const pc = v => Math.round(v*100) + '%';
+    const el = h(`<div class="mtr" data-mac="${m}">
+      <div class="hd2"><i style="background:${mtShade(sw[2], c)}"></i><b>${esc(r.name)}</b><small>${r.visible} bulbs · ${esc(mtWords(c))}</small></div>
+      <div class="nb"><button data-n="warmer">A bit warmer</button><button data-n="cooler">A bit cooler</button>
+        <button data-n="brighter">A bit brighter</button><button data-n="dimmer">A bit dimmer</button></div>
+      <details data-mac="${m}" ${open.has(r.mac)?'open':''}><summary>Fine-tune ${esc(r.name)}</summary>
+        ${knob('Brightness','brightness',0,0.3,1,0.01,c.brightness,pc)}
+        ${['Red','Green','Blue'].map((n,k) => knob(n,'gain',k,0.2,1,0.01,c.gain[k],pc)).join('')}
+        ${knob('Mid-tones','gamma',0,0.6,1.6,0.05,c.gamma,v => (+v).toFixed(2))}
+        ${knob('Far end','fade',0,0,0.4,0.01,c.fade,v => +v ? pc(v) : 'off')}
+        <p class="help">Far end looks dimmer than the start? Slide "Far end" up a little: the start of the run dims gently to match the far end. Mid-tones: higher makes soft colours deeper on this run only.</p>
+        <button data-n="reset" style="width:100%">Reset ${esc(r.name)}</button>
+      </details></div>`);
+    el.querySelectorAll('button[data-n]').forEach(b => b.onclick = () =>
+      matchCal(b.dataset.n === 'reset' ? {mac: r.mac, reset: true} : {mac: r.mac, nudge: b.dataset.n}));
+    const send = debounce(() => {
+      const v = f => [...el.querySelectorAll(`input[data-f="${f}"]`)].map(i => +i.value);
+      post('calibrate', {mac: r.mac, brightness: v('brightness')[0], gain: v('gain'), gamma: v('gamma')[0], fade: v('fade')[0]})
+        .then(x => { if (x) { MT.cal = x.cal; drawMatch(true) } });
+    }, 150);
+    el.querySelectorAll('input[type=range]').forEach(i => {
+      const down = () => { i._drag = true };          // cleared when the finger lifts (below drawMatch)
+      i.addEventListener('pointerdown', down); i.addEventListener('touchstart', down, {passive: true});
+    });
+    el.querySelectorAll('input[type=range]').forEach(i => i.oninput = () => {
+      const f = i.dataset.f; i.nextElementSibling.textContent = f === 'gamma' ? (+i.value).toFixed(2) : f === 'fade' && !+i.value ? 'off' : pc(+i.value);
+      send() });
     box.appendChild(el) });
 }
+['pointerup','pointercancel','touchend','touchcancel'].forEach(ev => window.addEventListener(ev, () =>   // a finger lifted anywhere ends a drag
+  document.querySelectorAll('#mtRuns input').forEach(i => { if (i._drag) { i._drag = false; setTimeout(() => drawMatch(), 400) } }), true));
+window.addEventListener('pagehide', () => { if (!MT.on) return; MT.on = null;     // leaving the app ends the test
+  fetch('/api/match', {method:'POST', keepalive:true, headers:{'Content-Type':'application/json','X-Requested-With':'lights'}, body:'{"action":"stop"}'}).catch(()=>{}) });
 
 // ------------------------------------------------------------- security
 async function security(){

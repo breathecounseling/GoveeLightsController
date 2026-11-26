@@ -13,7 +13,7 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import addrun, calendar_builtin
+from . import addrun, calendar_builtin, calibrate
 from . import evolve as evo
 from . import live, livedata, shows, tonight
 from . import shows_builtin
@@ -283,6 +283,8 @@ class Controller:
         self._sched_key = "unset"
         self.sched_status: dict = {}
         self.phone_only = False                     # the owner chose "show on phone only": taps don't light the house
+        self.match_state: dict | None = None        # "Match the runs": a test colour over everything
+        self._live_on_gen = 0                       # bumped by every "lights on" (the match test knows if it still owns them)
         self._stop = threading.Event()
         self.started = time.time()
         self.bulbcheck = BulbCheck(self, lambda: time.time())   # More -> Bulb check (takes over the lights for a while)
@@ -345,6 +347,8 @@ class Controller:
                 self.set_live(True, manual=False)
 
     def set_live(self, on: bool, manual: bool = True):
+        if on:
+            self._live_on_gen += 1
         if manual or on:
             self.phone_only = manual and not on       # Stop (lights off) is not "phone only"
         if manual:
@@ -369,6 +373,9 @@ class Controller:
             self.bulbcheck.stop("lights off")         # it may have switched the boxes on itself
             with self.lock:
                 self.vqueue.clear()                   # lights off: waiting picks would play unseen later
+                if self.match_state:
+                    self.match_state["took"] = False  # lights off ends a colour test too
+                    self._end_match()
         # a tap on Live always re-takes every box, in case the Govee app grabbed one
         self.engine.set_live(on, release=True, force=on and manual)
 
@@ -615,11 +622,19 @@ class Controller:
         with self.lock:
             if self.diag_active or self.map_state:
                 return False
+            ms = self.match_state
+            if ms is not None and ms["took"] and self._live_on_gen == ms["gen"] and not force_live:
+                return False                          # the lights are only on for a colour test
             if not self.engine.live and not force_live:
                 return False
             sc = Scene.from_dict(d, self.user_palettes)     # a bad scene leaves no state behind
+            # lights that are only on for the colour test count as off: they go off again afterwards
+            was_live = self.engine.live and not (ms is not None and ms["took"] and self._live_on_gen == ms["gen"])
+            if ms is not None:                        # a show or celebration ends the colour test
+                ms["took"] = ms["took"] and not force_live
+                self._end_match()
             if self.interrupt is None:
-                self.interrupt = {"scene": self.scene_dict, "playing": self.playing, "live": self.engine.live}
+                self.interrupt = {"scene": self.scene_dict, "playing": self.playing, "live": was_live}
             it = self.interrupt
             if resume_show and it.get("show"):
                 it["resume"] = {"show": it["show"], "label": it.get("label"), "at": time.time()}
@@ -1001,6 +1016,131 @@ class Controller:
         e.overlays["pad:" + action] = (S(d), mode, op, until, now, decay)
         return action
 
+    # ------------------------------------------------- match the runs
+    MATCH_HOLD = 180.0                          # a test colour lasts this long without a tap or a ping (3 min)
+
+    def calibrations(self) -> dict[str, dict]:
+        return {r.mac: calibrate.read(self.cfg.devices.get(r.mac, {})) for r in self.engine.layout.runs}
+
+    def _set_cal(self, mac: str, c: dict) -> dict:
+        """Store one run's calibration and apply it at once (no engine rebuild). Call with
+        self.cfg.lock held."""
+        c = calibrate.write(self.cfg.device(mac), c)
+        r = self.engine.layout.run(mac)
+        if r is not None:
+            calibrate.apply_to_run(r, c)
+        return c
+
+    def calibrate(self, b: dict) -> dict:
+        """POST /api/calibrate. {mac, brightness?, gain?, gamma?, fade?}: set fields;
+        {mac, nudge: warmer|cooler|brighter|dimmer|even|less-even}: one tap;
+        {mac, reset: true}: this run back to normal; {reset: "all"}: every run.
+        Returns every run's calibration (mac -> calibration)."""
+        return self.calibrate_with_note(b)[0]
+
+    def calibrate_with_note(self, b: dict) -> tuple[dict[str, dict], str]:
+        """calibrate(), plus a short message for the owner when a tap did something they
+        might not expect (empty otherwise)."""
+        note = ""
+        with self.cfg.lock:
+            cals = self.calibrations()
+            if b.get("reset") == "all":
+                for m in cals:
+                    self._set_cal(m, dict(calibrate.IDENTITY))
+            else:
+                mac = str(b.get("mac", ""))
+                if mac not in cals:
+                    raise ValueError("unknown run")
+                if b.get("reset"):
+                    self._set_cal(mac, dict(calibrate.IDENTITY))
+                elif b.get("nudge"):
+                    names = {r.mac: r.name for r in self.engine.layout.runs}
+                    note = calibrate.nudge_note(cals, mac, str(b["nudge"]), names)
+                    for m, c in calibrate.nudge(cals, mac, str(b["nudge"])).items():
+                        self._set_cal(m, c)
+                else:
+                    c = dict(cals[mac])
+                    for k in ("brightness", "gamma", "fade"):
+                        if k in b:
+                            c[k] = b[k]
+                    if "gain" in b:
+                        g = b["gain"]
+                        if not isinstance(g, (list, tuple)) or len(g) != 3:
+                            raise ValueError("gain needs three numbers (red, green, blue)")
+                        c["gain"] = list(g)
+                    self._set_cal(mac, c)
+            self.cfg.save()
+        return self.calibrations(), note
+
+    def match(self, action: str, color: str | None = None) -> dict:
+        """POST /api/match: one test colour on every run at once, over whatever is playing.
+        It is an overlay, so the scene underneath keeps running and ending the test brings
+        back exactly what was on. action: start | color | ping | stop. If the lights were
+        off, the test switches them on, and off again afterwards (unless something else
+        switched them on meanwhile). Never during a show, diagnostics or camera mapping;
+        a show or celebration starting ends it, and so does a phone that stops pinging."""
+        e, now = self.engine, time.time()
+        with self.lock:
+            st = self.match_state
+            if action == "stop":
+                self._end_match()
+                return {"on": False}
+            if action == "ping":                      # the phone still has the card open
+                if not st:
+                    return {"on": False}
+                action, color = "color", st["color"]
+            if action not in ("start", "color"):
+                raise ValueError(f"unknown action {action}")
+            if self.diag_active:
+                raise ValueError("Diagnostics is using the lights. Close it first.")
+            if self.map_state:
+                raise ValueError("Camera mapping is using the lights. Finish it first.")
+            if st is None and (self.interrupt or {}).get("show"):
+                raise ValueError("A show is playing. Try again when it ends.")
+            key = color if color in calibrate.SWATCHES else (st or {}).get("color", "warm")
+            if st is None:
+                if not e.live and not any(d.get("ip") or (d.get("cloud") or {}).get("enabled")
+                                          for d in self.cfg.devices.values() if d.get("pixel_count")):
+                    raise ValueError("no devices with a known IP; scan first")
+                took = not e.live
+                st = self.match_state = {"took": took, "gen": self._live_on_gen, "interrupt": self.interrupt,
+                                         "color": key, "until": now + self.MATCH_HOLD}
+                switch_on = took
+            else:
+                switch_on = False
+            st.update(color=key, until=now + self.MATCH_HOLD)
+            w = e.wall()
+            e.overlays["match"] = (Scene.from_dict({"layers": [{"effect": "solid",
+                                                                "params": {"color": calibrate.SWATCHES[key][1]}}]}),
+                                   "normal", 1.0, w + self.MATCH_HOLD + 5, w, 0)   # the engine's clock
+            res = {"on": True, "color": key, "took_lights": st["took"], "blackout": e.blackout}
+        if switch_on:
+            # Switching the boxes on takes a second or so each: done outside the lock (as
+            # set_live does) so status polls and the once-a-second tick don't wait on it.
+            e.set_live(True)                          # the engine only: the schedule and the scene stay as they are
+            with self.lock:
+                if self.match_state is not st and st["took"] and self._live_on_gen == st["gen"] and e.live:
+                    e.set_live(False, release=True)   # the test was stopped while the lights came on
+        return res
+
+    def _end_match(self):
+        """Call with self.lock held."""
+        st, self.match_state = self.match_state, None
+        self.engine.overlays.pop("match", None)
+        if st and st["took"] and self._live_on_gen == st["gen"] and self.engine.live:
+            self.engine.set_live(False, release=True)  # the lights were off before the test
+
+    def _match_tick(self, now: float):
+        st = self.match_state
+        if not st:
+            return
+        if (now >= st["until"] or self.diag_active or self.map_state
+                or (self.interrupt is not None and (self.interrupt is not st["interrupt"]
+                                                    or self.interrupt.get("show")))):
+            self._end_match()                          # the phone went away, or a show / celebration began
+        elif "match" not in self.engine.overlays:      # an engine rebuild drops overlays
+            self.match("color", st["color"])
+
     # --------------------------------------------------------- visitors
     @property
     def vcfg(self) -> dict:
@@ -1205,6 +1345,8 @@ class Controller:
         now = time.time()
         self.vqueue[:] = [r for r in self.vqueue if r.get("expires", now + 1) > now]
         if not self.vqueue or not self.engine.live or self.engine.blackout or self.map_state or self.diag_active:
+            return
+        if self.match_state:                         # the owner is matching the runs: picks wait
             return
         it = self.interrupt
         if it and not it.get("visitor"):            # a show, countdown or celebration is on: wait
@@ -1791,6 +1933,7 @@ class Controller:
                 self._advance()
             self._evolve_tick(now)
         self.bulbcheck.tick(now)
+            self._match_tick(now)
         self._events_tick()
         self._showtimes_tick()
 
@@ -2069,6 +2212,7 @@ class Controller:
             "mapping": bool(self.map_state), "weather": self.weather, "overlays": list(e.overlays),
             "bulb_check": self.bulbcheck.view(),
             "games": self.games, "dim": round(e.dim, 2),
+            "match": ({"color": (self.match_state or {}).get("color")} if self.match_state else None),
             "show": ((it or {}).get("show") or {}).get("name"),
             "dusk_intro": ({"left": max(0, round(di["until"] - time.time())), "then": di["program"]} if di else None),
             "visitor_queue": len(self.vqueue),
@@ -2080,6 +2224,7 @@ class Controller:
             "schedule": {"enabled": bool(sch.get("enabled")), **self.sched_status,
                          "override_until": self.override_until.isoformat(timespec="minutes") if self.override_until else None},
             "runs": [{"name": r.name, "mac": r.mac, "count": r.count, "visible": len(r.pixels), "trim": r.trim,
+                      "cal": calibrate.read(self.cfg.devices.get(r.mac, {})),
                       "kind": self.cfg.devices.get(r.mac, {}).get("kind", "govee"),
                       "cloud": bool((self.cfg.devices.get(r.mac, {}).get("cloud") or {}).get("enabled")),
                       "added": bool(self.cfg.devices.get(r.mac, {}).get("added_run")),

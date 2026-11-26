@@ -7,6 +7,7 @@ import math
 import threading
 import time
 
+from . import calibrate
 from .audio import AudioState
 from .color import Color
 from .layout import Layout
@@ -19,19 +20,23 @@ log = logging.getLogger(__name__)
 def to_device_frames(layout: Layout, colors: list[Color], gamma: float = 1.0,
                      dither: list | None = None) -> dict[str, list[tuple[int, int, int]]]:
     """Virtual-strip colours -> per-run frames in physical bulb order (hidden bulbs dark).
-    Applies each run's colour trim. With a `dither` error buffer (one [r, g, b] per
+    Applies each run's calibration (colour gain, brightness, gamma, far-end fade
+    compensation; see calibrate.py), which is a no-op for an untouched run. With a `dither` error buffer (one [r, g, b] per
     pixel, kept between frames), values between two 8-bit levels alternate over time
     so slow dim fades look smooth instead of stepping (temporal dithering)."""
     frames = {r.mac: [(0, 0, 0)] * r.count for r in layout.runs}
-    trims = {r.mac: getattr(r, "trim", None) for r in layout.runs}
+    mult, rgam = calibrate.pixel_gains(layout)
     for k, (p, c) in enumerate(zip(layout.pixels, colors)):
-        tr = trims[p.mac]
-        vals = (c[0] * tr[0], c[1] * tr[1], c[2] * tr[2]) if tr else c
+        m = mult[k] if mult is not None else None
+        vals = (c[0] * m[0], c[1] * m[1], c[2] * m[2]) if m else c
+        rg = rgam[k] if rgam is not None else None
         out = []
         for ch in range(3):
             v = min(1.0, max(0.0, vals[ch]))
             if gamma != 1.0:
                 v = v ** gamma
+            if rg is not None:
+                v = v ** rg
             v *= 255.0
             if dither is not None and v < 0.5:             # truly dark stays dark (no stray blips)
                 q = 0
