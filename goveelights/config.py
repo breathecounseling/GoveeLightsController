@@ -17,7 +17,8 @@ DEFAULTS = {
     "palettes": {},
     "events": None,                                  # None -> built-in New Year / Christmas
     "game": {"enabled": False, "teams": [{"league": "nfl", "team": "DEN"}], "delay": 30,
-             "when_lights_off": False},
+             "when_lights_off": False,
+             "scoreboard_every": 0, "scoreboard_seconds": 20},   # minutes between in-game scoreboards (0 = off)
     "weather": {"enabled": False, "snow": True, "rain": False, "storm": True, "wind": True},
     "shows": {
         "Christmas show": {"end": "resume", "cues": [
@@ -41,6 +42,7 @@ DEFAULTS = {
     "schedule": {
         "enabled": False, "lat": 40.3764, "lon": -104.6922,
         "on": "sunset", "on_offset_min": 0, "on_time": "17:00", "off_time": "23:00",
+        "dusk_intro_minutes": 0,                     # play the dusk sky this long at lights-on (0 = off)
         "default": {"preset": "warm-white"},
         "rules": [
             {"name": "Christmas", "from": "11-25", "to": "01-06", "program": {"playlist": "Christmas"}},

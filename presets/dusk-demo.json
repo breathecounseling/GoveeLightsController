@@ -1,0 +1,17 @@
+{
+  "name": "Dusk to night (2-minute demo)",
+  "tags": [
+    "Ambient"
+  ],
+  "layers": [
+    {
+      "effect": "dusk",
+      "params": {
+        "demo": 120,
+        "clouds": 0.4,
+        "sun_glow": 0.7,
+        "stars": 0.12
+      }
+    }
+  ]
+}

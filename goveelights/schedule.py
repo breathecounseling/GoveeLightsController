@@ -5,7 +5,9 @@ with offsets (thanksgiving, easter, mothers-day, fathers-day, memorial-day, labo
 mlk-day, presidents-day; e.g. "thanksgiving+1"). Rules may also have "days" (weekday
 numbers, Mon=0), "on_time"/"off_time" overrides, and no program (times only). Optional
 "morning": {"enabled", "on_time", "off": "sunrise"|"time", "off_time", "program"} and
-"dim": {"enabled", "from": "22:00", "level": 0.5, "fade_min": 30}.
+"dim": {"enabled", "from": "22:00", "level": 0.5, "fade_min": 30}. "dusk_intro_minutes" (default 0 =
+off): when the evening starts around sunset, the controller first plays the live dusk sky
+(effect "dusk") for that many minutes, then crossfades into the evening's program.
 {
   "enabled": true,
   "lat": 40.3764, "lon": -104.6922,          # Evans, CO

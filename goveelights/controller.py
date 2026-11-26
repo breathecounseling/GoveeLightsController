@@ -14,6 +14,7 @@ from pathlib import Path
 
 from . import evolve as evo
 from . import live, livedata, shows
+from . import shows_builtin
 from . import schedule as sched
 from .config import Config
 from .diag_server import App as DiagApp
@@ -100,6 +101,9 @@ class Controller:
         self.vqueue: list[dict] = []                # visitor requests waiting
         self._vlast: dict[str, float] = {}          # visitor cooldowns by client
         self._showtimes_done: set = set()
+        self.dusk_intro: dict | None = None         # {"until", "program", "on"}: the dusk sky at lights-on
+        self._dusk_done: str | None = None          # the evening window ("on" time) an intro already ran for
+        self._scoreboard_at: float | None = None    # when the next in-game scoreboard is due
         self._sched_key = "unset"
         self.sched_status: dict = {}
         self._stop = threading.Event()
@@ -145,6 +149,8 @@ class Controller:
 
     def set_live(self, on: bool, manual: bool = True):
         if manual:
+            with self.lock:
+                self._dusk_to_program(fade=8.0 if on else 0.0)   # a Live tap ends the dusk intro
             self._manual()
         if on and self.diag_active:
             if not manual:
@@ -232,6 +238,7 @@ class Controller:
     # -------------------------------------------------------- playback
     def _manual(self):
         """A manual action pauses the schedule until its next on/off change."""
+        self.dusk_intro = None                    # the user took over: no switch to the program later
         if self.cfg.data.get("schedule", {}).get("enabled"):
             ev = sched.evaluate(datetime.now().astimezone(), self.cfg.data["schedule"])
             self.override_until = datetime.fromisoformat(ev["next_change"])
@@ -254,10 +261,11 @@ class Controller:
         d = self.presets.get(pid)
         self.play_scene(d, {"kind": "preset", "id": pid, "name": d.get("name", pid)}, fade, manual, keep_playlist)
 
-    def play_evolve(self, pid: str, minutes: float = 3.0, amount: float = 0.2, manual: bool = True):
+    def play_evolve(self, pid: str, minutes: float = 3.0, amount: float = 0.2, manual: bool = True,
+                    fade: float | None = None):
         """Play a preset, then keep crossfading into fresh variations of it."""
         base = self.presets.get(pid)
-        self.play_preset(pid, fade=1.5, manual=manual)
+        self.play_preset(pid, fade=1.5 if fade is None else fade, manual=manual)
         with self.lock:
             self.evolve = {"id": pid, "base": base, "step": 0, "minutes": max(0.25, float(minutes)),
                            "amount": max(0.02, min(0.6, float(amount))),
@@ -280,7 +288,7 @@ class Controller:
         self.engine.set_scene(scene, 8.0)
         self.playing = {"kind": "evolve", "id": ev["id"], "name": ev["base"].get("name", ev["id"])}
 
-    def play_playlist(self, name: str, manual: bool = True):
+    def play_playlist(self, name: str, manual: bool = True, fade: float | None = None):
         pl = self.cfg.data.get("playlists", {}).get(name)
         if not pl or not pl.get("items"):
             raise ValueError(f"playlist {name!r} is empty or missing")
@@ -292,9 +300,9 @@ class Controller:
                 self._manual()
             self.evolve = None
             self.playlist = {"name": name, "order": order, "idx": -1, "next_at": 0.0, "fade": float(pl.get("fade", 2))}
-            self._advance(first=True)
+            self._advance(first=True, fade=fade)
 
-    def _advance(self, first=False):
+    def _advance(self, first=False, fade: float | None = None):
         pl_cfg = self.cfg.data.get("playlists", {}).get(self.playlist["name"])
         if not pl_cfg or not pl_cfg.get("items"):
             self.playlist = None
@@ -306,23 +314,27 @@ class Controller:
         item = pl_cfg["items"][st["order"][st["idx"]] % len(pl_cfg["items"])]
         st["next_at"] = time.time() + max(0.1, float(item.get("minutes", 5))) * 60
         try:
-            self.play_preset(item["preset"], fade=0 if first else st["fade"], manual=False, keep_playlist=True)
+            self.play_preset(item["preset"], fade=(fade or 0) if first else st["fade"], manual=False, keep_playlist=True)
         except (OSError, ValueError, KeyError) as e:
             log.warning("playlist item %s failed: %s", item, e)
         self.playing = {"kind": "playlist", "name": st["name"], "item": item.get("preset"),
                         "item_name": (self.playing or {}).get("name")}
 
-    def run_program(self, prog: dict | None, manual: bool = False):
+    def run_program(self, prog: dict | None, manual: bool = False, fade: float | None = None,
+                    live: bool = True):
+        """fade: seconds to crossfade from what is playing (None: each kind's usual).
+        live=False: only set up the program, leave the lights as they are."""
         if not prog:
             self.stop(manual=manual)
             return
         if prog.get("playlist"):
-            self.play_playlist(prog["playlist"], manual=manual)
+            self.play_playlist(prog["playlist"], manual=manual, fade=fade)
         elif prog.get("evolve"):
-            self.play_evolve(prog["evolve"], float(prog.get("minutes", 3)), manual=manual)
+            self.play_evolve(prog["evolve"], float(prog.get("minutes", 3)), manual=manual, fade=fade)
         elif prog.get("preset"):
-            self.play_preset(prog["preset"], manual=manual)
-        self.set_live(True, manual=manual)
+            self.play_preset(prog["preset"], fade=1.0 if fade is None else fade, manual=manual)
+        if live:
+            self.set_live(True, manual=manual)
 
     def stop(self, manual: bool = True, release: bool = True):
         with self.lock:
@@ -346,8 +358,8 @@ class Controller:
                 self.interrupt = {"scene": self.scene_dict, "playing": self.playing, "live": self.engine.live}
             self.interrupt["until"] = time.time() + seconds
             self.interrupt["label"] = label
-            self.interrupt.pop("show", None)
-            self.interrupt.pop("visitor", None)
+            for k in ("show", "visitor", "scoreboard"):
+                self.interrupt.pop(k, None)
             self.engine.set_scene(Scene.from_dict(d, self.user_palettes), fade, transition=transition)
             self.playing = {"kind": "event", "name": label}
             if force_live:
@@ -366,53 +378,171 @@ class Controller:
                 self.engine.set_live(False, release=True)
 
     # ----------------------------------------------------------- shows
-    def _cue_scene(self, cue: dict) -> dict:
+    ANCHOR_WINDOW = 20 * 60          # a clock-pinned countdown cue is honoured this long before its time
+
+    def show_def(self, name: str) -> dict | None:
+        """A user show, or else the built-in one of that name (the user's copy wins)."""
+        sh = (self.cfg.data.get("shows") or {}).get(name)
+        return sh if isinstance(sh, dict) else shows_builtin.BUILTIN_SHOWS.get(name)
+
+    def shows_list(self) -> list[dict]:
+        """Built-in shows first, then the user's; one entry per name."""
+        user = self.cfg.data.get("shows") or {}
+        names = list(shows_builtin.BUILTIN_SHOWS) + [n for n in user if n not in shows_builtin.BUILTIN_SHOWS]
+        out = []
+        for name in names:
+            sh = self.show_def(name) or {}
+            cues = self._show_cues(sh)
+            mine = isinstance(user.get(name), dict)
+            out.append({"name": name, "builtin": not mine, "overrides_builtin": mine and name in shows_builtin.BUILTIN_SHOWS,
+                        "cues": len(cues), "seconds": round(sum(self._cue_secs(c) for c in cues)),
+                        "loop": sh.get("end") == "loop", "description": str(sh.get("description", ""))})
+        return out
+
+    def copy_show(self, name: str, new_name: str = "") -> str:
+        """Copy a show (built-in or user) into the user's shows, to edit."""
+        src = self.show_def(name)
+        if not src:
+            raise ValueError(f"no show called {name!r}")
+        user = self.cfg.data.get("shows") or {}
+        new_name = str(new_name or "").strip()[:80]
+        if not new_name:
+            new_name, k = f"{name} (copy)", 2
+            while new_name in user or new_name in shows_builtin.BUILTIN_SHOWS:
+                new_name, k = f"{name} (copy {k})", k + 1
+        elif new_name in user and new_name != name:
+            raise ValueError(f"there is already a show called {new_name!r}")
+        d = json.loads(json.dumps(src))
+        d.pop("builtin", None)
+        with self.cfg.lock:
+            self.cfg.data["shows"] = {**user, new_name: d}
+            self.cfg.save()
+        return new_name
+
+    @staticmethod
+    def _show_cues(show: dict | None) -> list[dict]:
+        return [c for c in (show or {}).get("cues", []) if shows_builtin.cue_ok(c)]
+
+    @staticmethod
+    def _cue_secs(cue: dict) -> float:
+        try:
+            return max(1.0, float(cue.get("seconds", 20)))
+        except (TypeError, ValueError):
+            return 20.0
+
+    def _show_anchor(self, cues: list[dict], now: float) -> tuple[float | None, int | None]:
+        """(unix time, cue index) of a countdown cue pinned to the clock, if that time is near."""
+        j = next((k for k, c in enumerate(cues) if c.get("countdown_to")), None)
+        if j is None:
+            return None, None
+        try:
+            hm = sched._hm(str(cues[j]["countdown_to"]))
+        except (ValueError, AttributeError):
+            return None, j
+        nowd = datetime.fromtimestamp(now).astimezone()
+        at = nowd.replace(hour=hm.hour, minute=hm.minute, second=0, microsecond=0)
+        if at.timestamp() <= now:
+            at = datetime.fromtimestamp(at.timestamp() + 86400).astimezone().replace(
+                hour=hm.hour, minute=hm.minute, second=0, microsecond=0)
+        left = at.timestamp() - now
+        return (at.timestamp() if 0 < left <= self.ANCHOR_WINDOW else None), j
+
+    def _cue_scene(self, cue: dict, st: dict | None = None, now: float | None = None) -> dict:
+        if cue.get("countdown_to"):
+            secs = int(max(3, min(99, self._cue_secs(cue))))
+            target = (st or {}).get("anchor") or (now or time.time()) + secs
+            return shows.countdown_scene(target, secs, min(10, secs))
         return self.presets.get(cue["preset"])
 
-    def play_show(self, name: str, manual: bool = True) -> bool:
-        show = self.cfg.data.get("shows", {}).get(name)
-        cues = [c for c in (show or {}).get("cues", []) if c.get("preset")]
+    def _cue_end(self, st: dict, cues: list[dict], idx: int, now: float) -> float:
+        """When cue idx (starting now) gives way to the next one."""
+        if idx == st.get("anchor_idx") and st.get("anchor"):
+            return st["anchor"]                       # a pinned countdown ends exactly on time
+        prev = st.get("next_at")
+        secs = self._cue_secs(cues[idx])
+        if prev and 0 <= now - prev < 2:              # chain from the planned time: no drift over a show
+            return prev + secs
+        return now + secs
+
+    def _show_until(self, st: dict, cues: list[dict]) -> float:
+        rest = sum(self._cue_secs(c) for c in cues[st["idx"] + 1:])
+        return 10 ** 12 if st["loop"] else st["next_at"] + rest + 3
+
+    def play_show(self, name: str, manual: bool = True, force_live: bool | None = None) -> bool:
+        show = self.show_def(name)
+        cues = self._show_cues(show)
         if not cues:
             raise ValueError(f"show {name!r} has no cues")
         if manual:
+            with self.lock:
+                self._dusk_to_program(swap_only=True)    # the show returns to the program, not the dusk sky
             self._manual()
+        now = time.time()
+        anchor, aidx = self._show_anchor(cues, now)
+        st = {"name": name, "idx": 0, "loop": (show or {}).get("end") == "loop", "anchor": anchor,
+              "anchor_idx": aidx, "owns": anchor, "next_at": None}
         first = cues[0]
-        total = sum(max(1.0, float(c.get("seconds", 20))) for c in cues)
-        loop = (show or {}).get("end") == "loop"
         with self.lock:
-            ok = self.start_interrupt(self._cue_scene(first), 10 ** 9 if loop else total + 1, f"Show: {name}",
-                                      force_live=manual, fade=float(first.get("fade", 1.5)),
+            ok = self.start_interrupt(self._cue_scene(first, st, now), 10 ** 12, f"Show: {name}",
+                                      force_live=manual if force_live is None else force_live,
+                                      fade=float(first.get("fade", 1.5)),
                                       transition=first.get("transition", "crossfade"))
             if ok:
-                self.interrupt["show"] = {"name": name, "idx": 0, "loop": loop,
-                                          "next_at": time.time() + max(1.0, float(first.get("seconds", 20)))}
+                st["next_at"] = self._cue_end(st, cues, 0, now)
+                self.interrupt["show"] = st
+                self.interrupt["until"] = self._show_until(st, cues)
         return ok
 
     def _show_tick(self, now: float):
         it = self.interrupt
         st = it and it.get("show")
-        if not st or now < st["next_at"]:
+        if not st:
             return
-        cues = [c for c in self.cfg.data.get("shows", {}).get(st["name"], {}).get("cues", []) if c.get("preset")]
-        st["idx"] += 1
-        if st["idx"] >= len(cues):
-            if not st["loop"] or not cues:
-                self.end_interrupt()
-                return
-            st["idx"] = 0
-        cue = cues[st["idx"]]
+        cues = self._show_cues(self.show_def(st["name"]))
+        if not cues:
+            self.end_interrupt()
+            return
+        a, j = st.get("anchor"), st.get("anchor_idx")
+        pinned = a is not None and j is not None and j < len(cues)
+        jump = pinned and st["idx"] < j and now >= a - self._cue_secs(cues[j])
+        if not jump and now < st["next_at"]:
+            return
+        if jump:
+            nxt = j                                   # the clock says it's time for the countdown
+        else:
+            nxt = st["idx"] + 1
+            if pinned and nxt == j and now < a - self._cue_secs(cues[j]) - 1:
+                nxt = 0                               # early: play the build-up again until it's time
+            elif nxt >= len(cues):
+                if not st["loop"]:
+                    self.end_interrupt()
+                    return
+                nxt = 0
+        if pinned and nxt > j:
+            st["anchor"] = None                       # the moment has passed; later loops are ordinary
+        cue = cues[nxt]
         try:
-            self.engine.set_scene(Scene.from_dict(self._cue_scene(cue), self.user_palettes),
+            self.engine.set_scene(Scene.from_dict(self._cue_scene(cue, st, now), self.user_palettes),
                                   float(cue.get("fade", 1.5)), transition=cue.get("transition", "crossfade"))
-        except (OSError, ValueError) as e:
+        except (OSError, ValueError, KeyError, TypeError) as e:
             log.warning("show cue %s failed: %s", cue, e)
-        st["next_at"] = now + max(1.0, float(cue.get("seconds", 20)))
+        st["next_at"] = self._cue_end(st, cues, nxt, now)
+        st["idx"] = nxt
+        it["until"] = self._show_until(st, cues)
+
+    def _show_owns(self, ts: float) -> bool:
+        """A running show has its own countdown pinned to (about) this moment."""
+        st = (self.interrupt or {}).get("show") or {}
+        return bool(st.get("owns")) and abs(st["owns"] - ts) < 300
 
     def _showtimes_tick(self):
         now = datetime.now().astimezone()
         mins = now.hour * 60 + now.minute
         for k, stt in enumerate(self.cfg.data.get("showtimes", [])):
             if not stt.get("enabled", True) or stt.get("days") and now.weekday() not in stt["days"]:
+                continue
+            dates = stt.get("date") or stt.get("dates")      # optional "MM-DD" (or a list): e.g. only on 12-31
+            if dates and now.strftime("%m-%d") not in ([dates] if isinstance(dates, str) else dates):
                 continue
             try:
                 a = sched._hm(stt.get("from", "17:00"))
@@ -427,14 +557,19 @@ class Controller:
             key = (k, now.date().isoformat(), mins)
             if key in self._showtimes_done:
                 continue
-            self._showtimes_done.add(key)
             if stt.get("only_when_on", True) and not self.engine.live:
+                self._showtimes_done.add(key)
                 continue
-            if self.interrupt:                      # don't cut off a countdown or a celebration
-                continue
+            it = self.interrupt
+            if it and not (it.get("scoreboard") or it.get("visitor")):
+                continue                            # a countdown or celebration: try again next tick this minute
             try:
-                self.play_show(stt["show"], manual=False)
+                # only_when_on false: switch the lights on for it (and off again afterwards).
+                # A scoreboard or visitor pick stands aside (queued picks resume after the show).
+                if self.play_show(stt["show"], manual=False, force_live=not stt.get("only_when_on", True)):
+                    self._showtimes_done.add(key)
             except (KeyError, ValueError) as e:
+                self._showtimes_done.add(key)
                 log.warning("showtime failed: %s", e)
 
     # ------------------------------------------------------------- pad
@@ -632,6 +767,9 @@ class Controller:
             except (KeyError, ValueError):
                 continue
             key = (ev.get("name"), at.isoformat())
+            if self._show_owns(at.timestamp()):        # e.g. the New Year's show counts down itself
+                self._events_done.update({("cd",) + key, ("party",) + key})
+                continue
             secs = (at - now).total_seconds()
             cd = float(ev.get("countdown", 0))
             if cd > 0 and 0 < secs <= cd and ("cd",) + key not in self._events_done:
@@ -686,6 +824,8 @@ class Controller:
                         _, kind, colors = item
                         d, secs = shows.celebration(kind, colors)
                         self.start_interrupt(d, secs, d["name"], force_live=bool(g.get("when_lights_off")))
+                with self.lock:
+                    self._scoreboard_tick(now)
             except Exception:  # noqa: BLE001
                 log.exception("live data loop failed")
 
@@ -698,7 +838,7 @@ class Controller:
             self.games[key] = {**self.games.get(key, {}), "error": str(e)}
             return 300
         prev = self.games.get(key)
-        self.games[key] = game or {"state": "none", "team": team}
+        self.games[key] = {**game, "polled": time.time()} if game else {"state": "none", "team": team}
         if not game:
             return 1800
         delay = float(self.cfg.data.get("game", {}).get("delay", 30))
@@ -709,6 +849,43 @@ class Controller:
             if prev.get("state") == "in" and game["state"] == "post" and game["score"] > game["opp_score"]:
                 self._pending.append((time.time() + delay, "win", game["colors"]))
         return 15 if game["state"] == "in" else 300
+
+    SCOREBOARD_FRESH = 120.0        # an in-progress game polled longer ago than this is not shown
+
+    def _scoreboard_tick(self, now: float):
+        """While a followed team is playing and the lights are on, show the score on the
+        zigzag every game.scoreboard_every minutes for scoreboard_seconds. Waits for (never
+        cuts off) shows, celebrations, visitors and countdowns; scoring celebrations still
+        cut in over it."""
+        g = self.cfg.data.get("game") or {}
+        try:
+            every = float(g.get("scoreboard_every") or 0) * 60
+            secs = max(5.0, min(300.0, float(g.get("scoreboard_seconds") or 20)))
+            delay = max(0.0, min(600.0, float(g.get("delay", 30))))
+        except (TypeError, ValueError):
+            return
+        teams = {f"{t.get('league')}:{t.get('team')}" for t in g.get("teams", []) if isinstance(t, dict)}
+        game = next((v for k, v in self.games.items()
+                     if k in teams and isinstance(v, dict) and v.get("state") == "in" and "error" not in v
+                     and now - float(v.get("polled") or 0) < self.SCOREBOARD_FRESH), None)
+        if every <= 0 or not g.get("enabled") or game is None:
+            self._scoreboard_at = None
+            return
+        every = max(60.0, every)
+        if self._scoreboard_at is None:
+            # the first one once the (broadcast-delayed) score has reached the text effect
+            self._scoreboard_at = now + min(every, delay + 10)
+            return
+        if now < self._scoreboard_at:
+            return
+        e = self.engine
+        if (not e.live or e.blackout or self.interrupt is not None or self.map_state or self.diag_active
+                or self._pending):
+            return                                    # busy: try again in a moment
+        if self.start_interrupt(shows.scoreboard_scene(game), secs, f"Scoreboard: {game.get('team', '')}".strip(),
+                                fade=1.0):
+            self.interrupt["scoreboard"] = True
+            self._scoreboard_at = now + max(every, secs + 30)
 
     def _apply_weather(self):
         w = self.cfg.data.get("weather", {})
@@ -871,18 +1048,7 @@ class Controller:
         while not self._stop.wait(1.0):
             try:
                 now = time.time()
-                with self.lock:
-                    self._show_tick(now)
-                    if self.interrupt and now >= self.interrupt["until"]:
-                        self.end_interrupt()
-                    self._visitor_tick()
-                    if self.playlist and (self.interrupt or self.map_state):
-                        self.playlist["next_at"] += 1.0          # hold the playlist while interrupted
-                    elif self.playlist and now >= self.playlist["next_at"]:
-                        self._advance()
-                    self._evolve_tick(now)
-                self._events_tick()
-                self._showtimes_tick()
+                self._tick_once(now)
                 if now - last_sched >= 10:
                     last_sched = now
                     self._schedule_tick()
@@ -891,6 +1057,22 @@ class Controller:
                     self.diag.scan()          # pick up DHCP address changes
             except Exception:  # noqa: BLE001
                 log.exception("controller tick failed")
+
+    def _tick_once(self, now: float):
+        """The once-a-second work (the tests drive this with a fake clock)."""
+        with self.lock:
+            self._show_tick(now)
+            if self.interrupt and now >= self.interrupt["until"]:
+                self.end_interrupt()
+            self._visitor_tick()
+            self._dusk_tick(now)
+            if self.playlist and (self.interrupt or self.map_state):
+                self.playlist["next_at"] += 1.0          # hold the playlist while interrupted
+            elif self.playlist and now >= self.playlist["next_at"]:
+                self._advance()
+            self._evolve_tick(now)
+        self._events_tick()
+        self._showtimes_tick()
 
     def _schedule_tick(self):
         sch = self.cfg.data.get("schedule", {})
@@ -911,20 +1093,106 @@ class Controller:
         if self.interrupt is not None:
             if key is not None:
                 return            # let the show/celebration finish; switch programs afterwards
+            if ((self.interrupt or {}).get("show") or {}).get("owns"):
+                return            # a show pinned to a moment (New Year's) finishes even after lights-off
             with self.lock:
                 self.interrupt = None             # lights-off time beats any show still running
         self._sched_key = key
         log.info("schedule: %s", f"on ({ev['rule']}: {ev['program']})" if key else "off")
+        with self.lock:
+            di, self.dusk_intro = self.dusk_intro, None
+        left = self._dusk_intro_left(now, ev, sch) if key else 0.0
+        if left > 0 and di and di.get("on") == ev["on"]:
+            with self.lock:                       # re-applied mid-intro (e.g. a schedule save): keep the sky
+                di["program"] = ev["program"]
+                self.dusk_intro = di
+            return
+        if left > 0 and ev.get("on") == self._dusk_done:
+            left = 0.0                            # this evening's intro already ran (or the owner ended it)
         try:
+            if left > 0 and self._start_dusk_intro(ev["program"], left, sch, ev.get("on")):
+                return
             self.run_program(ev["program"] if ev["active"] else None, manual=False)
         except (OSError, ValueError) as e:
             log.warning("schedule action failed: %s", e)
+
+    # ------------------------------------------------------ dusk intro
+    def _dusk_intro_left(self, now: datetime, ev: dict, sch: dict) -> float:
+        """Seconds of the dusk intro still to play: schedule.dusk_intro_minutes from the
+        moment the evening window opened, when it opens around sunset. After a restart
+        mid-window only what is left of it plays."""
+        try:
+            mins = max(0.0, min(120.0, float(sch.get("dusk_intro_minutes") or 0)))
+            if mins <= 0 or not ev.get("active") or ev.get("rule") == "morning":
+                return 0.0
+            on = datetime.fromisoformat(ev["on"])
+            _, sunset = sched.sun_times(on.date(), float(sch.get("lat", 40.3764)), float(sch.get("lon", -104.6922)))
+        except (TypeError, ValueError, KeyError):
+            return 0.0
+        if sunset is None or abs((on - sunset).total_seconds()) > 90 * 60:
+            return 0.0                            # lights on at a fixed time far from sunset
+        left = mins * 60 - (now - on).total_seconds()
+        return left if 30 < left <= mins * 60 + 60 else 0.0
+
+    def _start_dusk_intro(self, prog: dict, left: float, sch: dict, on: str | None = None) -> bool:
+        try:
+            lat = max(-89.0, min(89.0, float(sch.get("lat", 40.3764))))
+            lon = max(-180.0, min(180.0, float(sch.get("lon", -104.6922))))
+        except (TypeError, ValueError):
+            lat, lon = 40.3764, -104.6922
+        d = {"name": "Dusk intro", "layers": [{"effect": "dusk", "target": "all", "params": {
+            "lat": lat, "lon": lon, "clouds": 0.4, "sun_glow": 0.7, "stars": 0.12}}]}
+        try:
+            with self.lock:
+                self.play_scene(d, {"kind": "dusk-intro", "name": "Dusk to night"}, fade=3.0, manual=False)
+                self.dusk_intro = {"until": time.time() + left, "program": prog, "on": on}
+                self._dusk_done = on
+        except ValueError as e:                   # e.g. the dusk effect is missing: straight to the program
+            log.warning("dusk intro failed: %s", e)
+            return False
+        self.set_live(True, manual=False)
+        log.info("schedule: dusk intro for %.0f s, then %s", left, prog)
+        return True
+
+    def _dusk_to_program(self, fade: float = 8.0, swap_only: bool = False):
+        """A manual action during the dusk intro: the scheduled program takes the intro's
+        place, so whatever comes next (a show, a Live tap) returns to the program and not
+        to the dusk sky. swap_only: set the program up but keep the house showing what it
+        shows now (the caller is about to replace it). Call with self.lock held."""
+        di = self.dusk_intro
+        if not di:
+            return
+        self.dusk_intro = None
+        shown, playing, it = self.engine.scene, self.playing, self.interrupt
+        try:
+            self.run_program(di["program"], manual=False, fade=fade, live=False)
+        except (OSError, ValueError) as e:
+            log.warning("program after the dusk intro failed: %s", e)
+            return
+        if it is not None:                        # something plays over the intro: it now returns to the program
+            it["scene"], it["playing"] = self.scene_dict, self.playing
+            self.playing = playing
+            self.engine.set_scene(shown, 0)
+        elif swap_only:
+            self.engine.set_scene(shown, 0)
+
+    def _dusk_tick(self, now: float):
+        di = self.dusk_intro
+        if not di or now < di["until"]:
+            return
+        if self.interrupt is not None or self.map_state or self.diag_active:
+            return                                # let the show/celebration finish first
+        self.dusk_intro = None
+        try:
+            self.run_program(di["program"], manual=False, fade=8.0)
+        except (OSError, ValueError) as e:
+            log.warning("program after the dusk intro failed: %s", e)
 
     # ---------------------------------------------------------- status
     def status(self) -> dict:
         e = self.engine
         sch = self.cfg.data.get("schedule", {})
-        it, evs, health = self.interrupt, self.evolve, dict(self.health)
+        it, evs, health, di = self.interrupt, self.evolve, dict(self.health), self.dusk_intro
         pl = None
         if self.playlist:
             pl = {"name": self.playlist["name"], "next_in": max(0, round(self.playlist["next_at"] - time.time()))}
@@ -937,6 +1205,7 @@ class Controller:
             "mapping": bool(self.map_state), "weather": self.weather, "overlays": list(e.overlays),
             "games": self.games, "dim": round(e.dim, 2),
             "show": ((it or {}).get("show") or {}).get("name"),
+            "dusk_intro": ({"left": max(0, round(di["until"] - time.time())), "then": di["program"]} if di else None),
             "visitor_queue": len(self.vqueue),
             "health": {self.cfg.devices.get(m, {}).get("name", m): {
                 "ok": h["miss"] == 0, "reasserts_15min": len([t for t in h["reasserts"] if time.time() - t < 900]),

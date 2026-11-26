@@ -23,6 +23,7 @@ from .fx import FX
 from .modulation import SHAPES
 from .palettes import BUILTIN, all_palettes, categories
 from .scene import BLEND_INFO, BLENDS
+from . import shows_builtin
 
 log = logging.getLogger("goveelights")
 WEB = Path(__file__).resolve().parent / "web"
@@ -176,6 +177,8 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                     return self._json({"scene": ctl.scene_dict, "playing": ctl.playing})
                 if path == "/api/playlists":
                     return self._json(ctl.cfg.data.get("playlists", {}))
+                if path == "/api/shows":           # built-in and user shows, for pickers
+                    return self._json(ctl.shows_list())
                 if path == "/api/schedule":
                     return self._json(ctl.cfg.data.get("schedule", {}))
                 if path == "/api/extras":
@@ -185,6 +188,7 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                     return self._json({"events": ctl.events, "game": ctl.cfg.data.get("game", {}),
                                        "weather": ctl.cfg.data.get("weather", {}),
                                        "shows": ctl.cfg.data.get("shows", {}), "showtimes": ctl.cfg.data.get("showtimes", []),
+                                       "builtin_shows": shows_builtin.builtin_shows(),
                                        "visitor": ctl.vcfg, "transitions": Engine.TRANSITIONS,
                                        "self_heal": ctl.ecfg.get("self_heal", True), "reenable_min": ctl.ecfg.get("reenable_min", 0),
                                        "leagues": {k: v[2] for k, v in LEAGUES.items()}, "pictures": list(PICTURES)})
@@ -405,8 +409,10 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                     else:
                         val["token"] = ctl.vcfg["token"]           # the link only changes when asked
                     val.pop("new_link", None)
-                elif a == "shows" and not isinstance(val, dict):
-                    raise ValueError("shows must be an object")
+                elif a == "shows":
+                    if not isinstance(val, dict):
+                        raise ValueError("shows must be an object")
+                    val = shows_builtin.without_builtin_copies(val)     # built-ins live in code
                 elif a == "showtimes" and not isinstance(val, list):
                     raise ValueError("showtimes must be a list")
                 if a == "events":
@@ -420,6 +426,8 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                     cfg.data[a] = val
                     cfg.save()
                 return {"ok": True}
+            if a == "show/copy":                  # e.g. copy a built-in show to edit it
+                return {"ok": True, "name": ctl.copy_show(str(b["name"]), str(b.get("as") or ""))}
             if a == "show/play":
                 if not ctl.play_show(str(b["name"])):
                     raise ValueError("can't start a show while diagnostics or mapping is running")

@@ -46,6 +46,29 @@ def celebration(kind: str, colors: list[str]) -> tuple[dict, float]:
         {"effect": "sparkle", "params": {"rate": 15, "decay": 0.1}, "blend": "add"}]}, 15.0
 
 
+def scoreboard_scene(game: dict | None) -> dict:
+    """The live score on the zigzag (the text effect's "score" source, which shows the
+    broadcast-delayed score) with the eaves chasing in the team's colours."""
+    game = game if isinstance(game, dict) else {}
+    cols = []
+    for x in game.get("colors") or []:
+        try:
+            cols.append(led_bright(str(x)))
+        except (ValueError, IndexError):
+            continue
+    cols = cols[:2] or ["#ff4f00", "#2050ff"]
+    if len(cols) == 1 or cols[0] == cols[1]:
+        cols = [cols[0], "#ffffff" if cols[0] != "#ffffff" else "#ff4f00"]
+    team = "".join(ch for ch in str(game.get("team") or "").upper() if ch.isalnum())[:10]
+    return {"name": "Scoreboard", "layers": [
+        {"effect": "chase", "target": ["Eaves", "Lower roofline"],
+         "params": {"colors": cols, "spacing": 4, "width": 2, "speed": 3, "axis": "strip"}},
+        {"effect": "text", "target": "Peak",
+         "params": {"source": "score", "text": f"GO {team}!" if team else "GAME ON!", "colors": ["#ffffff"],
+                    "color_mode": "solid", "speed": 5.5, "sparkle": 0.1, "border": "twinkle",
+                    "border_color": cols[1], "score_detail": True}}]}
+
+
 def countdown_scene(target: float, count_s: int, digits_s: int, colors=None) -> dict:
     cols = colors or ["#ffffff", "#ffd000", "#ffffff"]
     return {"name": "Countdown", "layers": [
