@@ -2,7 +2,7 @@
 
     python tools/fake_govee.py --count 72 --devices 2
 
-Each fake device binds 127.0.0.<2+i> on ports 4001 (scan) and 4003 (control),
+Each fake device binds 127.0.0.<2+i> (or <base+i> with --base) on ports 4001 (scan) and 4003 (control),
 razer frames with n > bulb count are ignored (as observed on H805A), or with
 --oversize dark the string goes dark (H706B, govee-local-api issue #404).
 Add the devices in the web UI with "Add by IP" (127.0.0.2, ...)."""
@@ -127,11 +127,12 @@ def main():
     ap.add_argument("--counts", help="comma-separated bulb count per device, e.g. 96,108")
     ap.add_argument("--timeout", type=float, default=0, help="simulate realtime timeout (s), 0 = none")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--base", type=int, default=2, help="first device binds 127.0.0.<base> (default 2)")
     ap.add_argument("--oversize", choices=["ignore", "dark"], default="ignore",
                     help="frames with n > bulbs: ignore (seen on H805A) or go dark (H706B)")
     a = ap.parse_args()
     counts = [int(x) for x in a.counts.split(",")] if a.counts else [a.count + i for i in range(a.devices)]
-    devs = [FakeDevice(f"127.0.0.{2 + i}", counts[i], a.timeout, ("H705E", "H805A")[i % 2], i, a.quiet, a.oversize)
+    devs = [FakeDevice(f"127.0.0.{a.base + i}", counts[i], a.timeout, ("H705E", "H805A")[i % 2], i, a.quiet, a.oversize)
             for i in range(len(counts) if a.counts else a.devices)]
     print("fake devices:", ", ".join(f"{d.ip} ({d.sku}, {d.count} bulbs)" for d in devs), flush=True)
     while True:

@@ -16,17 +16,23 @@ button:active{filter:brightness(1.3);transform:scale(.98)}
 button.pri{background:var(--accbg);border-color:#2f9e5a}
 button.bad{background:#3b1517;border-color:#7f2a2a}
 button.ghost{background:transparent;border-color:transparent}
-button.sm{padding:5px 9px;font-size:13px;border-radius:9px}
-input[type=text],input[type=number],input[type=time],select,textarea{background:var(--p2);border:1px solid var(--line);border-radius:10px;padding:9px 10px;min-width:0;width:100%}
+button.sm{padding:5px 10px;font-size:13px;border-radius:9px;min-height:38px;min-width:38px}
+input[type=text],input[type=number],input[type=time],input[type=password],select,textarea{background:var(--p2);border:1px solid var(--line);border-radius:10px;padding:9px 10px;min-width:0;width:100%}
 input[type=color]{width:40px;height:40px;border:1px solid var(--line);border-radius:10px;padding:2px;background:var(--p2)}
 input[type=range]{width:100%;accent-color:var(--blue);margin:0;height:28px}
-input[type=checkbox]{width:20px;height:20px;accent-color:var(--blue)}
+input[type=checkbox]{width:22px;height:22px;flex:none;accent-color:var(--blue)}
+label.row{min-height:40px}
 /* header + preview */
 header{position:sticky;top:0;z-index:20;background:var(--bg)}
 .hd{display:flex;align-items:center;gap:8px;padding:calc(6px + env(safe-area-inset-top)) 12px 6px}
 .hd h1{flex:1;font-size:16px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hd h1 small{color:var(--dim);font-weight:500;font-size:13px}
-.live{border-radius:99px;padding:6px 13px;font-weight:700;font-size:13px}
+.hd h1 small{display:block;color:var(--dim);font-weight:500;font-size:11.5px;letter-spacing:.02em}
+.hd h1 span{display:block;overflow:hidden;text-overflow:ellipsis}
+.hd h1 span.on::before{content:'';display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--acc);margin-right:6px;vertical-align:1px;box-shadow:0 0 6px var(--acc)}
+.hd h1 span.show::before{background:var(--warn);box-shadow:0 0 6px var(--warn)}
+.npstop{flex:none;font-weight:700}
+.npstop.arm{background:#3b1517;border-color:var(--bad);color:#fecaca}
+.live{border-radius:99px;padding:6px 13px;font-weight:700;font-size:13px;min-height:38px;flex:none}
 .live.on{background:var(--accbg);border-color:#2f9e5a}
 #pv{display:block;width:100%;background:#040608;border-top:1px solid #11161d;border-bottom:1px solid var(--line)}
 main{padding:12px 12px calc(84px + env(safe-area-inset-bottom));max-width:720px;margin:0 auto}
@@ -48,7 +54,7 @@ h2 .sp{flex:1}
 .dim{color:var(--dim)}
 .chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;margin:0 -12px;padding-left:12px;padding-right:12px}
 .chips::-webkit-scrollbar{display:none}
-.chip{flex:none;border-radius:99px;padding:6px 12px;font-size:13px;background:var(--p2);white-space:nowrap}
+.chip{flex:none;border-radius:99px;padding:6px 13px;font-size:13px;background:var(--p2);white-space:nowrap;min-height:38px}
 .chip.on{background:#1e3a5f;border-color:var(--blue)}
 .pal{flex:none;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:var(--dim);background:none;border:none;padding:2px;width:62px}
 .pal i{display:block;width:56px;height:28px;border-radius:9px;border:2px solid var(--line)}
@@ -67,12 +73,16 @@ h2 .sp{flex:1}
 .pc .nm{padding:7px 9px 8px;font-weight:600;font-size:13.5px;line-height:1.25}
 .pc .tg{display:block;color:var(--dim);font-weight:400;font-size:11px}
 .pc.on{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset}
-.pc .st{position:absolute;right:4px;top:3px;font-size:18px;color:#ffffff60;background:none;border:none;padding:2px 5px}
+.pc .st{position:absolute;right:0;top:0;font-size:18px;color:#ffffff60;background:none;border:none;padding:0;width:42px;height:40px;display:flex;align-items:flex-start;justify-content:flex-end;padding:5px 8px 0 0}
 .pc .st.on{color:var(--warn)}
+.fstrip{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x proximity;scrollbar-width:none;margin:0 -12px;padding:0 12px 2px;scroll-padding:0 12px}
+.fstrip::-webkit-scrollbar{display:none}
+.fstrip .pc{flex:none;width:158px;scroll-snap-align:start}
+.fstrip .pc canvas{height:76px}
 /* editor */
 .tb{display:flex;gap:6px;align-items:center;margin-bottom:10px}
 .tb button{padding:8px 10px}
-.tb .grow{font-weight:700;font-size:16px;background:none;border:none;padding:4px 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb .grow{font-weight:700;font-size:16px;background:none;border:none;padding:4px 2px;min-height:40px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lrow{display:flex;align-items:center;gap:8px;background:var(--p1);border:1px solid var(--line);border-radius:12px;padding:8px 10px;margin-bottom:6px}
 .lrow.sel{border-color:var(--blue);background:#132033}
 .lrow.off .lname{opacity:.45}
@@ -88,13 +98,13 @@ h2 .sp{flex:1}
 .prm .top{display:flex;align-items:center;gap:6px;font-size:13px}
 .prm .top .lbl{flex:1;color:var(--dim)}
 .prm .top output{font-variant-numeric:tabular-nums;min-width:44px;text-align:right}
-.modb{border-radius:8px;padding:2px 8px;font-size:13px;color:var(--dim);background:var(--p2)}
+.modb{border-radius:8px;padding:2px 8px;font-size:13px;color:var(--dim);background:var(--p2);min-width:36px;min-height:32px}
 .modb.on{color:#fff;background:#4c1d95;border-color:var(--mod)}
 .prm.modded input[type=range]{accent-color:var(--mod)}
 .modsum{font-size:11.5px;color:var(--mod);margin-top:2px}
-.cols{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:4px}
+.cols{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px}
 .cols .c{position:relative}
-.cols .c .x{position:absolute;right:-7px;top:-7px;padding:0 5px;font-size:11px;line-height:16px;border-radius:99px}
+.cols .c .x{position:absolute;right:-9px;top:-9px;padding:0;width:24px;height:24px;min-width:0;min-height:0;font-size:12px;line-height:20px;border-radius:99px}
 .fxu{background:var(--p2);border:1px solid var(--line);border-radius:12px;padding:8px 10px;margin-bottom:8px}
 .fxu.off{opacity:.55}
 .fxu .h{display:flex;align-items:center;gap:6px}
@@ -119,7 +129,7 @@ h2 .sp{flex:1}
 .blendc button b{display:block;font-size:13.5px}
 .blendc button span{display:block;font-size:11.5px;color:var(--dim);margin-top:2px}
 .blendc button.on{border-color:var(--blue);background:#132033}
-.info{background:none;border:none;padding:0 4px;color:var(--blue);font-size:14px}
+.info{background:none;border:none;padding:0 4px;color:var(--blue);font-size:14px;min-width:32px;min-height:32px}
 .phelp{font-size:12px;color:var(--dim);margin:2px 0 4px;display:none}
 .phelp.on{display:block}
 .stop{width:40px;height:40px;border-radius:10px;border:2px solid var(--line);padding:0;position:relative}
@@ -147,9 +157,15 @@ h2 .sp{flex:1}
 .cue .full{grid-column:1/-1}
 .cue .row{gap:6px}
 .days{display:flex;gap:4px;flex-wrap:wrap}
-.days button{padding:4px 7px;font-size:12px;border-radius:8px}
+.days button{padding:4px 0;font-size:12px;border-radius:8px;min-width:38px;min-height:36px}
 .days button.on{background:#1e3a5f;border-color:var(--blue)}
 #qr canvas,#qr img{display:block;margin:8px auto;background:#fff;padding:10px;border-radius:12px;max-width:220px;width:100%;image-rendering:pixelated}
+.badge{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:3px 8px;border-radius:99px;background:#3a2d0b;color:var(--warn);border:1px solid #6b5313}
+.cuelist{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.cuero{display:flex;gap:10px;align-items:center;padding:8px 10px;background:var(--p2);border-bottom:1px solid var(--line)}
+.cuero:last-child{border-bottom:none}
+.cuero .n{flex:none;width:22px;height:22px;border-radius:50%;background:var(--p3);color:var(--dim);font-size:12px;display:flex;align-items:center;justify-content:center}
+.cuero b{display:block;font-size:13.5px}.cuero span{display:block;font-size:12px;color:var(--dim)}
 .grp{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin:12px 0 6px}
 #toast{position:fixed;left:50%;bottom:calc(76px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#2c3542;padding:8px 14px;border-radius:10px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;z-index:60;font-size:14px}
 #toast.show{opacity:1}
@@ -165,7 +181,8 @@ h2 .sp{flex:1}
 <body>
 <header>
   <div class="hd">
-    <h1 id="title">House Lights <small id="sub"></small></h1>
+    <h1 id="title" aria-live="polite"><small id="sub">House Lights</small><span id="hdNow">Loading…</span></h1>
+    <button id="stopBtn" class="sm npstop" style="display:none" onclick="stopTap()">■ Stop</button>
     <button id="liveBtn" class="live" onclick="toggleLive()">Preview</button>
     <button class="ghost sm" onclick="powerSheet()" aria-label="Power menu"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v9"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg></button>
   </div>
@@ -177,6 +194,10 @@ h2 .sp{flex:1}
 
 <!-- PLAY -->
 <section id="s-play" class="on">
+  <div class="card" id="featured" style="display:none">
+    <h2><span class="sp">Featured tonight</span><span class="dim" style="font-size:12px;font-weight:400">the big scenes · swipe</span></h2>
+    <div class="fstrip" id="featStrip"></div>
+  </div>
   <div class="card">
     <div class="row"><div class="grow"><div class="dim" style="font-size:12px">Now playing</div>
       <div id="nowName" style="font-size:19px;font-weight:700">Nothing</div><div id="nowSub" class="dim" style="font-size:12.5px"></div></div>
@@ -245,6 +266,9 @@ h2 .sp{flex:1}
       <p class="help">Celebrates when your team scores (touchdowns, field goals, goals, runs) and wins, in the team's colours. Scores come from ESPN's public scoreboard. TV is usually 20–60 s behind, so add a delay to avoid spoilers.</p>
       <div id="gTeams"></div><button class="sm" onclick="addTeam()">+ Team</button>
       <div class="prm"><div class="top"><span class="lbl">Delay to match TV</span><output id="gDelayV"></output></div><input type="range" id="gDelay" min="0" max="120" step="5"></div>
+      <div class="prm"><div class="top"><span class="lbl">Show the score on the zigzag every</span><output id="gSbEveryV"></output></div><input type="range" id="gSbEvery" min="0" max="30" step="1"></div>
+      <div class="prm" id="gSbSecsRow"><div class="top"><span class="lbl">…for</span><output id="gSbSecsV"></output></div><input type="range" id="gSbSecs" min="5" max="120" step="5"></div>
+      <p class="help">While a game is on and the lights are on; waits for shows and celebrations to finish. Off = only celebrations.</p>
       <label class="row" style="margin:6px 0"><input type="checkbox" id="gOff"> <span>Celebrate even when the lights are off</span></label>
       <div id="gStatus" class="help"></div>
       <div class="row wrap"><button class="sm" onclick="post('live/test',{kind:'touchdown'})">Test touchdown</button><button class="sm" onclick="post('live/test',{kind:'field goal'})">Test field goal</button><button class="sm" onclick="post('live/test',{kind:'win'})">Test win</button></div>
@@ -279,11 +303,16 @@ h2 .sp{flex:1}
       <div id="rules"></div>
       <p class="help">Dates can be MM-DD or a holiday: <code>thanksgiving</code>, <code>easter</code>, <code>mothers-day</code>, <code>fathers-day</code>, <code>memorial-day</code>, <code>labor-day</code>, <code>mlk-day</code>, <code>presidents-day</code>, with an offset like <code>thanksgiving+1</code>. Leave the dates empty and pick days for a weekly rule (e.g. stay on later Fri/Sat).</p>
       <button onclick="addRule()">+ Rule</button>
+      <div class="grp">Dusk intro</div>
+      <div class="row"><span>Play Sky for</span><input id="scDusk" type="number" min="0" max="120" step="5" inputmode="numeric" style="width:80px"><span class="dim">min (0 = off)</span></div>
+      <p class="help">Plays Sky at dusk when the lights come on, then your program.</p>
       <div class="grp">Late-night dimming</div>
-      <label class="row"><input type="checkbox" id="dmEn"> <span>Dim from</span> <input type="time" id="dmFrom" style="width:auto"> <span>to</span> <input type="number" id="dmLvl" min="5" max="100" step="5" style="width:70px"> <span>%</span></label>
+      <label class="row"><input type="checkbox" id="dmEn"> <span>Dim the lights late at night</span></label>
+      <div class="row" style="padding-left:30px"><span class="dim">from</span><input type="time" id="dmFrom" style="width:auto;flex:1;min-width:110px"><span class="dim">to</span><input type="number" id="dmLvl" min="5" max="100" step="5" inputmode="numeric" style="width:70px"><span>%</span></div>
       <div class="grp">Morning</div>
-      <label class="row wrap"><input type="checkbox" id="mnEn"> <span>Also on from</span> <input type="time" id="mnOn" style="width:auto"> <span>until</span>
-        <select id="mnOff" style="width:auto"><option value="sunrise">sunrise</option><option value="time">a time</option></select><input type="time" id="mnOffT" style="width:auto"></label>
+      <label class="row"><input type="checkbox" id="mnEn"> <span>Also on in the morning</span></label>
+      <div class="row wrap" style="padding-left:30px"><span class="dim">from</span><input type="time" id="mnOn" style="width:auto;min-width:110px"><span class="dim">until</span>
+        <select id="mnOff" style="width:auto" onchange="mnUI()"><option value="sunrise">sunrise</option><option value="time">a time</option></select><input type="time" id="mnOffT" style="width:auto;min-width:110px"></div>
       <div class="row" style="margin-top:10px"><button class="pri grow" onclick="saveSchedule()">Save schedule</button></div>
       <details style="margin-top:10px"><summary class="dim">Location (for sunset)</summary>
         <div class="row" style="margin-top:6px"><input id="scLat" type="number" step="0.0001"><input id="scLon" type="number" step="0.0001"></div></details>
@@ -454,6 +483,7 @@ const thumbs = {
     for (const [el, id] of this.cards){
       const d = this.data[id]; if (!d || d === 'loading' || !el.isConnected) continue;
       const c = el.querySelector('canvas'); if (!c) continue;
+      const r = c.getBoundingClientRect(); if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) continue;
       drawThumb(c, d.frames[this.frame % d.frames.length]);
     }
   }
@@ -464,10 +494,10 @@ setInterval(() => { if (document.visibilityState === 'visible' && $('s-play').cl
 async function refresh(){
   const s = await get('status').catch(()=>null); if (!s) return; ST = s;
   $('liveBtn').textContent = s.live ? '● Live' : 'Preview'; $('liveBtn').classList.toggle('on', s.live);
-  $('sub').textContent = s.blackout ? '· blackout' : (s.live ? '' : '· preview');
-  const p = s.playing;
+  const p = s.playing, dusk = s.dusk_intro;
   $('nowName').textContent = p ? p.name : 'Nothing';
-  $('nowSub').textContent = p ? (p.kind==='playlist' ? `playlist · ${p.item_name||p.item} · next in ${fmtS(s.playlist?.next_in)}` :
+  headerNow(s);
+  $('nowSub').textContent = p ? (dusk ? `dusk intro · ${fmtS(dusk.left)} left, then ${progName(dusk.then)}` : p.kind==='playlist' ? `playlist · ${p.item_name||p.item} · next in ${fmtS(s.playlist?.next_in)}` :
     p.kind==='evolve' ? `evolving · next variation in ${fmtS(s.evolve?.next_in)}` : (s.live ? 'on the lights' : 'preview only (tap Preview to go Live)')) : '';
   $('evoBtn').classList.toggle('pri', !!p && p.kind === 'evolve'); $('evoBtn').style.display = p && (p.kind === 'preset' || p.kind === 'evolve') ? '' : 'none';
   setKnob('kBri','oBri', s.brightness, v => Math.round(v*100)+'%');
@@ -477,7 +507,7 @@ async function refresh(){
   if (document.activeElement !== $('fps')) setSel($('fps'), String(Math.round(s.fps)));
   setKnob('gamma','oGamma', s.gamma, v => (+v).toFixed(1));
   const b = [];
-  if (s.interrupt) b.push(`<div class="banner">Playing <b>${esc(s.interrupt.label)}</b> (${s.interrupt.left}s left), then back to what was on. <button class="sm" onclick="post('interrupt/end').then(refresh)">End now</button></div>`);
+  if (s.interrupt) b.push(`<div class="banner">Playing <b>${esc(s.interrupt.label)}</b> ${s.interrupt.left < 86400 ? `(${fmtS(s.interrupt.left)} left), then back to what was on` : '(looping until you end it)'}. <button class="sm" onclick="post('interrupt/end').then(refresh)">End now</button></div>`);
   if (s.dim && s.dim < 0.99) b.push(`<div class="banner" style="background:#1e293b;border-color:var(--line)">Late-night dimming: ${Math.round(s.dim*100)}%</div>`);
   const sick = Object.entries(s.health||{}).filter(([,h]) => h.paused);
   if (sick.length) b.push(`<div class="banner">Self-healing paused for ${esc(sick.map(x=>x[0]).join(', '))}: its status keeps changing on its own. Tell Claude!</div>`);
@@ -492,6 +522,29 @@ async function refresh(){
   if ($('devInfo')._h !== di) $('devInfo').innerHTML = $('devInfo')._h = di;
   schedStatus(); liveStatus(); drawTrims();
   if (document.activeElement !== $('dthEn')) $('dthEn').checked = s.dither !== false;
+}
+/* The header always says what the house is doing, with Stop (or End, for a show or celebration) in reach. */
+function headerNow(s){
+  const p = s.playing, it = s.interrupt, el = $('hdNow'), b = $('stopBtn');
+  /* The time left goes in the small line (which has room) so the ellipsis on a long name never hides it. */
+  const name = it ? String(it.label || '').replace(/^Show:\s*/, '') : p ? p.name : (s.live ? 'Nothing playing' : 'Lights off');
+  if (el.textContent !== name) el.textContent = name;
+  const mode0 = s.blackout ? 'blackout' : s.live ? 'live' : 'preview';
+  const sub = it && it.left < 86400 ? fmtS(it.left) + ' left · ' + mode0 : 'House Lights · ' + mode0;
+  if ($('sub').textContent !== sub) $('sub').textContent = sub;
+  el.className = it ? 'on show' : (p && s.live && !s.blackout ? 'on' : '');
+  const mode = it ? 'end' : p ? 'stop' : '';
+  b.style.display = mode ? '' : 'none';
+  if (b.dataset.mode !== mode){ b.dataset.mode = mode; disarmStop() }
+}
+let stopArm = null;
+function disarmStop(){ const b = $('stopBtn'); clearTimeout(stopArm); stopArm = null; b.classList.remove('arm'); b.textContent = b.dataset.mode === 'end' ? 'End' : '■ Stop' }
+/* End a show or celebration in one tap; Stop (lights off) needs a second tap so a pocket tap can't black out the house. */
+async function stopTap(){
+  const b = $('stopBtn');
+  if (b.dataset.mode === 'end'){ await post('interrupt/end'); return refresh() }
+  if (!stopArm){ b.classList.add('arm'); b.textContent = 'Tap to stop'; stopArm = setTimeout(disarmStop, 3000); return }
+  disarmStop(); await post('stop'); toast('Stopped'); refresh();
 }
 function setKnob(id, out, v, fmt){ const el=$(id); if (document.activeElement !== el && !el._drag){ el.value = v; $(out).textContent = fmt(v) } }
 function fmtS(n){ if(n==null) return ''; const m=Math.floor(n/60), s=n%60; return m?`${m}m ${s}s`:`${s}s` }
@@ -516,7 +569,7 @@ function powerSheet(){
     <button class="pri" style="width:100%;margin-bottom:8px" onclick="post('live',{on:${!ST.live}}).then(()=>{closeSheet();refresh()})">${ST.live?'Switch to preview (stop sending)':'Go live'}</button>
     <button style="width:100%;margin-bottom:8px" onclick="post('master',{blackout:${!ST.blackout}}).then(()=>{closeSheet();refresh()})">${ST.blackout?'End blackout':'Blackout (keep playing, lights dark)'}</button>
     <button style="width:100%;margin-bottom:8px" onclick="post('stop').then(()=>{closeSheet();refresh()})">Stop playback</button>
-    <button class="bad" style="width:100%" onclick="post('release').then(()=>{closeSheet();toast('Released to the Govee app');refresh()})">Release to Govee app</button></div>`));
+    <button class="bad" style="width:100%" onclick="confirm('Hand the lights back to the Govee app? Effects stop until you play something here again.') && post('release').then(()=>{closeSheet();toast('Released to the Govee app');refresh()})">Release to Govee app</button></div>`));
 }
 
 // ------------------------------------------------------------- palettes
@@ -614,7 +667,7 @@ async function editPalette(name){
   draw();
   el.querySelector('#psave').onclick = () => { const n = el.querySelector('#pnm').value.trim(); if (!n) return toast('Name it first');
     if (name && name !== n && r.user.includes(name)) delete user[name]; user[n] = cols; savePalettes(user).then(closeSheet) };
-  const del = el.querySelector('#pdel'); if (del) del.onclick = () => { delete user[name]; savePalettes(user).then(closeSheet) };
+  const del = el.querySelector('#pdel'); if (del) del.onclick = () => { if (!confirm('Delete the palette "' + name + '"?')) return; delete user[name]; savePalettes(user).then(closeSheet) };
   openSheet(name ? 'Edit palette' : 'New palette', el);
 }
 
@@ -626,18 +679,39 @@ async function loadPresets(){
   $('filters').querySelectorAll('.chip').forEach(b => b.onclick = () => { filter = b.dataset.f; loadPresets() });
   const list = PRESETS.filter(p => filter==='all' || (filter==='★' ? p.favorite : (p.tags||[]).includes(filter)));
   thumbs.cards.clear();
+  drawFeatured();
   $('presetGrid').innerHTML = '';
-  list.forEach(p => {
-    const el = h(`<div class="pc" data-id="${esc(p.id)}" role="button" tabindex="0"><canvas></canvas><div class="nm">${esc(p.name)}<span class="tg">${esc((p.tags||[]).join(' · '))}</span></div><button class="st ${p.favorite?'on':''}" aria-label="favourite">★</button></div>`);
-    el.onclick = () => playPreset(p.id);
-    el.querySelector('.st').onclick = e => { e.stopPropagation(); post('preset/meta',{id:p.id, favorite:!p.favorite}).then(loadPresets) };
-    let pressT; el.addEventListener('pointerdown', () => pressT = setTimeout(() => { pressT = null; editPreset(p.id) }, 600));
-    ['pointerup','pointerleave','pointercancel'].forEach(ev => el.addEventListener(ev, () => clearTimeout(pressT)));
-    $('presetGrid').appendChild(el); thumbs.observe(el, p.id);
-  });
+  list.forEach(p => { const el = presetCard(p); $('presetGrid').appendChild(el); thumbs.observe(el, p.id) });
   if (!list.length) $('presetGrid').innerHTML = '<p class="help">Nothing here yet.</p>';
   $('presetGrid').insertAdjacentHTML('afterend', '');
   refresh();
+}
+/* One preset tile: animated thumbnail, tap to play, ★ to favourite, long-press to edit. */
+function presetCard(p, tagline){
+  const el = h(`<div class="pc" data-id="${esc(p.id)}" role="button" tabindex="0"><canvas></canvas><div class="nm">${esc(p.name)}<span class="tg">${esc(tagline ?? (p.tags||[]).join(' · '))}</span></div><button class="st ${p.favorite?'on':''}" aria-label="favourite">★</button></div>`);
+  el.onclick = () => playPreset(p.id);
+  el.onkeydown = e => { if (e.target !== el) return; if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); playPreset(p.id) } };
+  el.querySelector('.st').onclick = e => { e.stopPropagation(); post('preset/meta',{id:p.id, favorite:!p.favorite}).then(loadPresets) };
+  let pressT; el.addEventListener('pointerdown', () => pressT = setTimeout(() => { pressT = null; editPreset(p.id) }, 600));
+  ['pointerup','pointerleave','pointercancel'].forEach(ev => el.addEventListener(ev, () => clearTimeout(pressT)));
+  el.addEventListener('contextmenu', e => e.preventDefault());
+  return el;
+}
+/* The big house scenes, up front: these ids (when installed) plus anything tagged "Featured". */
+const FEATURED = ['christmas-tree', 'tree-lighting-ceremony', 'porch-fireworks', 'grand-finale', 'snow-piling-up',
+                  'ember-falls', 'roller-coaster', 'text-merry-christmas', 'dusk-to-night'];
+function featuredPresets(){
+  const byId = new Map(PRESETS.map(p => [p.id, p]));
+  const out = FEATURED.map(id => byId.get(id)).filter(Boolean);
+  PRESETS.forEach(p => { if ((p.tags||[]).some(t => String(t).toLowerCase() === 'featured') && !out.includes(p)) out.push(p) });
+  return out;
+}
+function drawFeatured(){
+  const box = $('featStrip'), list = featuredPresets();
+  $('featured').style.display = list.length ? '' : 'none';
+  const keep = box.scrollLeft; box.innerHTML = '';
+  list.forEach(p => { const el = presetCard(p, (p.tags||[]).filter(t => String(t).toLowerCase() !== 'featured').slice(0, 2).join(' · ')); box.appendChild(el); thumbs.observe(el, p.id) });
+  box.scrollLeft = keep;
 }
 async function toggleEvolve(){ const p = ST.playing; if (!p) return;
   if (p.kind === 'evolve') { await post('play', {preset: p.id}); toast('Evolve off') }
@@ -965,7 +1039,9 @@ const progVal = v => !v ? null : v.startsWith('playlist:') ? {playlist:v.slice(9
 function schedForm(){ const s = SCH; $('scEn').checked = !!s.enabled; $('scOn').value = s.on||'sunset'; $('scOffset').value = s.on_offset_min??0; $('scOnTime').value = s.on_time||'17:00'; $('scOff').value = s.off_time||'23:00';
   $('scDefault').innerHTML = progOpts(s.default); $('scLat').value = s.lat??40.3764; $('scLon').value = s.lon??-104.6922; drawRules(); scUI();
   const dm = s.dim||{}, mn = s.morning||{}; $('dmEn').checked = !!dm.enabled; $('dmFrom').value = dm.from||'22:00'; $('dmLvl').value = Math.round((dm.level??0.5)*100);
-  $('mnEn').checked = !!mn.enabled; $('mnOn').value = mn.on_time||'06:00'; $('mnOff').value = mn.off||'sunrise'; $('mnOffT').value = mn.off_time||'07:30' }
+  $('mnEn').checked = !!mn.enabled; $('mnOn').value = mn.on_time||'06:00'; $('mnOff').value = mn.off||'sunrise'; $('mnOffT').value = mn.off_time||'07:30'; mnUI();
+  $('scDusk').value = Math.max(0, +s.dusk_intro_minutes || 0) }
+function mnUI(){ $('mnOffT').style.display = $('mnOff').value === 'time' ? '' : 'none' }
 function scUI(){ const sun = $('scOn').value==='sunset'; $('scOffW').style.display = sun?'':'none'; $('scOnTime').style.display = sun?'none':'' }
 function drawRules(){ const rs = SCH.rules = SCH.rules || [];
   const D = ['Mo','Tu','We','Th','Fr','Sa','Su'];
@@ -983,7 +1059,7 @@ const DATE_RE = /^(\d{1,2}-\d{1,2}|(thanksgiving|easter|mothers-day|fathers-day|
 async function saveSchedule(){ for (const r of SCH.rules){ if ((r.from || r.to) && (!DATE_RE.test(r.from||'') || !DATE_RE.test(r.to||''))) return toast('Dates: MM-DD or a holiday like thanksgiving+1'); if (!r.from && !r.to && !(r.days||[]).length) return toast('Give each rule dates or days') }
   SCH.dim = {enabled: $('dmEn').checked, from: $('dmFrom').value || '22:00', level: (+$('dmLvl').value || 50)/100, fade_min: (SCH.dim||{}).fade_min || 30};
   SCH.morning = {...(SCH.morning||{}), enabled: $('mnEn').checked, on_time: $('mnOn').value || '06:00', off: $('mnOff').value, off_time: $('mnOffT').value || '07:30'};
-  Object.assign(SCH, {enabled:$('scEn').checked, on:$('scOn').value, on_offset_min:+$('scOffset').value, on_time:$('scOnTime').value, off_time:$('scOff').value, default:progVal($('scDefault').value), lat:+$('scLat').value, lon:+$('scLon').value});
+  Object.assign(SCH, {enabled:$('scEn').checked, on:$('scOn').value, on_offset_min:+$('scOffset').value, on_time:$('scOnTime').value, off_time:$('scOff').value, default:progVal($('scDefault').value), dusk_intro_minutes: Math.max(0, Math.min(120, Math.round(+$('scDusk').value || 0))), lat:+$('scLat').value, lon:+$('scLon').value});
   if (await post('schedule',{schedule:SCH})){ toast('Schedule saved'); setTimeout(refresh,300) } }
 const tfmt = iso => iso ? new Date(iso).toLocaleString([], {weekday:'short', hour:'numeric', minute:'2-digit'}) : '';
 function progName(p){ if (!p) return 'lights off'; if (p.playlist) return 'playlist '+p.playlist; if (p.evolve){ const f = PRESETS.find(x=>x.id===p.evolve); return (f ? f.name : p.evolve) + ' (evolving)' } const f = PRESETS.find(x=>x.id===p.preset); return f ? f.name : p.preset }
@@ -1186,7 +1262,7 @@ async function mapWizard(){
 
 // ------------------------------------------------------------- live: events, game day, weather
 let EXTRAS = {};
-async function loadExtras(){ EXTRAS = await get('extras'); drawEvents(); drawGame(); drawWeather(); shSelect(); drawVisitor();
+async function loadExtras(){ EXTRAS = await get('extras'); if (!EXTRAS.shows || typeof EXTRAS.shows !== 'object') EXTRAS.shows = {}; EXTRAS.events ||= []; drawEvents(); drawGame(); drawWeather(); shSelect(); drawVisitor();
   $('shEn').checked = EXTRAS.self_heal !== false; setSel($('reEn'), String(EXTRAS.reenable_min || 0)) }
 function drawEvents(){
   const box = $('evList'); box.innerHTML = '';
@@ -1213,6 +1289,11 @@ function drawGame(){
   const g = EXTRAS.game; $('gEn').checked = !!g.enabled; $('gDelay').value = g.delay ?? 30; $('gDelayV').textContent = (g.delay ?? 30) + ' s'; $('gOff').checked = !!g.when_lights_off;
   $('gDelay').oninput = e => { g.delay = +e.target.value; $('gDelayV').textContent = g.delay + ' s' };
   $('gEn').onchange = e => g.enabled = e.target.checked; $('gOff').onchange = e => g.when_lights_off = e.target.checked;
+  const sbE = () => { const m = Math.max(0, +g.scoreboard_every || 0); $('gSbEveryV').textContent = m ? (m === 1 ? 'minute' : m + ' min') : 'off'; $('gSbSecsRow').style.opacity = m ? '' : '.45' };
+  const sbS = () => { $('gSbSecsV').textContent = Math.max(5, +g.scoreboard_seconds || 20) + ' s' };
+  $('gSbEvery').value = Math.max(0, +g.scoreboard_every || 0); $('gSbSecs').value = Math.max(5, +g.scoreboard_seconds || 20); sbE(); sbS();
+  $('gSbEvery').oninput = e => { g.scoreboard_every = +e.target.value; sbE() };
+  $('gSbSecs').oninput = e => { g.scoreboard_seconds = +e.target.value; sbS() };
   const box = $('gTeams'); box.innerHTML = '';
   (g.teams ||= []).forEach((t, k) => { const el = h(`<div class="row" style="margin-bottom:6px"><select class="grow">${Object.entries(EXTRAS.leagues).map(([v,l]) => opt(v, l, v===t.league)).join('')}</select>
       <input type="text" value="${esc(t.team)}" style="width:90px" placeholder="DEN" maxlength="6"><button class="sm bad">✕</button></div>`);
@@ -1226,7 +1307,10 @@ function drawWeather(){
   [['snow','❄ Snow'],['rain','☂ Rain'],['storm','⚡ Lightning'],['wind','🌬 Wind shimmer']].forEach(([k,l]) => { const b = h(`<button class="chip ${w[k]?'on':''}">${l}</button>`);
     b.onclick = () => { w[k] = !w[k]; drawWeather() }; box.appendChild(b) });
 }
-async function saveExtras(which){ if (await post(which, {value: EXTRAS[which]})) toast('Saved') }
+/* Save one section of the live settings. Shows: only the user's own (built-ins live on the server). */
+async function saveExtras(which, msg = 'Saved'){
+  const value = which === 'shows' ? userShows() : EXTRAS[which];
+  const r = await post(which, {value}); if (r && msg) toast(msg); return r }
 function liveStatus(){
   const g = Object.entries(ST.games || {}).map(([k, v]) => v.error ? `${esc(k)}: couldn't reach scores (${esc(v.error)})` :
     v.state === 'none' || !v.id ? `${esc(v.team||k)}: no game on the current scoreboard` :
@@ -1254,23 +1338,70 @@ function drawPad(){
 // ------------------------------------------------------------- shows
 let shCur = null;
 const TRANS_LABEL = {cut:'Cut', crossfade:'Crossfade', wipe:'Wipe →', 'wipe-back':'Wipe ←', rise:'Rise up', iris:'Iris from apex', flash:'Flash', black:'Through black'};
-function shSelect(){ const names = Object.keys(EXTRAS.shows||{}); if (!shCur || !EXTRAS.shows[shCur]) shCur = names[0] || null;
-  $('shSel').innerHTML = names.map(n => opt(n,n,n===shCur)).join('') || '<option value="">No shows yet</option>'; shEditor(); drawShowtimes() }
+/* Built-in shows come from the server (extras.builtin_shows, or entries in extras.shows marked
+   "builtin": true). They can be played and copied, never edited, deleted or saved into the config. */
+function builtinShows(){
+  const out = {}, user = EXTRAS.shows || {};
+  Object.entries(EXTRAS.builtin_shows || {}).forEach(([n, d]) => { if (d && typeof d === 'object' && !(user[n] && !user[n].builtin)) out[n] = d });
+  Object.entries(user).forEach(([n, d]) => { if (d && d.builtin) out[n] = d });
+  return out;
+}
+function userShows(){ const out = {}; Object.entries(EXTRAS.shows || {}).forEach(([n, d]) => { if (d && typeof d === 'object' && !d.builtin) out[n] = d }); return out }
+const isBuiltinShow = n => !!n && n in builtinShows();
+const showDef = n => userShows()[n] || builtinShows()[n] || null;
+const allShowNames = () => [...Object.keys(builtinShows()), ...Object.keys(userShows()).filter(n => !(n in builtinShows()))];
+const cueSecs = c => Math.max(1, +c.seconds || 20);
+const fmtDur = t => { t = Math.round(t); const m = Math.floor(t/60), s = t%60; return m ? (s ? `${m}m ${s}s` : `${m} min`) : `${s}s` };
+const presetName = id => (PRESETS.find(p => p.id === id) || {}).name || id;
+function shSelect(){ const names = allShowNames(); if (!shCur || !names.includes(shCur)) shCur = Object.keys(userShows())[0] || names[0] || null;
+  const b = Object.keys(builtinShows()), u = Object.keys(userShows()).filter(n => !b.includes(n));
+  $('shSel').innerHTML = !names.length ? '<option value="">No shows yet</option>' :
+    (b.length ? `<optgroup label="Built-in">${b.map(n => opt(n, n, n===shCur)).join('')}</optgroup>` : '') +
+    (u.length ? (b.length ? `<optgroup label="My shows">${u.map(n => opt(n,n,n===shCur)).join('')}</optgroup>` : u.map(n => opt(n,n,n===shCur)).join('')) : '');
+  shEditor(); drawShowtimes() }
 function shPick(n){ shCur = n; shEditor() }
-function shNew(){ const n = prompt('Show name'); if (!n) return; EXTRAS.shows[n] = {end:'resume', cues:[]}; shCur = n; shSelect() }
+function shNew(){ const n = (prompt('Show name') || '').trim(); if (!n) return; if (showDef(n)) return toast('That name exists');
+  EXTRAS.shows[n] = {end:'resume', cues:[]}; shCur = n; shSelect() }
+async function shCopy(name){
+  const src = showDef(name); if (!src) return;
+  let n = `${name} (copy)`, k = 2; while (showDef(n)) n = `${name} (copy ${k++})`;
+  const d = JSON.parse(JSON.stringify(src)); delete d.builtin; EXTRAS.shows[n] = d;
+  if (await saveExtras('shows', 'Copied to "' + n + '"')) { shCur = n; shSelect() } else delete EXTRAS.shows[n];
+}
+function cueLine(c, k){
+  const tr = TRANS_LABEL[c.transition || 'crossfade'] || c.transition || 'Crossfade';
+  const what = c.countdown_to ? `Countdown to ${esc(c.countdown_to)}` : esc(presetName(c.preset));
+  const fade = Number.isFinite(+(c.fade ?? 1.5)) ? +(c.fade ?? 1.5) : 1.5;
+  const how = c.countdown_to ? `then ${fmtDur(cueSecs(c))}` : `${esc(tr)} in ${fade}s · then ${fmtDur(cueSecs(c))}`;
+  return `<div class="cuero"><span class="n">${k+1}</span><div class="grow"><b>${what}</b><span>${how}</span></div></div>`;
+}
 function shEditor(){
-  const box = $('shEd'); if (!shCur){ box.innerHTML = ''; return }
-  const sh = EXTRAS.shows[shCur], total = sh.cues.reduce((a,c) => a + (+c.seconds||0), 0);
+  const box = $('shEd'); if (!shCur){ box.innerHTML = '<p class="help">No shows yet. Tap New to make one.</p>'; return }
+  if (isBuiltinShow(shCur)){
+    const sh = builtinShows()[shCur], cues = (sh.cues || []), total = cues.reduce((a,c) => a + cueSecs(c), 0);
+    box.innerHTML = `<div class="row" style="margin-bottom:6px"><span class="badge">Built-in</span><span class="dim" style="font-size:12.5px">${fmtDur(total)} · ${sh.end === 'loop' ? 'loops until you end it' : 'then back to what was playing'}</span></div>
+      ${sh.description ? `<p class="help" style="margin-top:0">${esc(sh.description)}</p>` : ''}
+      <div class="cuelist">${cues.map(cueLine).join('')}</div>
+      <div class="row" style="margin-top:10px"><button class="pri grow" id="shPlay">▶ Play now</button><button class="grow" id="shCopy">Copy to my shows</button></div>
+      <p class="help">Built-in shows can't be changed. Copy one to make your own version.</p>`;
+    box.querySelector('#shPlay').onclick = () => post('show/play', {name: shCur}).then(r => { if (r) toast('Playing ' + shCur); refresh() });
+    box.querySelector('#shCopy').onclick = () => shCopy(shCur);
+    return;
+  }
+  const sh = EXTRAS.shows[shCur]; sh.cues ||= [];
+  const total = sh.cues.reduce((a,c) => a + cueSecs(c), 0);
   box.innerHTML = `<div id="cues"></div><button class="sm" id="cAdd">+ Cue</button>
     <div class="row" style="margin-top:10px"><span class="dim" style="font-size:13px">When it ends</span><select id="shEnd" style="width:auto">${opt('resume','go back to what was playing',sh.end!=='loop')}${opt('loop','loop forever',sh.end==='loop')}</select></div>
-    <p class="help">Total ${Math.floor(total/60)}m ${total%60}s</p>
-    <div class="row"><button class="pri" id="shSave">Save</button><button id="shPlay">▶ Play now</button><button class="bad sm" id="shDel" style="margin-left:auto">Delete</button></div>`;
+    <p class="help">Total ${fmtDur(total)}</p>
+    <div class="row"><button class="pri" id="shSave">Save</button><button id="shPlay">▶ Play now</button><button class="sm" id="shDup">Copy</button><button class="bad sm" id="shDel" style="margin-left:auto">Delete</button></div>`;
   const cb = box.querySelector('#cues');
-  sh.cues.forEach((c, k) => { const el = h(`<div class="cue"><select class="full" data-f="preset">${optsWithMissing(PRESETS.map(p => [p.id, p.name]), c.preset)}</select>
+  sh.cues.forEach((c, k) => { const el = h(`<div class="cue">${c.countdown_to
+        ? `<div class="full row"><b class="grow">Countdown to</b><input type="time" data-f="countdown_to" value="${esc(c.countdown_to)}" style="width:auto"></div>`
+        : `<select class="full" data-f="preset">${optsWithMissing(PRESETS.map(p => [p.id, p.name]), c.preset)}</select>`}
       <div class="full row"><div class="grow"><label class="dim" style="font-size:11px">${k+1}. Transition in</label><select data-f="transition">${(EXTRAS.transitions||[]).map(t => opt(t, TRANS_LABEL[t]||t, t===(c.transition||'crossfade'))).join('')}</select></div>
         <div style="width:70px"><label class="dim" style="font-size:11px">over (s)</label><input type="number" data-f="fade" min="0" max="10" step="0.5" value="${c.fade??1.5}"></div>
         <div style="width:70px"><label class="dim" style="font-size:11px">then hold (s)</label><input type="number" data-f="seconds" min="2" max="600" step="1" value="${c.seconds??20}"></div></div>
-      <div class="row full"><span class="grow"></span><button class="sm" data-a="up" ${k?'':'disabled'}>↑</button><button class="sm" data-a="down" ${k<sh.cues.length-1?'':'disabled'}>↓</button><button class="sm bad" data-a="del">✕</button></div></div>`);
+      <div class="row full"><span class="grow"></span><button class="sm" data-a="up" ${k?'':'disabled'} aria-label="Move up">↑</button><button class="sm" data-a="down" ${k<sh.cues.length-1?'':'disabled'} aria-label="Move down">↓</button><button class="sm bad" data-a="del" aria-label="Remove cue">✕</button></div></div>`);
     el.querySelectorAll('[data-f]').forEach(i => i.onchange = () => { const f = i.dataset.f; c[f] = i.type==='number' ? +i.value : i.value; if (f==='seconds') shEditor() });
     el.querySelectorAll('[data-a]').forEach(b => b.onclick = () => { const a = b.dataset.a, cs = sh.cues;
       if (a==='up') [cs[k-1],cs[k]] = [cs[k],cs[k-1]]; if (a==='down') [cs[k+1],cs[k]] = [cs[k],cs[k+1]]; if (a==='del') cs.splice(k,1); shEditor() });
@@ -1278,13 +1409,17 @@ function shEditor(){
   box.querySelector('#cAdd').onclick = () => { sh.cues.push({preset: PRESETS[0]?.id, seconds: 20, transition: 'crossfade', fade: 1.5}); shEditor() };
   box.querySelector('#shEnd').onchange = e => sh.end = e.target.value;
   box.querySelector('#shSave').onclick = () => saveExtras('shows').then(drawShowtimes);
-  box.querySelector('#shPlay').onclick = async () => { await saveExtras('shows'); post('show/play',{name:shCur}).then(refresh) };
-  box.querySelector('#shDel').onclick = async () => { if (!confirm('Delete show '+shCur+'?')) return; delete EXTRAS.shows[shCur]; shCur = null; await saveExtras('shows'); shSelect() };
+  box.querySelector('#shPlay').onclick = async () => { if (await saveExtras('shows', '')) post('show/play',{name:shCur}).then(refresh) };
+  box.querySelector('#shDup').onclick = () => shCopy(shCur);
+  box.querySelector('#shDel').onclick = async () => { if (!confirm('Delete the show "'+shCur+'"? This can\'t be undone.')) return;
+    const gone = shCur, d = EXTRAS.shows[gone]; delete EXTRAS.shows[gone]; shCur = null;
+    if (await saveExtras('shows', 'Deleted')) shSelect(); else { EXTRAS.shows[gone] = d; shCur = gone } };
 }
 function drawShowtimes(){
   const box = $('stList'); box.innerHTML = ''; const D = ['Mo','Tu','We','Th','Fr','Sa','Su'];
+  const b = Object.keys(builtinShows()), names = allShowNames().map(n => [n, b.includes(n) ? n + ' (built-in)' : n]);
   (EXTRAS.showtimes ||= []).forEach((st, k) => { const el = h(`<div class="evt">
-      <div class="full"><label>Show</label><select data-f="show">${optsWithMissing(Object.keys(EXTRAS.shows||{}).map(n => [n, n]), st.show)}</select></div>
+      <div class="full"><label>Show</label><select data-f="show">${optsWithMissing(names, st.show)}</select></div>
       <div><label>From</label><input type="time" data-f="from" value="${esc(st.from||'17:00')}"></div><div><label>To</label><input type="time" data-f="to" value="${esc(st.to||'22:00')}"></div>
       <div class="full"><label>Every</label><select data-f="every">${[[15,'15 minutes'],[30,'30 minutes'],[60,'hour'],[120,'2 hours']].map(([v,l]) => opt(v,l,+st.every===v)).join('')}</select></div>
       <div class="full days">${D.map((d,i) => `<button class="${(st.days||[]).includes(i)?'on':''}" data-day="${i}">${d}</button>`).join('')}<span class="dim" style="font-size:11px;align-self:center;margin-left:4px">(none = every day)</span></div>
@@ -1294,7 +1429,7 @@ function drawShowtimes(){
     el.querySelector('[data-del]').onclick = () => { EXTRAS.showtimes.splice(k,1); drawShowtimes() };
     box.appendChild(el) });
 }
-function addShowtime(){ const first = Object.keys(EXTRAS.shows||{})[0]; if (!first) return toast('Make a show first'); EXTRAS.showtimes.push({show:first, from:'17:00', to:'22:00', every:60, enabled:true}); drawShowtimes() }
+function addShowtime(){ const first = Object.keys(userShows())[0] || allShowNames()[0]; if (!first) return toast('Make a show first'); EXTRAS.showtimes.push({show:first, from:'17:00', to:'22:00', every:60, enabled:true}); drawShowtimes() }
 
 // ------------------------------------------------------------- visitor page
 function visitorUrl(){ const v = EXTRAS.visitor || {}; return v.token ? `${location.origin}/visit/${v.token}` : '' }
