@@ -180,7 +180,7 @@ h2 .sp{flex:1}
   <div class="card">
     <div class="row"><div class="grow"><div class="dim" style="font-size:12px">Now playing</div>
       <div id="nowName" style="font-size:19px;font-weight:700">Nothing</div><div id="nowSub" class="dim" style="font-size:12.5px"></div></div>
-      <button class="sm" onclick="editCurrent()">Edit</button></div>
+      <div class="row" style="gap:6px"><button class="sm" id="evoBtn" onclick="toggleEvolve()" title="Keep crossfading into fresh variations of this preset">✨ Evolve</button><button class="sm" onclick="editCurrent()">Edit</button></div></div>
     <div style="margin-top:8px">
       <div class="knob"><label>Brightness</label><input id="kBri" type="range" min="0" max="1" step="0.01"><output id="oBri"></output></div>
       <div class="knob"><label>Speed</label><input id="kSpd" type="range" min="0" max="3" step="0.05"><output id="oSpd"></output></div>
@@ -302,6 +302,7 @@ h2 .sp{flex:1}
     <div class="knob"><label>Frame rate</label><select id="fps" onchange="post('settings',{fps:+this.value})"><option>10</option><option>15</option><option>20</option><option>25</option><option>30</option></select><span></span></div>
     <div class="knob"><label>Gamma</label><input id="gamma" type="range" min="1" max="2.8" step="0.1"><output id="oGamma"></output></div>
     <p class="help">Gamma 1.0 = off; ~2.2 if mid colours look washed out on the bulbs.</p>
+    <label class="row" style="margin-top:8px"><input type="checkbox" id="dthEn" onchange="post('settings',{dither:this.checked})"> <span>Smooth dim fades (tiny flicker between brightness steps hides banding)</span></label>
     <label class="row" style="margin-top:8px"><input type="checkbox" id="shEn" onchange="post('settings',{self_heal:this.checked})"> <span>Self-healing: re-take control if a box drops out (power blip, Govee app)</span></label>
     <div class="knob"><label>Re-enable every</label><select id="reEn" onchange="post('settings',{reenable_min:+this.value})"><option value="0">never</option><option value="5">5 min</option><option value="15">15 min</option><option value="60">hour</option></select><span></span></div>
     <p class="help">Only turn on "re-enable every" if re-sending realtime doesn't make your boxes blink (try Enable realtime twice in diagnostics).</p>
@@ -310,6 +311,12 @@ h2 .sp{flex:1}
     <h2>Map the bulbs with your camera</h2>
     <p class="help">Makes 2D effects (ripples, sweeps, pictures, fire rising) line up with the real roofline. The lights blink a code, you film them for ~25 seconds, and your phone works out where every bulb is. Nothing is uploaded.</p>
     <div class="row"><button class="pri grow" onclick="mapWizard()">Start mapping</button><button onclick="post('map/undo').then(r=>r&&(toast(r.restored?'Previous layout restored':'Nothing to undo'), reloadLayout()))">Undo last</button></div>
+  </div>
+  <div class="card">
+    <h2>Colour-match the runs</h2>
+    <p class="help">Different runs can tint slightly differently. Show plain white on everything, then lower red, green or blue on any run that looks off until they all match (for example, less blue for a warmer white).</p>
+    <div class="row" style="margin-bottom:8px"><button id="wtBtn" onclick="whiteTest()">Show white on all runs</button></div>
+    <div id="trims"></div>
   </div>
   <div class="card">
     <h2>Devices</h2><div id="devInfo" class="kv"></div>
@@ -457,7 +464,9 @@ async function refresh(){
   $('sub').textContent = s.blackout ? '· blackout' : (s.live ? '' : '· preview');
   const p = s.playing;
   $('nowName').textContent = p ? p.name : 'Nothing';
-  $('nowSub').textContent = p ? (p.kind==='playlist' ? `playlist · ${p.item_name||p.item} · next in ${fmtS(s.playlist?.next_in)}` : (s.live ? 'on the lights' : 'preview only (tap Preview to go Live)')) : '';
+  $('nowSub').textContent = p ? (p.kind==='playlist' ? `playlist · ${p.item_name||p.item} · next in ${fmtS(s.playlist?.next_in)}` :
+    p.kind==='evolve' ? `evolving · next variation in ${fmtS(s.evolve?.next_in)}` : (s.live ? 'on the lights' : 'preview only (tap Preview to go Live)')) : '';
+  $('evoBtn').classList.toggle('pri', !!p && p.kind === 'evolve'); $('evoBtn').style.display = p && (p.kind === 'preset' || p.kind === 'evolve') ? '' : 'none';
   setKnob('kBri','oBri', s.brightness, v => Math.round(v*100)+'%');
   setKnob('kSpd','oSpd', s.master.speed, v => (+v).toFixed(2)+'×');
   setKnob('kHue','oHue', s.master.hue, v => Math.round(v*360)+'°');
@@ -477,7 +486,8 @@ async function refresh(){
   document.querySelectorAll('.pc').forEach(el => el.classList.toggle('on', !!p && p.kind==='preset' && el.dataset.id===p.id));
   document.querySelectorAll('#palChips .pals .pal').forEach(el => el.classList.toggle('on', el.dataset.p === (s.master.palette||'')));
   $('devInfo').innerHTML = s.runs.map(r => `<b>${esc(r.name)}</b><span>${r.visible}/${r.count} bulbs · ${esc(r.ip||'no IP')}</span>`).join('');
-  schedStatus(); liveStatus();
+  schedStatus(); liveStatus(); drawTrims();
+  if (document.activeElement !== $('dthEn')) $('dthEn').checked = s.dither !== false;
 }
 function setKnob(id, out, v, fmt){ const el=$(id); if (document.activeElement !== el && !el._drag){ el.value = v; $(out).textContent = fmt(v) } }
 function fmtS(n){ if(n==null) return ''; const m=Math.floor(n/60), s=n%60; return m?`${m}m ${s}s`:`${s}s` }
@@ -625,6 +635,10 @@ async function loadPresets(){
   $('presetGrid').insertAdjacentHTML('afterend', '');
   refresh();
 }
+async function toggleEvolve(){ const p = ST.playing; if (!p) return;
+  if (p.kind === 'evolve') { await post('play', {preset: p.id}); toast('Evolve off') }
+  else if (p.kind === 'preset') { await post('play', {evolve: p.id, minutes: 3}); toast('Evolving: a fresh variation every 3 minutes') }
+  refresh() }
 async function playPreset(id){ await post('play',{preset:id}); draft = null; refresh() }
 function playlistChips(){ $('playlistChips').innerHTML = Object.keys(PL).map(n => `<button class="chip" data-pl="${esc(n)}">▶ ${esc(n)}</button>`).join('') || '<p class="help">None yet. Make one in Shows.</p>';
   $('playlistChips').querySelectorAll('[data-pl]').forEach(b => b.onclick = () => post('play',{playlist:b.dataset.pl}).then(refresh)) }
@@ -807,6 +821,8 @@ function paramRow(obj, p, owner){
         box.appendChild(w) });
       const add = h('<button class="sm">+</button>'); add.onclick = () => { set([...val(obj,p), cs[cs.length-1] || '#ffffff']); drawC() }; box.appendChild(add) };
     drawC();
+  } else if (p.kind === 'text'){
+    const i = h(`<input type="text" maxlength="120" value="${esc(val(obj,p))}" style="margin-top:4px">`); const s2 = debounce(() => set(i.value), 300); i.oninput = s2; el.appendChild(i);
   } else if (p.kind === 'choice'){
     const tg = h('<div class="tgt" style="margin-top:4px"></div>');
     p.options.forEach(o => { const b = h(`<button class="chip ${o===val(obj,p)?'on':''}">${esc(o)}</button>`); b.onclick = () => { set(o); tg.querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x===b)) }; tg.appendChild(b) });
@@ -936,9 +952,10 @@ function plEditor(){
 }
 
 // ------------------------------------------------------------- schedule
-function progOpts(sel){ const k = sel ? (sel.playlist ? 'playlist:'+sel.playlist : sel.preset ? 'preset:'+sel.preset : '') : '';
-  return opt('','(lights off)',k==='') + '<optgroup label="Playlists">' + Object.keys(PL).map(n => opt('playlist:'+n,n,k==='playlist:'+n)).join('') + '</optgroup><optgroup label="Presets">' + PRESETS.map(p => opt('preset:'+p.id,p.name,k==='preset:'+p.id)).join('') + '</optgroup>' }
-const progVal = v => !v ? null : (v.startsWith('playlist:') ? {playlist:v.slice(9)} : {preset:v.slice(7)});
+function progOpts(sel){ const k = sel ? (sel.playlist ? 'playlist:'+sel.playlist : sel.evolve ? 'evolve:'+sel.evolve : sel.preset ? 'preset:'+sel.preset : '') : '';
+  return opt('','(lights off)',k==='') + '<optgroup label="Playlists">' + Object.keys(PL).map(n => opt('playlist:'+n,n,k==='playlist:'+n)).join('') + '</optgroup><optgroup label="Presets">' + PRESETS.map(p => opt('preset:'+p.id,p.name,k==='preset:'+p.id)).join('') + '</optgroup>' +
+    '<optgroup label="Evolving (never the same twice)">' + PRESETS.map(p => opt('evolve:'+p.id, p.name + ' · evolving', k==='evolve:'+p.id)).join('') + '</optgroup>' }
+const progVal = v => !v ? null : v.startsWith('playlist:') ? {playlist:v.slice(9)} : v.startsWith('evolve:') ? {evolve:v.slice(7)} : {preset:v.slice(7)};
 function schedForm(){ const s = SCH; $('scEn').checked = !!s.enabled; $('scOn').value = s.on||'sunset'; $('scOffset').value = s.on_offset_min??0; $('scOnTime').value = s.on_time||'17:00'; $('scOff').value = s.off_time||'23:00';
   $('scDefault').innerHTML = progOpts(s.default); $('scLat').value = s.lat??40.3764; $('scLon').value = s.lon??-104.6922; drawRules(); scUI();
   const dm = s.dim||{}, mn = s.morning||{}; $('dmEn').checked = !!dm.enabled; $('dmFrom').value = dm.from||'22:00'; $('dmLvl').value = Math.round((dm.level??0.5)*100);
@@ -963,7 +980,7 @@ async function saveSchedule(){ for (const r of SCH.rules){ if ((r.from || r.to) 
   Object.assign(SCH, {enabled:$('scEn').checked, on:$('scOn').value, on_offset_min:+$('scOffset').value, on_time:$('scOnTime').value, off_time:$('scOff').value, default:progVal($('scDefault').value), lat:+$('scLat').value, lon:+$('scLon').value});
   if (await post('schedule',{schedule:SCH})){ toast('Schedule saved'); setTimeout(refresh,300) } }
 const tfmt = iso => iso ? new Date(iso).toLocaleString([], {weekday:'short', hour:'numeric', minute:'2-digit'}) : '';
-function progName(p){ if (!p) return 'lights off'; if (p.playlist) return 'playlist '+p.playlist; const f = PRESETS.find(x=>x.id===p.preset); return f ? f.name : p.preset }
+function progName(p){ if (!p) return 'lights off'; if (p.playlist) return 'playlist '+p.playlist; if (p.evolve){ const f = PRESETS.find(x=>x.id===p.evolve); return (f ? f.name : p.evolve) + ' (evolving)' } const f = PRESETS.find(x=>x.id===p.preset); return f ? f.name : p.preset }
 function schedStatus(){ const s = ST.schedule || {}; let x;
   if (!s.enabled) x = '<b>Schedule is off.</b>';
   else if (s.active) x = `<b style="color:var(--acc)">On now</b> · ${esc(progName(s.program))} <span class="dim">(${esc(s.rule)})</span><br><span class="dim">Off ${tfmt(s.off)}</span>`;
@@ -1301,6 +1318,19 @@ function printSign(){
     <div style="display:inline-block;padding:16px;border:6px solid #111;border-radius:24px">${q.createSvgTag({cellSize: 12, margin: 2})}</div>
     <p style="font-size:20px">${esc(EXTRAS.visitor.message || '')}</p></body>`);
   w.document.close(); setTimeout(() => w.print(), 400);
+}
+
+// ------------------------------------------------------------- colour match
+let whiteOn = false;
+function whiteTest(){ whiteOn = !whiteOn; post('pad', {action:'white', on: whiteOn}); $('wtBtn').textContent = whiteOn ? 'Stop white test' : 'Show white on all runs'; $('wtBtn').classList.toggle('pri', whiteOn) }
+function drawTrims(){
+  const box = $('trims'); if (!box || box._drawn === JSON.stringify(ST.runs.map(r => r.mac))) return;
+  box._drawn = JSON.stringify(ST.runs.map(r => r.mac)); box.innerHTML = '';
+  ST.runs.forEach(r => { const tr = r.trim || [1,1,1];
+    const el = h(`<div style="margin-bottom:10px"><b style="font-size:13px">${esc(r.name)}</b>${['Red','Green','Blue'].map((c,k) => `<div class="knob"><label>${c}</label><input type="range" min="0.4" max="1" step="0.01" value="${tr[k]}" data-k="${k}"><output>${Math.round(tr[k]*100)}%</output></div>`).join('')}</div>`);
+    const send = debounce(() => post('trim', {mac: r.mac, trim: [...el.querySelectorAll('input')].map(i => +i.value)}), 120);
+    el.querySelectorAll('input').forEach(i => i.oninput = () => { i.nextElementSibling.textContent = Math.round(i.value*100)+'%'; send() });
+    box.appendChild(el) });
 }
 
 // ------------------------------------------------------------- security

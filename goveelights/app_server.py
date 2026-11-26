@@ -295,7 +295,9 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
         def _api(self, a: str, b: dict):
             cfg = ctl.cfg
             if a == "play":
-                if b.get("preset"):
+                if b.get("evolve"):
+                    ctl.play_evolve(b["evolve"], float(b.get("minutes", 3)), float(b.get("amount", 0.2)))
+                elif b.get("preset"):
                     ctl.play_preset(b["preset"], fade=float(b.get("fade", 1)))
                 elif b.get("playlist"):
                     ctl.play_playlist(b["playlist"])
@@ -307,6 +309,16 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
             if a == "scene":                       # editor: replace the playing scene instantly
                 ctl.play_scene(b["scene"], {"kind": "scene", "name": b["scene"].get("name", "untitled"),
                                             "id": b.get("id")}, fade=0, continuous=True)
+                return {"ok": True}
+            if a == "trim":
+                mac, tr = b["mac"], b.get("trim")
+                tr = [max(0.2, min(1.0, float(v))) for v in tr] if tr else None
+                with cfg.lock:
+                    cfg.device(mac)["trim"] = tr
+                    cfg.save()
+                r = ctl.engine.layout.run(mac)
+                if r:
+                    r.trim = tuple(tr) if tr else None
                 return {"ok": True}
             if a == "master":
                 ctl.set_master(b)

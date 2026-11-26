@@ -12,6 +12,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from . import evolve as evo
 from . import live, shows
 from . import schedule as sched
 from .config import Config
@@ -95,6 +96,7 @@ class Controller:
         self._last_reminder = 0.0
         self._forced_weather: dict = {}             # test overlays {kind: until}
         self.health: dict[str, dict] = {}           # per-device self-healing state
+        self.evolve: dict | None = None             # 'let it evolve' state
         self.vqueue: list[dict] = []                # visitor requests waiting
         self._vlast: dict[str, float] = {}          # visitor cooldowns by client
         self._showtimes_done: set = set()
@@ -156,6 +158,8 @@ class Controller:
                 e.gamma = self.ecfg["gamma"] = max(0.5, min(3.0, float(b["gamma"])))
             if "brightness" in b:
                 e.brightness = self.ecfg["brightness"] = max(0.0, min(1.0, float(b["brightness"])))
+            if "dither" in b:
+                e.dither = self.ecfg["dither"] = bool(b["dither"])
             if "self_heal" in b:
                 self.ecfg["self_heal"] = bool(b["self_heal"])
             if "reenable_min" in b:
@@ -219,6 +223,7 @@ class Controller:
             if manual:
                 self._manual()
                 self.interrupt = None
+                self.evolve = None
             if not keep_playlist:
                 self.playlist = None
             self.scene_dict = scene.to_dict()
@@ -228,6 +233,32 @@ class Controller:
     def play_preset(self, pid: str, fade: float = 1.0, manual: bool = True, keep_playlist: bool = False):
         d = self.presets.get(pid)
         self.play_scene(d, {"kind": "preset", "id": pid, "name": d.get("name", pid)}, fade, manual, keep_playlist)
+
+    def play_evolve(self, pid: str, minutes: float = 3.0, amount: float = 0.2, manual: bool = True):
+        """Play a preset, then keep crossfading into fresh variations of it."""
+        base = self.presets.get(pid)
+        self.play_preset(pid, fade=1.5, manual=manual)
+        with self.lock:
+            self.evolve = {"id": pid, "base": base, "step": 0, "minutes": max(0.25, float(minutes)),
+                           "amount": max(0.02, min(0.6, float(amount))),
+                           "next_at": time.time() + max(0.25, float(minutes)) * 60}
+            self.playing = {"kind": "evolve", "id": pid, "name": base.get("name", pid)}
+
+    def _evolve_tick(self, now: float):
+        ev = self.evolve
+        if not ev or self.interrupt or self.map_state or now < ev["next_at"]:
+            return
+        ev["step"] += 1
+        ev["next_at"] = now + ev["minutes"] * 60
+        d = evo.variation(ev["base"], ev["step"], ev["amount"], ev["id"])
+        try:
+            scene = Scene.from_dict(d, self.user_palettes)
+        except ValueError as e:
+            log.warning("evolve step failed: %s", e)
+            return
+        self.scene_dict = scene.to_dict()
+        self.engine.set_scene(scene, 8.0)
+        self.playing = {"kind": "evolve", "id": ev["id"], "name": ev["base"].get("name", ev["id"])}
 
     def play_playlist(self, name: str, manual: bool = True):
         pl = self.cfg.data.get("playlists", {}).get(name)
@@ -239,6 +270,7 @@ class Controller:
         with self.lock:
             if manual:
                 self._manual()
+            self.evolve = None
             self.playlist = {"name": name, "order": order, "idx": -1, "next_at": 0.0, "fade": float(pl.get("fade", 2))}
             self._advance(first=True)
 
@@ -266,6 +298,8 @@ class Controller:
             return
         if prog.get("playlist"):
             self.play_playlist(prog["playlist"], manual=manual)
+        elif prog.get("evolve"):
+            self.play_evolve(prog["evolve"], float(prog.get("minutes", 3)), manual=manual)
         elif prog.get("preset"):
             self.play_preset(prog["preset"], manual=manual)
         self.set_live(True, manual=manual)
@@ -274,7 +308,7 @@ class Controller:
         with self.lock:
             if manual:
                 self._manual()
-            self.playlist, self.playing = None, None
+            self.playlist, self.playing, self.evolve = None, None, None
             self.engine.set_scene(None)
             self.engine.set_live(False, release=release)
 
@@ -388,6 +422,13 @@ class Controller:
         if action == "blackout":
             e.blackout = bool(on) if on is not None else not e.blackout
             return "blackout" if e.blackout else "lights back"
+        if action == "white":                     # colour-matching aid: every run plain white
+            if on is False:
+                e.overlays.pop("pad:white", None)
+            else:
+                e.overlays["pad:white"] = (S({"layers": [{"effect": "solid", "params": {"color": "#ffffff"}}]}),
+                                           "normal", 1.0, now + 120, now, 0)
+            return "white test"
         if action == "hue":
             e.hue_sweep = (now, 4.0)
             return "hue sweep"
@@ -765,6 +806,7 @@ class Controller:
                         self.playlist["next_at"] += 1.0          # hold the playlist while interrupted
                     elif self.playlist and now >= self.playlist["next_at"]:
                         self._advance()
+                    self._evolve_tick(now)
                 self._events_tick()
                 self._showtimes_tick()
                 if now - last_sched >= 10:
@@ -809,7 +851,9 @@ class Controller:
         return {
             "live": e.live, "playing": self.playing, "playlist": pl, "diag_active": self.diag_active,
             "fps": e.fps, "gamma": e.gamma, "brightness": e.brightness, "stats": e.stats,
-            "master": e.master, "blackout": e.blackout,
+            "master": e.master, "blackout": e.blackout, "dither": e.dither,
+            "evolve": ({"next_in": max(0, round(self.evolve["next_at"] - time.time())), "step": self.evolve["step"]}
+                       if self.evolve else None),
             "interrupt": ({"label": self.interrupt.get("label"), "left": max(0, round(self.interrupt["until"] - time.time()))}
                           if self.interrupt else None),
             "mapping": bool(self.map_state), "weather": self.weather, "overlays": list(e.overlays),
@@ -821,7 +865,7 @@ class Controller:
                 "paused": h["paused"]} for m, h in self.health.items()},
             "schedule": {"enabled": bool(sch.get("enabled")), **self.sched_status,
                          "override_until": self.override_until.isoformat(timespec="minutes") if self.override_until else None},
-            "runs": [{"name": r.name, "mac": r.mac, "count": r.count, "visible": len(r.pixels),
+            "runs": [{"name": r.name, "mac": r.mac, "count": r.count, "visible": len(r.pixels), "trim": r.trim,
                       "ip": self.cfg.devices[r.mac].get("ip")} for r in e.layout.runs],
             "devices_without_count": [d.get("name") for d in self.cfg.devices.values() if not d.get("pixel_count")],
         }

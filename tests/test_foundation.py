@@ -63,3 +63,21 @@ class FoundationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EvolveTests(unittest.TestCase):
+    def test_variations_stay_in_character(self):
+        import glob
+        import json
+        from goveelights import evolve
+        L = house()
+        for f in glob.glob("presets/*.json"):
+            base = json.load(open(f))
+            for step in range(1, 4):
+                v = evolve.variation(base, step, 0.2, f)
+                self.assertEqual(len(v["layers"]), len(base["layers"]))
+                Scene.from_dict(v).render(1.0, L)        # always renders
+        base = json.load(open("presets/festive-glitter.json"))
+        v = evolve.variation(base, 1, 0.2, "x")
+        self.assertLess(abs(v["layers"][0]["params"]["length"] - base["layers"][0]["params"]["length"]), 20)
+        self.assertEqual(evolve.variation(base, 5, 0.2, "x"), evolve.variation(base, 5, 0.2, "x"))   # deterministic
