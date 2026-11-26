@@ -107,7 +107,7 @@ class Controller:
         self.games: dict = {}                       # "league:team" -> latest game info
         self._pending: list = []                    # delayed celebrations [(at, kind, colors)]
         self._events_done: set = set()
-        self._last_reminder = 0.0
+        self._last_reminder = time.time()   # no "days to go" reminder the moment it starts
         self._forced_weather: dict = {}             # test overlays {kind: until}
         self.health: dict[str, dict] = {}           # per-device self-healing state
         self.evolve: dict | None = None             # 'let it evolve' state
@@ -373,8 +373,9 @@ class Controller:
 
     # ---------------------------------------------------- interruptions
     def start_interrupt(self, d: dict, seconds: float, label: str, force_live: bool = False,
-                        fade: float = 0.3, transition: str = "crossfade") -> bool:
-        """Play a scene for a while (celebration, countdown), then put back what was playing."""
+                        fade: float = 0.3, transition: str = "crossfade", resume_show: bool = False) -> bool:
+        """Play a scene for a while (celebration, countdown), then put back what was playing.
+        resume_show: a running show is paused, not ended, and picks up again afterwards."""
         with self.lock:
             if self.diag_active or self.map_state:
                 return False
@@ -383,6 +384,11 @@ class Controller:
             sc = Scene.from_dict(d, self.user_palettes)     # a bad scene leaves no state behind
             if self.interrupt is None:
                 self.interrupt = {"scene": self.scene_dict, "playing": self.playing, "live": self.engine.live}
+            it = self.interrupt
+            if resume_show and it.get("show"):
+                it["resume"] = {"show": it["show"], "label": it.get("label"), "at": time.time()}
+            elif not resume_show:
+                it.pop("resume", None)                # anything else replaces a paused show for good
             self.interrupt["until"] = time.time() + seconds
             self.interrupt["label"] = label
             for k in ("show", "visitor", "scoreboard", "event"):
@@ -399,6 +405,8 @@ class Controller:
             st, self.interrupt = self.interrupt, None
             if not st:
                 return
+            if st.get("resume") and self._resume_show(st):
+                return
             self.engine.set_scene(Scene.from_dict(st["scene"], self.user_palettes) if st["scene"] else None, 1.5)
             self.playing = st["playing"]
             if not st["live"]:
@@ -407,6 +415,29 @@ class Controller:
                 else:
                     self.vqueue.clear()
                     self.engine.set_live(False, release=True)
+
+    def _resume_show(self, st: dict) -> bool:
+        """Back into the show a celebration paused, at the cue it had reached."""
+        rs = st["resume"]
+        show = dict(rs["show"])
+        cues = self._show_cues(self.show_def(show["name"]))
+        if not cues or show.get("idx", 0) >= len(cues):
+            return False
+        now = time.time()
+        if show.get("next_at"):
+            show["next_at"] += max(0.0, now - rs["at"])     # the cue gets the rest of its time
+        cue = cues[show["idx"]]
+        try:
+            sc = Scene.from_dict(self._cue_scene(cue, show, now), self.user_palettes)
+        except (OSError, ValueError, KeyError, TypeError):
+            return False
+        self.interrupt = {"scene": st["scene"], "playing": st["playing"], "live": st["live"],
+                          "label": rs.get("label") or f"Show: {show['name']}", "show": show}
+        self.interrupt["until"] = self._show_until(show, cues)
+        self.engine.set_scene(sc, 1.5, transition=cue.get("transition", "crossfade"))
+        self.playing = {"kind": "event", "name": self.interrupt["label"]}
+        log.info("show %s resumes after the interruption", show["name"])
+        return True
 
     def _schedule_on_pending(self) -> bool:
         """The schedule wants the lights on with a program it hasn't applied yet (its
@@ -582,6 +613,29 @@ class Controller:
         st["idx"] = nxt
         it["until"] = self._show_until(st, cues)
 
+    def _pinned(self, now: float) -> bool:
+        """Something pinned to a moment is on (an event countdown/party, or a show that owns
+        its countdown, from the build-up to the finale): a celebration waits for it."""
+        it = self.interrupt or {}
+        if it.get("event"):
+            return True
+        owns = (it.get("show") or {}).get("owns")
+        return bool(owns) and owns - self.ANCHOR_WINDOW <= now < owns + self.OWNS_AFTER
+
+    def _pending_tick(self, now: float, force_live: bool = False):
+        """Start the delayed celebrations that are due. A running show pauses for one and
+        then carries on; a pinned moment (New Year's) holds them until it is over."""
+        for item in list(self._pending):
+            if now < item[0]:
+                continue
+            with self.lock:
+                if self._pinned(now):
+                    return
+                self._pending.remove(item)
+                _, kind, colors = item
+                d, secs = shows.celebration(kind, colors)
+                self.start_interrupt(d, secs, d["name"], force_live=force_live, resume_show=True)
+
     def _show_owns(self, ts: float) -> bool:
         """A running show has its own countdown pinned to (about) this moment."""
         st = (self.interrupt or {}).get("show") or {}
@@ -605,9 +659,11 @@ class Controller:
                 continue
             every = max(5, int(stt.get("every", 60)))
             inside = lo <= mins <= hi if lo <= hi else (mins >= lo or mins <= hi)     # may cross midnight
-            if not inside or ((mins - lo) % 1440) % every:
-                continue
             key = (k, now.date().isoformat(), mins)
+            if not inside or ((mins - lo) % 1440) % every:
+                if not self._showtime_late(stt, lo, hi, mins):
+                    continue
+                key = (k, now.date().isoformat(), lo)    # its first slot tonight, started late
             if key in self._showtimes_done:
                 continue
             if stt.get("only_when_on", True) and not self.engine.live:
@@ -624,6 +680,16 @@ class Controller:
             except (KeyError, ValueError, TypeError, OSError) as e:
                 self._showtimes_done.add(key)
                 log.warning("showtime failed: %s", e)
+
+    def _showtime_late(self, stt: dict, lo: int, hi: int, mins: int) -> bool:
+        """A loop show due earlier this evening (e.g. Santa's coming at 5:15 pm) that never
+        started: the controller was restarted after its minute, or a long celebration
+        covered it. It plays for what is left of the evening rather than not at all."""
+        if not stt.get("only_when_on", True) or lo > hi or mins <= lo or not self.engine.live:
+            return False
+        if self.cfg.data.get("schedule", {}).get("enabled") and not (self.sched_status or {}).get("active"):
+            return False                                  # lights on by hand after lights-off
+        return (self.show_def(str(stt.get("show", ""))) or {}).get("end") == "loop"
 
     def _limit_forced_loop(self, now: datetime, to):
         """A loop show that a showtime switched the lights on for would otherwise run
@@ -987,6 +1053,8 @@ class Controller:
 
     def _events_tick(self):
         now = datetime.now().astimezone()
+        if not self.engine.live:
+            self._last_reminder = time.time()     # the first reminder comes one interval after lights-on
         for ev in self.events:
             if not ev.get("enabled", True):
                 continue
@@ -1028,7 +1096,7 @@ class Controller:
                     and 0 < days <= int(ev.get("remind_from_days", 30))
                     and time.time() - self._last_reminder > float(ev.get("remind_every_min", 15)) * 60):
                 self._last_reminder = time.time()
-                self.start_interrupt(shows.days_scene(days), 8, f"{days} days to {ev.get('name')}")
+                self.start_interrupt(shows.days_scene(days), 8, f"{days} {'day' if days == 1 else 'days'} to {ev.get('name')}")
 
     # ------------------------------------------------------- live data
     def _live_loop(self):
@@ -1056,12 +1124,7 @@ class Controller:
                             next_game[key] = now + self._poll_game(t, key)
                             # for the scoreboard text effect, held back like the celebrations
                             livedata.update_game(key, self.games.get(key), g.get("delay", 30))
-                for item in list(self._pending):
-                    if now >= item[0]:
-                        self._pending.remove(item)
-                        _, kind, colors = item
-                        d, secs = shows.celebration(kind, colors)
-                        self.start_interrupt(d, secs, d["name"], force_live=bool(g.get("when_lights_off")))
+                self._pending_tick(now, force_live=bool(g.get("when_lights_off")))
                 with self.lock:
                     self._scoreboard_tick(now)
             except Exception:  # noqa: BLE001

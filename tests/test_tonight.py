@@ -226,7 +226,8 @@ class TonightTests(_Denver, unittest.TestCase):
         self.assertEqual(p["dusk_intro_min"], 20)
         labels = [x["label"] for x in p["timeline"]]
         self.assertEqual(labels[0], "Lights on: the dusk sky")
-        self.assertEqual(labels[1], "Christmas tree")
+        self.assertEqual([x for x in labels if not x.startswith("Reminders")][1], "Christmas tree")
+        self.assertIn("Reminders: 1 day to Christmas", labels)    # 15 min in, during the dusk sky
         self.assertIn("Show: Santa's coming", labels)
         self.assertIn("Show: Christmas show", labels)         # Dec 24 2026 is a Thursday
         self.assertNotIn("Show: New Year's Eve countdown", labels)

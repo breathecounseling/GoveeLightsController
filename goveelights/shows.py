@@ -79,7 +79,7 @@ def countdown_scene(target: float, count_s: int, digits_s: int, colors=None) -> 
 
 def days_scene(days: int, colors=None) -> dict:
     cols = colors or ["#ff2020", "#00c040"]
-    return {"name": f"{days} days to go", "layers": [
+    return {"name": f"{days} {'day' if days == 1 else 'days'} to go", "layers": [
         {"effect": "glitter", "params": {"colors": cols, "level": 0.2, "density": 0.3}},
         {"effect": "digits", "params": {"value": days, "colors": ["#ffffff"]}, "target": "Peak"}]}
 

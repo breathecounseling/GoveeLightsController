@@ -23,6 +23,7 @@ STALE_IN = 360.0          # an in-progress game not refreshed for this long is n
 STALE_POST = 2400.0       # ... a finished game (polled every 5-30 minutes)
 FINAL_FOR = 7200.0        # show a final score for this long after the game ends
 KICKOFF_MAX = 6 * 3600.0  # ... but never for a game that kicked off longer ago than this
+ENDED_KEEP = 24 * 3600.0   # how long a finished game's "first seen final" time is remembered
 
 _lock = threading.Lock()
 _queue: list = []          # [(due, key, entry)] waiting for the broadcast delay
@@ -38,6 +39,9 @@ def _stamp(key: str, g: dict, at: float) -> dict:
         g["polled"] = _polled[key] = at
     if g.get("state") == "post":
         g["ended"] = _ended.setdefault((key, g.get("id")), at)
+    cur = (key, g.get("id"))
+    for k in [k for k, t in _ended.items() if k[0] == key and k != cur and at - t > ENDED_KEEP]:
+        del _ended[k]                      # this team's earlier games, long over
     return g
 
 

@@ -330,7 +330,7 @@ def _build(ctl, now: datetime, password_set) -> dict:
             at(on, f"Lights on: {names.program(prog)}", "on", "; ".join(
                 x for x in (plan["on_why"], plan["program_detail"]) if x))
     span_start = now if current else on
-    st_out, missed = [], []
+    st_out, missed, owners = [], [], []
     for k, st in enumerate(cfg.get("showtimes") or []):
         if not isinstance(st, dict) or not st.get("enabled", True):
             continue
@@ -357,7 +357,9 @@ def _build(ctl, now: datetime, password_set) -> dict:
         loops = bool(isinstance(sh, dict) and sh.get("end") == "loop")
         st_out.append({"index": k, "show": name, "times": [t.isoformat(timespec="minutes") for t in ts[:48]],
                        "text": describe_times(ts), "forced": not when_on, "exists": exists, "loops": loops})
-        note = "; ".join(x for x in ("switches the lights on for it" if not when_on else "",
+        owners.append((name, sh, ts))
+        lights_off = not prog or any(t < on or t >= off for t in ts)      # the lights may already be on
+        note = "; ".join(x for x in ("switches the lights on for it" if not when_on and lights_off else "",
                                      "loops until lights-off (replaces the program)" if loops else "") if x)
         if len(ts) <= 3:
             for t in ts:
@@ -374,6 +376,13 @@ def _build(ctl, now: datetime, password_set) -> dict:
             when = shows.next_occurrence(ev, now)
         except (KeyError, ValueError, TypeError):
             continue
+        days = (when.date() - d).days
+        if (prog and ev.get("reminders") and 0 < days <= int(ev.get("remind_from_days", 30))
+                and on < off):
+            every = max(1.0, float(ev.get("remind_every_min", 15)))
+            label = f"{days} {'day' if days == 1 else 'days'} to {ev.get('name', 'Event')}"
+            at(max(on, now) + timedelta(minutes=every), f"Reminders: {label}", "event",
+               f"8 s on the Peak every {every:g} min while the lights are on")
         if not (now - timedelta(minutes=1) <= when <= now + timedelta(hours=24)):
             continue
         cd, mins = float(ev.get("countdown") or 0), float(ev.get("minutes") or 0)
@@ -381,6 +390,9 @@ def _build(ctl, now: datetime, password_set) -> dict:
             continue
         what = ", ".join(x for x in (f"{cd:g} s countdown" if cd > 0 else "",
                                      f"{mins:g} min celebration" if mins > 0 else "") if x)
+        owner = _counted_by(owners, when)
+        if owner:                                     # the show counts down itself; the event stands aside
+            what = f"counted down by the {owner} show"
         ev_out.append({"name": ev.get("name", "Event"), "at": when.isoformat(timespec="minutes"),
                        "time": fmt_time(when), "what": what, "lights_on": bool(ev.get("lights_on", True))})
         at(when, str(ev.get("name", "Event")), "event", what)
@@ -534,6 +546,26 @@ def _build(ctl, now: datetime, password_set) -> dict:
     plan["summary"] = {k: sum(1 for c in checks if c["level"] == k) for k in (OK, WARN, FAIL)}
     plan["generated"] = now.isoformat(timespec="seconds")
     return plan
+
+
+def _counted_by(owners: list, when: datetime) -> str | None:
+    """The show (started by a showtime tonight) whose own countdown cue lands on this
+    moment: the controller lets that show own it (see Controller._show_owns)."""
+    for name, sh, ts in owners:
+        cue = next((c for c in (sh or {}).get("cues", []) if isinstance(c, dict) and c.get("countdown_to")), None)
+        if not cue:
+            continue
+        try:
+            hm = sched._hm(str(cue["countdown_to"]))
+        except (ValueError, AttributeError):
+            continue
+        for t in ts:
+            a = t.replace(hour=hm.hour, minute=hm.minute, second=0, microsecond=0)
+            if a <= t:
+                a = (a + timedelta(days=1)).replace(hour=hm.hour, minute=hm.minute)
+            if (a - t).total_seconds() <= 20 * 60 and abs((a - when).total_seconds()) < 300:
+                return name
+    return None
 
 
 def _device_checks(ctl, now: datetime) -> list[dict]:
