@@ -194,6 +194,20 @@ never gets a firewall prompt). The lighter option is `python -m goveelights inst
    devices add the port rules below.
 5. Open the URL it prints (e.g. `http://192.168.1.50:8080/`) on your phone, on the same network as the PC.
 
+### Updating (`git pull`)
+
+Your own presets and your favourites/tags live in `user_presets\` (not in git), so
+`git pull` updates the built-in `presets\` without touching them. Older versions saved
+them into `presets\`; the first start of this version moves them to `user_presets\`
+(and puts the built-ins back as shipped). Zones added to `layouts\house.json` are added
+to your config at start-up too; your own zones and box names are kept.
+
+If the pull that brings this version stops with "Your local changes ... would be
+overwritten" or "untracked working tree files would be overwritten" in `presets\`: copy
+the `presets` folder somewhere safe, run `git checkout -- presets` and `git clean -f presets`,
+`git pull` again, then copy your own (and changed) preset files from the copy into
+`user_presets\`.
+
 ### Phone page never loads ("connection aborted" / spins for minutes)
 
 Windows is dropping the incoming connection. This happens when the network is marked
@@ -328,7 +342,7 @@ goveelights/schedule.py     sunset maths + schedule rules
 goveelights/app_server.py   creator app server (API, preview stream)
 goveelights/web/app.html    creator app page
 layouts/house.json          this house's geometry
-presets/                    example presets
+presets/                    built-in presets (yours go in user_presets/, not in git)
 goveelights/web/diag.html   phone page
 tools/fake_govee.py         device simulator
 ```

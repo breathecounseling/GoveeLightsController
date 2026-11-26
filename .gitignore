@@ -2,9 +2,12 @@ __pycache__/
 *.pyc
 govee_config.json
 govee_config.tmp
+govee_config.json.*.tmp
 .venv/
 
 govee_auth.json
 govee_auth.tmp
+govee_auth.json.*.tmp
 goveelights.log
 .claude/worktrees/
+user_presets/
