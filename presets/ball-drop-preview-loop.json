@@ -1,0 +1,11 @@
+{
+  "name": "Ball drop (preview loop)",
+  "tags": ["Holiday", "New Year"],
+  "layers": [
+    {
+      "effect": "ball_drop",
+      "target": "all",
+      "params": {"mode": "loop", "seconds": 10, "celebrate": 20, "pause": 4}
+    }
+  ]
+}

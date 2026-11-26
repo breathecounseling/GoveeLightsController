@@ -1,0 +1,11 @@
+{
+  "name": "Icicles",
+  "tags": ["Holiday", "Winter", "Ambient"],
+  "layers": [
+    {
+      "effect": "icicles",
+      "target": "Whole front",
+      "params": {}
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "Ball drop at midnight",
+  "tags": ["Holiday", "New Year"],
+  "layers": [
+    {
+      "effect": "ball_drop",
+      "target": "all",
+      "params": {"mode": "clock", "at": "00:00", "seconds": 10, "celebrate": 600}
+    }
+  ]
+}

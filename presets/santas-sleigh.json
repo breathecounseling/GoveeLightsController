@@ -1,0 +1,17 @@
+{
+  "name": "Santa's sleigh",
+  "tags": ["Holiday", "Christmas"],
+  "layers": [
+    {
+      "effect": "breathe",
+      "target": "Porch",
+      "params": {"colors": ["#ff9a30"], "period": 9, "min": 0.55},
+      "opacity": 0.6
+    },
+    {
+      "effect": "sleigh",
+      "target": "Eaves",
+      "params": {}
+    }
+  ]
+}
