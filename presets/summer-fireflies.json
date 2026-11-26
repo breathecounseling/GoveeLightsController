@@ -8,7 +8,7 @@
     {
       "effect": "solid",
       "params": {
-        "color": "#052a0c"
+        "color": "#00500f"
       }
     },
     {
@@ -16,9 +16,9 @@
       "target": "Peak",
       "params": {
         "colors": [
-          "#0a5a14",
-          "#063a10",
-          "#021a0a"
+          "#10a020",
+          "#087a18",
+          "#035a12"
         ],
         "length": 6,
         "speed": 0,
@@ -29,32 +29,32 @@
       "effect": "fireflies",
       "params": {
         "colors": [
-          "#c0ff00",
-          "#e8ff10",
-          "#90ff20"
+          "#d0ff00",
+          "#ffff40",
+          "#a0ff20"
         ],
-        "density": 0.11,
-        "life": 2.2,
+        "density": 0.12,
+        "life": 3.0,
         "snap": 0.8,
-        "drift": 1.5
+        "drift": 0.9
       },
-      "blend": "lighten"
+      "blend": "add"
     },
     {
       "effect": "fireflies",
       "target": "Whole front gable",
       "params": {
         "colors": [
-          "#c0ff00",
-          "#ffff30"
+          "#d0ff00",
+          "#ffff40"
         ],
-        "density": 0.08,
-        "life": 1.8,
-        "drift": 1.0,
+        "density": 0.05,
+        "life": 2.6,
+        "drift": 0.9,
         "snap": 0.8,
         "seed": 41
       },
-      "blend": "lighten"
+      "blend": "add"
     }
   ]
 }

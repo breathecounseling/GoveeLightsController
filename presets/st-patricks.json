@@ -7,12 +7,12 @@
   "layers": [
     {
       "effect": "gradient",
-      "opacity": 0.7,
+      "opacity": 1.0,
       "params": {
         "colors": [
           "#00c020",
           "#30ff40",
-          "#00a040",
+          "#00d050",
           "#60ff00"
         ],
         "length": 30,
@@ -52,7 +52,7 @@
         "wave": 0.15,
         "level": 1.0,
         "speed": 3,
-        "intro": 2
+        "intro": 1
       }
     },
     {
@@ -60,16 +60,16 @@
       "target": "Porch",
       "params": {
         "colors": [
-          "#ffb000",
-          "#ffd040",
-          "#ff9000"
+          "#ffc000",
+          "#ffd840",
+          "#ffb000"
         ],
         "sparkle": "#ffffff",
         "density": 1.2,
         "length": 10,
         "speed": 2,
         "seed": 5,
-        "level": 0.7
+        "level": 1.0
       }
     }
   ]

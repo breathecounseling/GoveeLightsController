@@ -8,14 +8,14 @@
       "effect": "plasma",
       "params": {
         "scale": 10,
-        "speed": 6
+        "speed": 8
       },
       "palette": "Rainbow",
       "fx": [
         {
           "type": "hue",
           "params": {
-            "spin": 0.03
+            "spin": 0.06
           }
         }
       ]

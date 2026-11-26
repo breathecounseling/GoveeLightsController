@@ -44,16 +44,17 @@ PICTURES: dict[str, list[str]] = {
         "..112222211..",
         "...1111111...",
     ],
-    # carved to fit the triangle: the top rows are narrow (eyes on the second row,
-    # the nose under them, a toothy grin across the wide lower rows); '2' is the
-    # candle-lit face, '3' the stem, '4' the pumpkin's ribs
+    # carved to fit the triangle: the top rows are narrow (two bold triangle eyes on
+    # the second and third rows and a wide grin across the lower rows);
+    # '2' is the candle-lit face, '3' the stem, '4' the pumpkin's ribs (unused: at
+    # zigzag resolution they read as stripes)
     "jack-o-lantern": [
-        "....11311....",
+        ".....333.....",
+        "...1121211...",
         "...1221221...",
-        "..141121141..",
+        "..111111111..",
         ".11222222211.",
-        "1112121212111",
-        "1411141114111",
+        "1111122211111",
     ],
     "present": [
         "....2.2.2....",

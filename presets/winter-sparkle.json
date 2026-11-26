@@ -30,10 +30,39 @@
         {
           "type": "glitter",
           "params": {
-            "density": 0.28,
+            "density": 0.12,
             "decay": 0.25,
             "base": 0.9,
-            "sparkle": "#e8f4ff"
+            "sparkle": "#ffffff"
+          }
+        }
+      ],
+      "target": [
+        "Eaves",
+        "Accent"
+      ]
+    },
+    {
+      "effect": "gradient",
+      "target": "Peak",
+      "params": {
+        "colors": [
+          "#0030c0",
+          "#0018a0",
+          "#0048d0",
+          "#0010a0"
+        ],
+        "length": 40,
+        "speed": 1.5
+      },
+      "fx": [
+        {
+          "type": "shimmer",
+          "params": {
+            "depth": 0.3,
+            "rate": 2,
+            "sheen": 0.5,
+            "sheen_speed": 8
           }
         }
       ]
@@ -41,7 +70,7 @@
     {
       "effect": "snowfall",
       "target": "Peak",
-      "blend": "lighten",
+      "blend": "screen",
       "params": {
         "color": "#ffffff",
         "density": 1.2,

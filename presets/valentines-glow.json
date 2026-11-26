@@ -41,9 +41,9 @@
       "params": {
         "image": "heart",
         "colors": [
-          "#ff0018"
+          "#ff0020"
         ],
-        "background": "#260070",
+        "background": "#4a10c0",
         "width": 0.95,
         "beat": 1.0,
         "period": 1.1

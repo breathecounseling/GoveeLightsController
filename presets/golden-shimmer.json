@@ -8,15 +8,19 @@
     {
       "effect": "solid",
       "params": {
-        "color": "#ff8c00"
+        "color": "#ffb000"
       },
-      "opacity": 0.55
+      "opacity": 0.75
     },
     {
       "effect": "shimmer",
       "blend": "add",
       "params": {
-        "colors": ["#ffd890", "#ffc060", "#ffe8c0"],
+        "colors": [
+          "#ffd890",
+          "#ffc060",
+          "#ffe8c0"
+        ],
         "level": 0,
         "width": 16,
         "spacing": 90,

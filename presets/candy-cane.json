@@ -6,10 +6,11 @@
       "params": {
         "colors": [
           "#ff0000",
-          "#b0b0b0"
+          "#ffe8e0"
         ],
         "width": 4,
-        "speed": 2
+        "speed": 2,
+        "crisp": true
       },
       "target": [
         "Eaves",
@@ -21,11 +22,12 @@
       "params": {
         "colors": [
           "#ff0000",
-          "#b0b0b0"
+          "#ffe8e0"
         ],
         "width": 1.6,
         "speed": 0.5,
-        "axis": "y"
+        "axis": "y",
+        "crisp": true
       },
       "target": "Peak"
     }
