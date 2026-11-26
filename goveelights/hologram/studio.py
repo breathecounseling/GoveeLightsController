@@ -276,6 +276,7 @@ class Studio:
         self.out = Path(out_dir).resolve()       # the job runs from another folder
         self.lock = threading.Lock()
         self._preview_slot = threading.Lock()   # one out-of-process preview at a time
+        self._preview_gen = 0                   # long previews asked for so far
         self._cache: OrderedDict = OrderedDict()
         self._job: dict = {"state": "idle"}
         self._proc = None
@@ -334,8 +335,15 @@ class Studio:
                 "colors": args["colors"], "team": args["team"], "year": args["year"]}
         if args["seconds"] * args["fps"] > PREVIEW_INLINE_FRAMES:
             # a long story preview is several seconds of CPU: make it in a low-priority
-            # process (one at a time) so the lights' engine in this server never waits on it
+            # process (one at a time) so the lights' engine in this server never waits on it.
+            # One still waiting when a newer one arrives (a slider dragged) is dropped, so
+            # the newest is made next instead of after every earlier one.
+            with self.lock:
+                self._preview_gen += 1
+                gen = self._preview_gen
             with self._preview_slot:
+                if not self._newest(gen):
+                    return {"ok": True, "superseded": True}
                 out = self._preview_proc(spec)
         else:
             out = render_preview(spec)
@@ -348,6 +356,10 @@ class Studio:
             while len(self._cache) > 12:
                 self._cache.popitem(last=False)
         return res
+
+    def _newest(self, gen: int) -> bool:
+        with self.lock:
+            return gen == self._preview_gen
 
     def _preview_proc(self, spec: dict) -> dict:
         argv = [sys.executable, "-c", "from goveelights.hologram.studio import _preview_main; _preview_main()"]

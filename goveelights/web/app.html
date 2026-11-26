@@ -2353,7 +2353,7 @@ function hoPreview(){
     const r = await post('hologram/preview', hoBody());
     if (seq !== hoSeq) return;
     $('hoStage').classList.remove('busy');
-    if (r) hoStage(r);
+    if (r && !r.superseded) hoStage(r);                 // superseded: another phone's newer preview went first
   }, 250);
 }
 function hoStage(r){
