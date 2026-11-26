@@ -8,7 +8,18 @@
     {
       "effect": "flag",
       "target": "Peak",
-      "params": {"colors": ["#ff0010", "#ffffff"], "level": 1.0, "wave": 0.25}
+      "params": {
+        "colors": [
+          "#ff0010",
+          "#ffffff"
+        ],
+        "level": 1.0,
+        "wave": 0.25,
+        "canton_rows": 3,
+        "canton_edge": 0.62,
+        "twinkle": 1.0,
+        "intro": 1.5
+      }
     },
     {
       "effect": "twinkle",
@@ -39,7 +50,7 @@
           "#0a2cff"
         ],
         "width": 5,
-        "blend": 0.25,
+        "blend": 0,
         "speed": 0.8
       }
     }

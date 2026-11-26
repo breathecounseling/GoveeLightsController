@@ -359,5 +359,23 @@ class PresetTests(unittest.TestCase):
             self.assertTrue(any(lum(c) > 0.1 for c in cols), name)
 
 
+class DuskVividTests(unittest.TestCase):
+    def test_vivid_saturates_at_same_brightness_and_default_unchanged(self):
+        self.assertEqual(dd._vivid((0.75, 0.38, 0.44), 0.0), (0.75, 0.38, 0.44))
+        c = dd._vivid((0.75, 0.38, 0.44), 0.7)
+        self.assertAlmostEqual(max(c), 0.75)
+        self.assertLess(min(c), 0.2)
+        self.assertGreater(c[2], c[1])                        # hue kept: still pink, not orange
+        self.assertEqual(dd._vivid((0.5, 0.5, 0.5), 1.0), (0.5, 0.5, 0.5))
+        L = house()
+        a = Scene.from_dict({"layers": [{"effect": "dusk", "params": {"demo": 60}}]}).render(15, L)
+        b = Scene.from_dict({"layers": [{"effect": "dusk", "params": {"demo": 60, "vivid": 0.8}}]}).render(15, L)
+        for c in b:
+            for v in c:
+                self.assertTrue(0.0 <= v <= 1.0)
+        sat = lambda cols: sum((max(c) - min(c)) / max(c) for c in cols if max(c) > 0.05) / len(cols)
+        self.assertGreater(sat(b), sat(a))
+
+
 if __name__ == "__main__":
     unittest.main()

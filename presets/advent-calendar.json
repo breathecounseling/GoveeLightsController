@@ -5,14 +5,14 @@
     {
       "effect": "twinkle",
       "target": ["North wall", "Front eave", "South wall", "South gable", "Garage", "Garage peak"],
-      "params": {"colors": ["#ffd890"], "background": "#ff9a20", "density": 0.15, "duration": 3.0, "seed": 6},
-      "opacity": 0.45
+      "params": {"colors": ["#ffe0a0"], "background": "#ffb000", "density": 0.15, "duration": 3.0, "seed": 6},
+      "opacity": 0.65
     },
     {
       "effect": "advent",
       "target": ["Whole front gable", "Porch"],
-      "params": {"open_colors": ["#ff1810", "#10c828"], "today_color": "#ffc030",
-                 "closed_color": "#ff9a30", "closed_level": 0.22,
+      "params": {"open_colors": ["#ff1810", "#10c828"], "today_color": "#fff4d0", "sparkle": 1.6,
+                 "closed_color": "#ffb000", "closed_level": 0.3,
                  "frame_color": "#ff1010", "frame_level": 0.6, "intro": 4}
     },
     {

@@ -468,5 +468,26 @@ class ControllerHookTests(unittest.TestCase):
         self.assertIn("livedata.update_game", inspect.getsource(controller.Controller._live_loop))
 
 
+class WordByWordTests(unittest.TestCase):
+    def test_hold_shows_one_still_word_at_a_time(self):
+        """hold > 0: each word of the message is shown on its own, centred and still, in
+        turn (cross-fading between words); the default (0) scrolls as before."""
+        p = {"text": "HI YO", "hold": 2, "border": "off", "sparkle": 0,
+             "colors": ["#ff0000", "#00ff00"], "color_mode": "words"}
+        a, L, sc = run(p, frames=30)                          # t = 1.45: the first word
+        b = sc.render(1.5, L)
+        idx = [i for i, q in enumerate(L.pixels) if q.run == "Peak"]
+        self.assertEqual([a[i] for i in idx], [b[i] for i in idx])   # still within a word
+        self.assertTrue(any(a[i][0] > 0.5 for i in idx))     # word 0 in the first colour
+        self.assertFalse(any(a[i][1] > 0.5 for i in idx))
+        for k in range(31, 61):                               # well into the second word
+            c = sc.render(k / 20, L)
+        self.assertTrue(any(c[i][1] > 0.5 for i in idx))     # word 1 in the second colour
+        self.assertFalse(any(c[i][0] > 0.5 for i in idx))
+        s, L2, sc2 = run({"text": "HI YO", "border": "off", "sparkle": 0}, frames=30)
+        s2 = sc2.render(1.6, L2)
+        self.assertNotEqual([s[i] for i in idx], [s2[i] for i in idx])   # default still scrolls
+
+
 if __name__ == "__main__":
     unittest.main()

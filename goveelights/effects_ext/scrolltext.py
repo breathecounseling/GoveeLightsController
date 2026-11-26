@@ -229,7 +229,7 @@ def _letter_colours(bm: font.Bitmap, P: dict, clock: float, extra: dict) -> list
         out.append(c)
         n += 1
     if mode == "words":                              # fill per word (needs the word numbers)
-        wnum, w = [], 0
+        wnum, w = [], int(extra.get("word0", 0))     # word by word: that word's place in the message
         for k, ch in enumerate(bm.chars):
             if ch == " " and k and bm.chars[k - 1] != " ":
                 w += 1
@@ -279,6 +279,9 @@ def _letter_colours(bm: font.Bitmap, P: dict, clock: float, extra: dict) -> list
     Param("date", "text", "12-25", "Count to (MM-DD)", help="for source 'days', e.g. 12-25 or 01-01"),
     Param("label", "text", "XMAS", "Counting to", help="for source 'days': 24 DAYS TO <this>"),
     Param("score_detail", "bool", False, "Show game clock", help="for source 'score': add the quarter/time"),
+    Param("hold", "number", 0, "Word by word (s)", 0, 10, 0.25,
+          help="above 0: show the message one word at a time, still and centred, each for this "
+               "long (easier to read from the street); 0 scrolls the whole message"),
     Param("seed", "int", 7, "Seed", 0, 9999, 1),
 ], "Words glide across the zigzag like a marquee sign, letter by letter in festive colours with glints, under a twinkling top row. Can also show the time, the live game score or days to go. Target the Peak.", group=GROUP)
 def scroll_text(t, ctx, P, state):
@@ -299,6 +302,14 @@ def scroll_text(t, ctx, P, state):
 
     # ---- message (live sources refresh every frame; the font layout is cached by string)
     msg, extra = build_message(P, _now())
+    hold = float(P.get("hold", 0) or 0)
+    words = msg.split() if hold > 0 else []
+    if words:                                           # word by word: each one still and centred
+        k = int(math.floor(clock / hold)) % len(words)
+        msg, sign = words[k], 0
+        extra = dict(extra, word0=k)
+        extra.pop("accent", None)
+        extra.pop("dim", None)
     _score_events(state, extra, P, dt)
     copies = _update_copies(state, P, D, msg, extra, sign, tr, cw, dt)
 

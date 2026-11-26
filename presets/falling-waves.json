@@ -8,28 +8,42 @@
     {
       "effect": "solid",
       "params": {
-        "color": "#002a90"
+        "color": "#001040"
       },
       "target": "all"
     },
     {
       "effect": "wave",
       "params": {
-        "color": "#30c8ff",
+        "color": "#1830ff",
         "color2": "#000000",
-        "wavelength": 16,
-        "sharpness": 2.5,
-        "speed": -6,
+        "wavelength": 22,
+        "sharpness": 1.5,
+        "speed": -5,
         "axis": "y"
       },
-      "target": "Whole front",
+      "target": "all",
+      "blend": "lighten",
+      "opacity": 0.85
+    },
+    {
+      "effect": "wave",
+      "params": {
+        "color": "#a0f0ff",
+        "color2": "#000000",
+        "wavelength": 10,
+        "sharpness": 3,
+        "speed": -9,
+        "axis": "y"
+      },
+      "target": "Whole front gable",
       "blend": "lighten",
       "fx": [
         {
           "type": "cascade",
           "params": {
             "mode": "height-down",
-            "delay": 0.8,
+            "delay": 0.6,
             "curve": 0.5,
             "depth_fade": 0.2
           }
@@ -39,11 +53,11 @@
     {
       "effect": "wave",
       "params": {
-        "color": "#30c8ff",
+        "color": "#a0f0ff",
         "color2": "#000000",
-        "wavelength": 16,
-        "sharpness": 2.5,
-        "speed": -6,
+        "wavelength": 10,
+        "sharpness": 3,
+        "speed": -9,
         "axis": "y"
       },
       "target": [
@@ -57,13 +71,30 @@
           "type": "cascade",
           "params": {
             "mode": "height-down",
-            "delay": 0.8,
+            "delay": 0.6,
             "curve": 0.5,
             "depth_fade": 0.2
           }
         }
       ],
-      "opacity": 0.6
+      "opacity": 0.75
+    },
+    {
+      "effect": "wave",
+      "params": {
+        "color": "#60d8ff",
+        "color2": "#000000",
+        "wavelength": 18,
+        "sharpness": 3,
+        "speed": 9,
+        "axis": "run"
+      },
+      "target": [
+        "Flat eaves",
+        "Lower roofline"
+      ],
+      "blend": "lighten",
+      "opacity": 0.8
     }
   ]
 }

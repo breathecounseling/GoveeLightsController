@@ -8,7 +8,7 @@
     {
       "effect": "solid",
       "params": {
-        "color": "#000a2a"
+        "color": "#000c60"
       }
     },
     {
@@ -18,21 +18,37 @@
       "params": {
         "level": 0,
         "shimmer": 0,
-        "density": 0.3,
+        "density": 1.2,
         "attack": 0.005,
-        "decay": 0.12,
+        "decay": 0.06,
         "whiteness": 1,
-        "bloom": 0.3
+        "bloom": 0
       }
     },
     {
-      "effect": "lightning",
+      "effect": "heartbeat",
       "target": "Peak",
       "blend": "lighten",
       "params": {
-        "color": "#ffffff",
-        "interval": 3.5,
-        "seed": 21
+        "colors": [
+          "#ffffff"
+        ],
+        "bpm": 21,
+        "strength": 0.8,
+        "decay": 0.06
+      }
+    },
+    {
+      "effect": "heartbeat",
+      "target": "Peak",
+      "blend": "lighten",
+      "params": {
+        "colors": [
+          "#ffffff"
+        ],
+        "bpm": 29,
+        "strength": 0,
+        "decay": 0.06
       }
     }
   ]

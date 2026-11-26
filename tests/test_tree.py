@@ -289,5 +289,20 @@ class TreePresetTests(unittest.TestCase):
         self.assertEqual(len(names), 5)
 
 
+class TreeCeremonyParamTests(unittest.TestCase):
+    def test_pre_glow_and_ignition_flash(self):
+        """pre_glow lights the outline while the tree lights; ignite_flash turns the whole
+        outline near-white as the star ignites. Both default off."""
+        L = house()
+        sc0 = scene({"intro": 10, "burst_every": 0})
+        sc1 = scene({"intro": 10, "burst_every": 0, "pre_glow": 0.5, "ignite_flash": 1.0, "glow_level": 0.5})
+        a, b = run(sc0, L, 0, 2), run(sc1, L, 0, 2)
+        outline = [i for i in range(L.n) if max(a[i]) < 0.01 and max(b[i]) > 0.1]
+        self.assertGreater(len(outline), 10)                  # outline lit during the intro
+        c0, c1 = run(sc0, L, 2.05, 8.25), run(sc1, L, 2.05, 8.25)   # the star ignites at 8.2 s
+        self.assertGreater(sum(min(c1[i]) for i in outline) / len(outline), 0.5)   # white flash
+        self.assertLess(sum(min(c0[i]) for i in outline) / len(outline), 0.3)
+
+
 if __name__ == "__main__":
     unittest.main()

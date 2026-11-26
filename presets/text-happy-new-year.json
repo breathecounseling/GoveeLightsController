@@ -5,15 +5,15 @@
     {
       "effect": "glitter",
       "target": ["Eaves", "Lower roofline"],
-      "params": {"colors": ["#ffb000", "#ffc840", "#ff9a00"], "sparkle": "#ffffff", "level": 0.4,
-                 "shimmer": 0.5, "density": 0.8, "length": 24, "speed": 3}
+      "params": {"colors": ["#ffb000", "#ffc000", "#ffa000"], "sparkle": "#ffffff", "level": 0.7,
+                 "shimmer": 0.4, "density": 0.8, "length": 24, "speed": 3}
     },
     {
       "effect": "text",
       "target": "Peak",
-      "params": {"text": "HAPPY NEW YEAR!", "colors": ["#ffc000", "#ffffff"],
-                 "color_mode": "words", "speed": 5.5, "sparkle": 0.4, "border": "marquee",
-                 "border_color": "#ffb000"}
+      "params": {"text": "HAPPY NEW YEAR!", "colors": ["#ffc000", "#ffffff", "#ff2050"],
+                 "color_mode": "words", "speed": 5.5, "hold": 2, "sparkle": 0.3, "border": "twinkle",
+                 "border_color": "#ffb000", "background": "#000a40"}
     }
   ]
 }

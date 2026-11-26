@@ -4,7 +4,7 @@
   "layers": [
     {
       "effect": "sequins",
-      "params": {"colors": ["#ffa000", "#8a10ff"], "spacing": 110, "speed": 14, "ragged": 8, "level": 0.8},
+      "params": {"colors": ["#ff7000", "#8a10ff"], "spacing": 70, "speed": 14, "ragged": 5, "level": 1.0},
       "fx": [{"type": "glitter", "params": {"density": 0.25, "base": 1.0, "decay": 0.15}}]
     }
   ]
