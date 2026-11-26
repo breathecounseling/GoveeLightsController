@@ -19,6 +19,7 @@ from . import live, livedata, shows, tonight
 from . import shows_builtin
 from . import schedule as sched
 from .audio import OFFSET_MS
+from .bulbcheck import BulbCheck, clear_rehung, section_indices
 from .cloud import CloudError, CloudKey, CloudRunOutput, GoveeCloud
 from .config import Config, write_json
 from .diag_server import App as DiagApp
@@ -284,6 +285,7 @@ class Controller:
         self.phone_only = False                     # the owner chose "show on phone only": taps don't light the house
         self._stop = threading.Event()
         self.started = time.time()
+        self.bulbcheck = BulbCheck(self, lambda: time.time())   # More -> Bulb check (takes over the lights for a while)
         self.build_engine()
         self.diag.scan()
         threading.Thread(target=self._tick_loop, name="controller", daemon=True).start()
@@ -335,6 +337,8 @@ class Controller:
             self._thumbs = {}
             if old and old.scene:
                 e.set_scene(old.scene)
+            if old and old.takeover is not None:   # a bulb check keeps running across a rebuild
+                e.takeover, e.takeover_live = old.takeover, old.takeover_live
             e.start(live=False)
             self.engine = e
             if was_live:
@@ -902,6 +906,8 @@ class Controller:
             it = self.interrupt
             if it and not (it.get("scoreboard") or it.get("visitor")):
                 continue                            # a countdown or celebration: try again next tick this minute
+            if self.bulbcheck.active:
+                self.bulbcheck.stop("a show is due")    # showtime wins: the house is the show's
             try:
                 # only_when_on false: switch the lights on for it (and off again afterwards).
                 # A scoreboard or visitor pick stands aside (queued picks resume after the show).
@@ -1513,6 +1519,7 @@ class Controller:
     # --------------------------------------------------------- mapping
     def map_start(self, level: float = 0.35) -> dict:
         from .effects import MAP_BITS, MAP_OFF, MAP_ON, MAP_SLOT, map_cycle
+        self.bulbcheck.stop("camera mapping")
         with self.lock:
             if self.map_state is None:
                 it, self.interrupt = self.interrupt, None
@@ -1542,10 +1549,15 @@ class Controller:
             if not st["live"]:
                 self.engine.set_live(False, release=True)
 
-    def map_apply(self, points: list, target: str = "all") -> dict:
+    def map_apply(self, points: list, target: str = "all", section: dict | None = None) -> dict:
+        """section {"mac", "from", "to"} (physical bulbs, inclusive): re-map just a re-hung
+        part of one run; the rest of the house anchors it and keeps its shape."""
         L = self.engine.layout
         only = None if target in ("all", "", None) else L.indices(target)
-        measured = shows.fit_mapping(L, points, only)
+        moved = None
+        if section:
+            only, moved = section_indices(L, str(section["mac"]), int(section["from"]), int(section["to"]))
+        measured = shows.fit_mapping(L, points, only, moved=moved)
         geo = shows.merged_geometry(L, measured)
         with self.cfg.lock:
             for d in self.cfg.devices.values():       # undo steps back this apply only
@@ -1556,6 +1568,7 @@ class Controller:
                 d["geometry"] = knots
                 if d.pop("geometry_guess", None):          # measured now, not a placeholder
                     d["geometry_guess_prev"] = True
+            clear_rehung(self.cfg, L, measured)     # re-hung sections the camera has now seen
             self.cfg.save()
         self.build_engine()
         return {"mapped": len(measured), "runs": [self.cfg.devices[m].get("name") for m in geo]}
@@ -1714,6 +1727,7 @@ class Controller:
 
     # ------------------------------------------------------ diagnostics
     def enter_diag(self):
+        self.bulbcheck.stop("diagnostics")
         if not self.diag_active:
             self.diag_active = True
             with self.lock:
@@ -1769,6 +1783,7 @@ class Controller:
             elif self.playlist and now >= self.playlist["next_at"]:
                 self._advance()
             self._evolve_tick(now)
+        self.bulbcheck.tick(now)
         self._events_tick()
         self._showtimes_tick()
 
@@ -2045,6 +2060,7 @@ class Controller:
             "evolve": ({"next_in": max(0, round(evs["next_at"] - time.time())), "step": evs["step"]} if evs else None),
             "interrupt": ({"label": it.get("label"), "left": max(0, round(it["until"] - time.time()))} if it else None),
             "mapping": bool(self.map_state), "weather": self.weather, "overlays": list(e.overlays),
+            "bulb_check": self.bulbcheck.view(),
             "games": self.games, "dim": round(e.dim, 2),
             "show": ((it or {}).get("show") or {}).get("name"),
             "dusk_intro": ({"left": max(0, round(di["until"] - time.time())), "then": di["program"]} if di else None),

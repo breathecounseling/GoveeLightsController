@@ -64,6 +64,22 @@ section{display:none}section.on{display:block}
 .frv{font-size:13.5px;margin:8px 0}
 .frr{align-items:flex-start;margin:8px 0;min-height:44px;font-size:13.5px}
 .fr input[type=radio]{width:22px;height:22px;flex:none;margin-top:1px;accent-color:var(--blue)}
+/* bulb check: big buttons for a phone held in the yard */
+.bc button{min-height:48px}
+.bc .chip,.bc summary{min-height:44px}
+.bcr{border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px;background:var(--p2)}
+.bcr .row.wrap button{flex:1 1 80px}
+.bcr input[type=number]{flex:1 1 0}
+.bcl{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.bcw{text-align:center}
+.bcw .big{font-size:26px;font-weight:800;margin:4px 0 2px;overflow-wrap:anywhere}
+.bcw .help{text-align:left}
+.bcw .nav2{display:flex;gap:10px;margin:12px 0}
+.bcw .nav2 button{flex:1;min-height:72px;font-size:20px;font-weight:700}
+.bcw .wide{width:100%;min-height:60px;font-size:17px;margin:6px 0}
+.bcw .bcsw{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
+.bcw .bcsw button{min-height:64px;font-weight:700;font-size:17px}
+.bcw .bcsw button.on{outline:3px solid var(--blue)}
 /* cards */
 .card{background:var(--p1);border:1px solid var(--line);border-radius:var(--r);padding:12px;margin-bottom:12px}
 h2{font-size:15px;margin:2px 0 10px;display:flex;align-items:center;gap:8px}
@@ -429,6 +445,13 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
     <p class="help">Bulb counts, landmarks, identify: diagnostics (pauses effects while open).</p>
     <a href="/diag"><button>Open diagnostics</button></a>
   </div>
+  <div class="card bc" id="bulbCard">
+    <h2>Bulb check</h2>
+    <p class="help">Find bulbs that are dark, stuck or the wrong colour. The house shows a bright marker you can follow from the yard. Whatever was playing comes back when you tap Done, or by itself after 4 minutes without a tap, or when a show is due.</p>
+    <div class="row" style="margin-bottom:8px"><button class="grow" onclick="bcStart('all','sweep')">Colour test: all runs</button></div>
+    <div id="bcRuns"><p class="help">Loading…</p></div>
+    <p class="help">Bulbs marked broken stay dark. Chases, words and the sleigh run straight past them, so the show has no gaps, and pictures keep their shape. Clear the mark once the bulb is replaced.</p>
+  </div>
   <div class="card fr" id="fourthCard">
     <h2>Fourth run</h2>
     <p class="help">A box on the network that isn't in the show yet (no bulb count, or it ignores commands). Check it, fix it from the ladder, then add it as a new run. The other runs, zones and presets stay as they are.</p>
@@ -657,7 +680,7 @@ function tabTo(t){
   if (t === 'create' && !draft) draftLoading = editCurrent(true);
   if (t === 'shows') loadTonight();
   if (t === 'holo') loadHolo();
-  if (t === 'more') loadFourth();
+  if (t === 'more'){ loadFourth(); loadBulbs() }
 }
 document.querySelectorAll('#nav button').forEach(b => b.onclick = () => tabTo(b.dataset.t));
 function openSheet(title, body){ $('sheetTitle').textContent = title; const sb=$('sheetBody'); sb.innerHTML=''; if (typeof body === 'string') sb.innerHTML = body; else sb.appendChild(body); $('sheet').scrollTop=0; $('sheet').classList.add('on'); $('scrim').classList.add('on') }
@@ -770,6 +793,7 @@ async function refresh(){
   if (s.dim && s.dim < 0.99) b.push(`<div class="banner" style="background:#1e293b;border-color:var(--line)">Late-night dimming: ${Math.round(s.dim*100)}%</div>`);
   const sick = Object.entries(s.health||{}).filter(([,h]) => h.paused);
   if (sick.length) b.push(`<div class="banner">Self-healing paused for ${esc(sick.map(x=>x[0]).join(', '))}: its status keeps changing on its own. Worth a bug report (include the Diagnostics page).</div>`);
+  if (s.bulb_check) b.push(`<div class="banner">The bulb check is on the lights (${esc(s.bulb_check.name)}). <button class="sm" onclick="bcOpen()">Open</button> <button class="sm" onclick="bcStop()">Done</button></div>`);
   if (s.mapping) b.push(`<div class="banner">The camera-mapping pattern is running. <button class="sm" onclick="post('map/stop').then(refresh)">Stop it</button></div>`);
   if (s.diag_active) b.push(`<div class="banner">Diagnostics paused the effects. <button class="sm" onclick="post('diag/exit').then(refresh)">Resume effects</button></div>`);
   if (!s.runs.length) b.push(`<div class="banner">No runs have a confirmed bulb count. Open <a href="/diag">diagnostics</a>.</div>`);
@@ -1902,11 +1926,12 @@ async function mapWizard(only){
       const c = out.querySelector('#mImg'); c.width = res.w; c.height = res.h; const x = c.getContext('2d');
       if (res.on) x.putImageData(res.on, 0, 0);
       res.blobs.forEach(b => { x.strokeStyle = b.ok ? '#4ade80' : '#f87171'; x.lineWidth = 2; x.beginPath(); x.arc(b.x, b.y, 5, 0, 7); x.stroke() });
-      let target = only && LAYOUT.targets.includes(only) ? only : LAYOUT.zones['Whole front gable'] ? 'Whole front gable' : 'all';
+      const sec = only && typeof only === 'object' ? only : null;      // a re-hung part of one run (Bulb check)
+      let target = sec ? '§' : only && LAYOUT.targets.includes(only) ? only : LAYOUT.zones['Whole front gable'] ? 'Whole front gable' : 'all';
       const tg = out.querySelector('#mTgt');
-      const drawT = () => { tg.innerHTML = ''; ['all', ...LAYOUT.targets].forEach(n => { const b = h(`<button class="chip ${n===target?'on':''}">${n==='all'?'Everything decoded':esc(n)}</button>`); b.onclick = () => { target = n; highlight(n); drawT() }; tg.appendChild(b) }) };
+      const drawT = () => { tg.innerHTML = ''; [...(sec ? ['§'] : []), 'all', ...LAYOUT.targets].forEach(n => { const b = h(`<button class="chip ${n===target?'on':''}">${n==='§'?'Re-hung: '+esc(sec.label):n==='all'?'Everything decoded':esc(n)}</button>`); b.onclick = () => { target = n; if (n !== '§') highlight(n); drawT() }; tg.appendChild(b) }) };
       drawT();
-      out.querySelector('#mApply').onclick = async () => { const r = await post('map/apply', {points: res.points, target});
+      out.querySelector('#mApply').onclick = async () => { const r = await post('map/apply', target === '§' ? {points: res.points, section: {mac: sec.mac, from: sec.from, to: sec.to}} : {points: res.points, target});
         if (r){ toast(`Updated ${r.mapped} bulbs (${r.runs.join(', ')})`); await post('map/stop'); closeSheet(); reloadLayout() } };
     } catch (e) { out.innerHTML = `<p class="help" style="color:var(--bad)">${esc(e.message)}</p>` }
   }
@@ -2146,6 +2171,122 @@ async function addWled(){ const ip = $('wledIp').value.trim(); if (!ip) return t
   const r = await post('wled/add', {address: ip, name: $('wledName').value.trim()});
   if (r){ toast(`Added ${r.name}: ${r.count} pixels`); $('wledIp').value = ''; $('wledName').value = ''; reloadLayout(); refresh() } }
 async function removeWled(id, name){ if (!confirm('Remove ' + name + '?')) return; if (await post('device/remove', {id})) { toast('Removed'); reloadLayout(); refresh() } }
+
+// ------------------------------------------------------------- bulb check
+let BULBS = null, BC = null, bcTimer = 0;
+const bn = k => (+k) + 1;                                  // bulb numbers count from 1, from the box
+const bcRange = (a, b) => a === b ? `bulb ${bn(a)}` : `bulbs ${bn(a)}–${bn(b)}`;
+async function loadBulbs(){ const r = await get('bulbs').catch(() => null); if (!r) return; BULBS = r; BC = r.check; drawBulbs(); return r }
+function drawBulbs(){
+  const box = $('bcRuns'); if (!box || !BULBS) return;
+  box.innerHTML = '';
+  if (!BULBS.runs.length) box.innerHTML = '<p class="help">No runs with a bulb count yet.</p>';
+  BULBS.runs.forEach(r => {
+    const el = h(`<div class="bcr">
+      <div class="row"><b class="grow">${esc(r.name)}</b><span class="dim">${r.walk} bulbs${r.dead.length ? ` · <span style="color:var(--warn)">${r.dead.length} marked broken</span>` : ''}</span></div>
+      <div class="row wrap" style="margin-top:8px"><button class="pri" data-a="walk">Walk it</button><button data-a="sweep">Colour test</button></div>
+      ${r.dead.length ? `<div class="grp">Marked broken (tap to clear)</div><div class="bcl">${r.dead.map(k => `<button class="chip" data-dead="${k}">Bulb ${bn(k)} ✕</button>`).join('')}</div>` : ''}
+      ${r.rehung.map(([a, b]) => `<div class="frb" style="margin:8px 0 0"><div class="help" style="margin-top:0">Re-hung: <b>${bcRange(a, b)}</b>. Check the spacing, then re-map just this part with the camera.</div>
+        <div class="row wrap"><button data-gap="${a},${b}">Gap check</button><button data-map="${a},${b}">Re-map it</button><button class="ghost" data-unhung="${a},${b}">Clear</button></div></div>`).join('')}
+      <details><summary class="dim">Type bulb numbers</summary>
+        <div class="row"><input type="text" inputmode="numeric" placeholder="Broken, e.g. 12, 57" data-i="dead" class="grow"><button data-a="setdead">Mark</button></div>
+        <div class="row" style="margin-top:8px"><input type="number" inputmode="numeric" min="1" placeholder="Re-hung from" data-i="from"><input type="number" inputmode="numeric" min="1" placeholder="to" data-i="to"><button data-a="hung">Mark</button></div>
+        <p class="help">Bulb 1 is the one next to the box.</p></details></div>`);
+    const q = s => el.querySelector(s);
+    q('[data-a=walk]').onclick = () => bcStart(r.mac, 'groups');
+    q('[data-a=sweep]').onclick = () => bcStart(r.mac, 'sweep');
+    el.querySelectorAll('[data-dead]').forEach(b => b.onclick = async () => {
+      if (!confirm(`Clear bulb ${bn(b.dataset.dead)} on ${r.name}? It lights up in the show again.`)) return;
+      if (await post('bulbs/dead', {mac: r.mac, dead: r.dead.filter(k => k !== +b.dataset.dead)})) { toast('Cleared'); loadBulbs(); reloadLayout() } });
+    el.querySelectorAll('[data-gap]').forEach(b => { const [a, z] = b.dataset.gap.split(',').map(Number); b.onclick = () => bcStart(r.mac, 'gap', {from: a, to: z}) });
+    el.querySelectorAll('[data-map]').forEach(b => { const [a, z] = b.dataset.map.split(',').map(Number); b.onclick = () => mapWizard({mac: r.mac, from: a, to: z, label: `${r.name} ${bcRange(a, z)}`}) });
+    el.querySelectorAll('[data-unhung]').forEach(b => { const [a, z] = b.dataset.unhung.split(',').map(Number);
+      b.onclick = async () => { if (await post('bulbs/rehung', {mac: r.mac, from: a, to: z, on: false})) loadBulbs() } });
+    q('[data-a=setdead]').onclick = async () => {
+      const ks = (q('[data-i=dead]').value.match(/\d+/g) || []).map(x => +x - 1).filter(k => k >= 0 && k < r.count);
+      if (!ks.length) return toast('Type the bulb numbers, e.g. 12, 57');
+      if (await post('bulbs/dead', {mac: r.mac, dead: [...new Set([...r.dead, ...ks])]})) { toast('Marked'); loadBulbs(); reloadLayout() } };
+    q('[data-a=hung]').onclick = async () => {
+      const a = +q('[data-i=from]').value, z = +q('[data-i=to]').value || a;
+      if (!(a >= 1)) return toast('Type the first bulb number');
+      if (await post('bulbs/rehung', {mac: r.mac, from: a - 1, to: z - 1, on: true})) { toast('Marked as re-hung'); loadBulbs() } };
+    box.appendChild(el);
+  });
+}
+async function bcStart(mac, mode, extra = {}){
+  const r = await post('bulbs/check', {action: 'start', mac, mode, ...extra});
+  if (!r) return;
+  BC = r.check; bcOpen(); refresh();
+}
+async function bcAct(action, extra = {}){
+  const r = await post('bulbs/check', {action, ...extra});
+  if (r){ BC = r.check; bcDraw() } else { await loadBulbs(); bcDraw() }
+}
+async function bcStop(){
+  await post('bulbs/check', {action: 'stop'});
+  BC = null; clearInterval(bcTimer); closeSheet(); toast('The house is back to what was playing'); refresh(); loadBulbs(); reloadLayout();
+}
+function bcOpen(){
+  const el = h('<div class="bcw" id="bcWalk"></div>');
+  openSheet('Bulb check', el);
+  bcDraw();
+  clearInterval(bcTimer);
+  bcTimer = setInterval(async () => {
+    if (!document.getElementById('bcWalk') || !$('sheet').classList.contains('on')){ clearInterval(bcTimer); return }
+    const r = await get('bulbs').catch(() => null); if (!r) return;
+    BULBS = r; BC = r.check; bcDraw();
+    if (!BC) clearInterval(bcTimer);
+  }, 5000);
+}
+function bcDraw(){
+  const el = document.getElementById('bcWalk'); if (!el) return;
+  const v = BC;
+  if (!v){ el.innerHTML = `<p class="big">Done</p><p class="help">The bulb check has ended and the house is back to what was playing.</p><button class="pri wide" data-a="close">Close</button>`;
+    el.querySelector('[data-a=close]').onclick = () => { closeSheet(); reloadLayout() }; drawBulbs(); return }
+  const left = v.left != null ? `Gives the house back after ${Math.max(1, Math.round(v.left / 60))} min without a tap.` : '';
+  let body = '';
+  const nav = `<div class="nav2"><button data-a="back">‹ Back</button><button class="pri" data-a="next">Next ›</button></div>`;
+  if (v.mode === 'groups'){
+    body = `<div class="dim">${esc(v.name)} · group ${v.group} of ${v.groups}</div>
+      <div class="big">${v.first != null ? bcRange(v.first, v.last) : '-'}</div>
+      <p class="help">These bulbs are bright white. Dim green: checked already. Dim white: still to come. Look for one that's dark, flickering or not white.</p>
+      ${v.dead_here.length ? `<p class="help" style="color:var(--warn)">Marked broken here: ${v.dead_here.map(bn).join(', ')} (lit for the check)</p>` : ''}
+      ${nav}
+      <button class="wide bad" data-a="find">One of these is dark or wrong</button>
+      <button class="wide" data-a="hung">I re-hung these</button>`;
+  } else if (v.mode === 'single'){
+    body = `<div class="dim">${esc(v.name)} · ${v.step} of ${v.steps}</div>
+      <div class="big">Bulb ${bn(v.bulb)}</div>
+      <p class="help">Just this one is bright white; its neighbours glow dim. Bulb 1 is next to the box.${v.dead_here ? ' <b style="color:var(--warn)">Marked broken.</b>' : ''}</p>
+      ${nav}
+      ${v.dead_here ? '<button class="wide pri" data-a="ok">It works now: clear the mark</button>' : '<button class="wide bad" data-a="dark">This one is dark or wrong</button>'}
+      <button class="wide" data-a="groups">Back to groups of 10</button>`;
+  } else if (v.mode === 'sweep'){
+    const names = {red: 'Red', green: 'Green', blue: 'Blue', white: 'White'}, ink = {red: '#fca5a5', green: '#86efac', blue: '#93c5fd', white: '#ffffff'};
+    body = `<div class="dim">${esc(v.name)} · colour test</div>
+      <div class="big">${names[v.color] || ''}</div>
+      <p class="help">Every bulb should be the same colour. One that is dark, dimmer, or another colour (often pinkish or yellowish) is a bad bulb: walk that run to find its number.</p>
+      <div class="bcsw">${Object.keys(names).map(c => `<button data-c="${c}" class="${c === v.color ? 'on' : ''}" style="color:${ink[c]}">${names[c]}</button>`).join('')}</div>
+      <button class="wide" data-a="next">Next colour ›</button>`;
+  } else if (v.mode === 'gap'){
+    body = `<div class="dim">${esc(v.name)} · gap check</div>
+      <div class="big">${bcRange(v.first, v.last)}</div>
+      <p class="help">The re-hung bulbs alternate white and amber, with their neighbours dim. Two of the same colour side by side, a dark spot, an uneven gap or a bulb out of line means one is loose, missing or clipped in the wrong place.</p>
+      <button class="wide" data-a="remap">Looks right: re-map this part with the camera</button>`;
+  }
+  el.innerHTML = body + `<button class="wide pri" data-a="done">Done: give the house back</button><p class="help" style="text-align:center">${left}</p>`;
+  const on = (a, f) => { const b = el.querySelector(`[data-a=${a}]`); if (b) b.onclick = f };
+  on('back', () => bcAct('back')); on('next', () => bcAct('next'));
+  on('find', () => bcAct('mode', {mode: 'single'}));
+  on('groups', () => bcAct('mode', {mode: 'groups', at: v.bulb}));
+  on('dark', async () => { await bcAct('dark'); toast(`Bulb ${bn(v.bulb)} marked broken`) });
+  on('ok', async () => { await bcAct('ok'); toast(`Bulb ${bn(v.bulb)} cleared`) });
+  on('hung', async () => { await bcAct('rehung'); toast(`${bcRange(v.first, v.last)} marked as re-hung`) });
+  on('done', bcStop);
+  on('remap', async () => { const s = {mac: v.mac, from: v.first, to: v.last, label: `${v.name} ${bcRange(v.first, v.last)}`};
+    await post('bulbs/check', {action: 'stop'}); BC = null; clearInterval(bcTimer); mapWizard(s) });
+  el.querySelectorAll('[data-c]').forEach(b => b.onclick = () => bcAct('color', {color: b.dataset.c}));
+}
 
 // ------------------------------------------------------------- fourth run (add a run)
 let FOURTH = null;

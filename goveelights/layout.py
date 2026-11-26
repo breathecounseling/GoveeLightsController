@@ -5,6 +5,11 @@ Per-device layout lives in the device's config entry:
   order     position of this run in the virtual strip
   reverse   traverse the run from its last bulb to its first
   hidden    physical bulb indexes that are not visible (kept dark, skipped)
+  dead      physical bulb indexes the owner marked as broken in the Bulb check (dark,
+            stuck or the wrong colour). They are kept dark and left out of the virtual
+            strip like hidden ones, so a chase or the sleigh runs straight past them, but
+            they still count for the house's outline (2D effects and pictures keep their
+            shape and scale: a letter or picture never shifts because a bulb died).
   geometry  [[index, x, y], ...] polyline knots in bulb-spacing units, as seen
             from outside with the house "unrolled"; bulbs between knots are
             interpolated. Missing -> a straight horizontal line.
@@ -35,6 +40,7 @@ class Run:
     role: str | None = None              # a run added later says what it is (peak, roofline, porch, accent)
     guess: bool = False                  # geometry is a placeholder until camera mapping measures it
     follows: str | None = None           # opt-in: a run or zone it copies when a scene leaves it dark
+    dead: set[int] = field(default_factory=set)   # marked broken in the Bulb check: dark, skipped
     pixels: list[Pixel] = field(default_factory=list)   # visible, virtual order
 
     def positions(self) -> list[tuple[float, float]]:
@@ -118,6 +124,21 @@ def _house_names(cfg) -> list[str]:
         return []
 
 
+def dead_bulbs(d: dict) -> set[int]:
+    """The bulbs a device entry marks as broken ("dead": [physical indexes]), within its
+    bulb count; anything unreadable is ignored (a hand-edited file must not stop the show)."""
+    out = set()
+    n = d.get("pixel_count")
+    for k in d.get("dead") or ():
+        try:
+            k = int(k)
+        except (TypeError, ValueError):
+            continue
+        if k >= 0 and (not n or k < int(n)):
+            out.add(k)
+    return out
+
+
 class Layout:
     def __init__(self, runs: list[Run], zones: list[dict] | None = None, aliases: dict | None = None,
                  dark=()):
@@ -140,7 +161,7 @@ class Layout:
         # runs without a mapped shape (e.g. a new WLED strip) go on their own line below
         # the house in the preview until camera mapping places them
         shaped = [pos_all[r.mac][k] for r in runs if r.geometry
-                  for k in range(r.count) if k not in r.hidden]     # visible bulbs only
+                  for k in range(r.count) if k not in r.hidden]     # visible bulbs only (a dead one is still there)
         if shaped:
             bx = min(x for x, _ in shaped)
             by = min(y for _, y in shaped)
@@ -153,7 +174,7 @@ class Layout:
                     pos_all[r.mac] = [(bx + i * step, by - 3.0 * k) for i in range(r.count)]
         for r in runs:
             order = range(r.count - 1, -1, -1) if r.reverse else range(r.count)
-            vis = [k for k in order if k not in r.hidden]
+            vis = [k for k in order if k not in r.hidden and k not in r.dead]
             for ri, local in enumerate(vis):
                 p = Pixel()
                 p.run, p.mac, p.local, p.ri, p.rn = r.name, r.mac, local, ri, len(vis)
@@ -168,6 +189,13 @@ class Layout:
         framed = [p for r in runs if r.geometry or not shaped for p in r.pixels] or self.pixels
         xs = [p.x for p in framed] or [0.0]
         ys = [p.y for p in framed] or [0.0]
+        # a dead bulb still marks the house's outline: the frame (and so every 2D effect's
+        # scale) is the same as with that bulb working
+        gone = {r.mac: self._dead_pos(r, pos_all[r.mac]) for r in runs if r.dead}
+        for r in runs:
+            if r.mac in gone and (r.geometry or not shaped):
+                xs += [x for x, _ in gone[r.mac]]
+                ys += [y for _, y in gone[r.mac]]
         self.minx, self.maxx, self.miny, self.maxy = min(xs), max(xs), min(ys), max(ys)
         spanx, spany = max(1e-6, self.maxx - self.minx), max(1e-6, self.maxy - self.miny)
         for i, p in enumerate(self.pixels):
@@ -177,8 +205,8 @@ class Layout:
             p.spanx, p.spany = spanx, spany
             p.nx, p.ny = p.sx / spanx, p.sy / spany
         for r in runs:
-            ys = [p.y for p in r.pixels] or [0.0]
-            xs = [p.x for p in r.pixels] or [0.0]
+            ys = [p.y for p in r.pixels] + [y for _, y in gone.get(r.mac, ())] or [0.0]
+            xs = [p.x for p in r.pixels] + [x for x, _ in gone.get(r.mac, ())] or [0.0]
             lo, hi = min(ys), max(ys)
             xlo, xhi = min(xs), max(xs)
             for p in r.pixels:
@@ -198,6 +226,10 @@ class Layout:
                 members |= {p.i for p in r.pixels if lo <= p.local <= hi}
             if members and z.get("name"):
                 self.zones[z["name"]] = sorted(members)
+
+    @staticmethod
+    def _dead_pos(r: Run, pos) -> list[tuple[float, float]]:
+        return [pos[k] for k in sorted(r.dead) if 0 <= k < r.count and k not in r.hidden]
 
     @property
     def n(self) -> int:
@@ -333,7 +365,8 @@ class Layout:
                             trim=tuple(float(v) for v in d["trim"]) if d.get("trim") else None,
                             role=d.get("role") if d.get("role") in ROLES else None,
                             guess=bool(d.get("geometry_guess")),
-                            follows=str(d["follows"]) if d.get("follows") else None))
+                            follows=str(d["follows"]) if d.get("follows") else None,
+                            dead=dead_bulbs(d)))
         return cls(runs, cfg.data.get("zones", []), cfg.data.get("target_aliases"), dark + _house_names(cfg))
 
     def summary(self) -> str:
@@ -341,7 +374,8 @@ class Layout:
         for r in self.runs:
             if r.pixels:
                 lines.append(f"  {r.name:<12} {r.mac}  bulbs {r.count}, visible {len(r.pixels)}, hidden {sorted(r.hidden)}"
-                             f", reverse={r.reverse}, virtual {r.pixels[0].i}..{r.pixels[-1].i}")
+                             + (f", dead {sorted(r.dead)}" if r.dead else "")
+                             + f", reverse={r.reverse}, virtual {r.pixels[0].i}..{r.pixels[-1].i}")
         for z, idx in self.zones.items():
             lines.append(f"  zone {z!r}: {len(idx)} bulbs")
         return "\n".join(lines)

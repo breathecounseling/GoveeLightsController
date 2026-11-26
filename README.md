@@ -151,6 +151,10 @@ twice. Please report the model and firmware. More → *Fourth run* has a phone c
 (LAN Control switch, firmware, Wi-Fi, power-cycle), a one-tap *Is it answering now?* and,
 as a last resort, a slow Govee-cloud output: [docs/FOURTH_RUN.md](docs/FOURTH_RUN.md).
 
+**A few bulbs are dark, stuck or the wrong colour.** More → *Bulb check* walks a run with a
+bright marker and a colour test, and keeps the bulbs you mark dark so chases and words run
+past them; re-hung bulbs can be re-mapped on their own: [docs/BULB_CHECK.md](docs/BULB_CHECK.md).
+
 **The phone page never loads.** The computer is dropping the connection: on Windows the
 network is probably marked *Public*. See *Windows firewall* below. Some routers isolate
 Wi-Fi clients (AP/client isolation); turn that off for your home network.

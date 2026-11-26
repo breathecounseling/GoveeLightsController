@@ -291,6 +291,9 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                     return self._json(ctl.layout_info())
                 if path == "/api/fourth":             # More -> Fourth run (never the API key itself)
                     return self._json(ctl.fourth_state())
+                if path == "/api/bulbs":              # More -> Bulb check: runs, marked bulbs, the walk
+                    return self._json({"runs": ctl.bulbcheck.runs(), "check": ctl.bulbcheck.view(),
+                                       "idle_s": ctl.bulbcheck.IDLE_S})
                 if path == "/api/effects":
                     return self._json({"effects": [e.to_dict() for e in EFFECTS.values()],
                                        "fx": [f.to_dict() for f in FX.values()], "blends": BLENDS,
@@ -539,6 +542,21 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
             if a == "fourth/release":
                 addrun.release(ctl, str(b["mac"]))
                 return {"ok": True}
+            if a == "bulbs/check":                  # the walk test: start / next / back / dark / stop
+                bc, act = ctl.bulbcheck, str(b.get("action", ""))
+                kw = {k: b[k] for k in ("at", "size", "color", "from", "to", "mode") if k in b}
+                if act == "start":
+                    kw.pop("mode", None)
+                    return {"ok": True, "check": bc.start(str(b["mac"]), str(b.get("mode", "groups")), **kw)}
+                if act == "stop":
+                    bc.stop("done")
+                    return {"ok": True, "check": None}
+                return {"ok": True, "check": bc.act(act, **kw)}
+            if a == "bulbs/dead":                   # the list of broken bulbs for one run
+                return {"ok": True, "dead": ctl.bulbcheck.set_dead(str(b["mac"]), [int(k) for k in b.get("dead") or []])}
+            if a == "bulbs/rehung":                 # mark / clear a re-hung section
+                return {"ok": True, "rehung": ctl.bulbcheck.mark_rehung(str(b["mac"]), int(b["from"]), int(b["to"]),
+                                                                        bool(b.get("on", True)))}
             if a == "run/add":
                 return {"ok": True, **ctl.add_run(b)}
             if a == "run/remove":
@@ -715,7 +733,8 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                 ctl.map_stop()
                 return {"ok": True}
             if a == "map/apply":
-                return {"ok": True, **ctl.map_apply(b["points"], b.get("target", "all"))}
+                return {"ok": True, **ctl.map_apply(b["points"], b.get("target", "all"),
+                                                    b.get("section") if isinstance(b.get("section"), dict) else None)}
             if a == "map/undo":
                 return {"ok": True, "restored": ctl.map_undo()}
             if a == "diag/exit":

@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Callable, Sequence
 
 from .config import write_json
+from .layout import dead_bulbs
 
 log = logging.getLogger(__name__)
 
@@ -334,7 +335,7 @@ class CloudRunOutput:
         segs = self._segments(d)
         hidden = self._hidden.get(run_id)
         if hidden is None:
-            hidden = self._hidden[run_id] = frozenset(d.get("hidden") or ())
+            hidden = self._hidden[run_id] = frozenset(d.get("hidden") or ()) | frozenset(dead_bulbs(d))
         n = len(pixels)
         with self.lock:
             a = self.acc.get(run_id)

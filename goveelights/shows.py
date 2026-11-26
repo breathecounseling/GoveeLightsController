@@ -108,13 +108,17 @@ DEFAULT_EVENTS = [
 
 
 # --------------------------------------------------------------- mapping
-def fit_mapping(layout, points, only: list[int] | None = None) -> dict[int, tuple[float, float]]:
+def fit_mapping(layout, points, only: list[int] | None = None,
+                moved=None) -> dict[int, tuple[float, float]]:
     """Measured image points [(virtual index, x, y)] -> positions in the layout's
     coordinate frame. Scale, rotation and offset are fitted against the bulbs of runs
     that already have a mapped shape, so mapping part of the house keeps the rest of
     it in proportion; with nothing mapped yet, 1 unit = the median neighbour gap.
     Bulbs of runs without a shape (placeholders below the house) are placed with the
-    transform fitted on the shaped runs, not matched to their placeholder line."""
+    transform fitted on the shaped runs, not matched to their placeholder line.
+    moved: virtual indexes that were re-hung (Bulb check): their old positions are wrong
+    by definition, so the transform is fitted on the other decoded bulbs of shaped runs
+    when there are enough of them; the re-hung bulbs then land where the camera saw them."""
     px = layout.pixels
     shaped = {r.mac for r in layout.runs if r.geometry and not getattr(r, "guess", False)}   # not a placeholder guess
     allm = {}
@@ -137,6 +141,11 @@ def fit_mapping(layout, points, only: list[int] | None = None) -> dict[int, tupl
         raise ValueError("not enough neighbouring bulbs decoded to measure the spacing")
     # reference bulbs: shaped runs in the target, else shaped runs anywhere in the image
     ref = {i: v for i, v in meas.items() if px[i].mac in shaped}
+    if moved is not None:
+        gone = set(moved)
+        still = {i: v for i, v in allm.items() if px[i].mac in shaped and i not in gone}
+        if len(still) >= 8:
+            ref = still
     if len(ref) < 8:
         ref = {i: v for i, v in allm.items() if px[i].mac in shaped}
     ratios = []

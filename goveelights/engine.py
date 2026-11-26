@@ -51,6 +51,14 @@ def to_device_frames(layout: Layout, colors: list[Color], gamma: float = 1.0,
     return frames
 
 
+def _px(frame, k: int):
+    """One bulb of a physical frame (ints) as a 0..1 colour, for the preview."""
+    if not frame or not 0 <= k < len(frame):
+        return (0.0, 0.0, 0.0)
+    c = frame[k]
+    return (c[0] / 255.0, c[1] / 255.0, c[2] / 255.0)
+
+
 class _Still:
     """A frozen frame standing in for the outgoing scene when a fade starts mid-fade."""
     def __init__(self, cols):
@@ -75,6 +83,12 @@ class Engine:
         self.audio = AudioState()               # music from a listening phone (POST /api/beat)
         self.hue_sweep: tuple[float, float] | None = None   # (start, seconds): one trip round the colour wheel
         self.transition = "crossfade"
+        # The Bulb check: a callable t -> {mac: physical frame (ints)} that stands in for
+        # the scene on the lights (and the preview) while it is set; nothing else changes,
+        # so the scene, shows and schedule carry on underneath and are back the moment it
+        # is cleared. takeover_live: send its frames even while the engine isn't live.
+        self.takeover = None
+        self.takeover_live = False
         self.scene: Scene | None = None
         self._prev: Scene | None = None
         self._mixed: list[Color] | None = None     # last crossfade frame (before overlays)
@@ -206,8 +220,27 @@ class Engine:
             return [lerp(a, (0, 0, 0), f * 2) for a in old] if f < 0.5 else [lerp((0, 0, 0), b, (f - 0.5) * 2) for b in new]
         return [lerp(a, b, f) for a, b in zip(old, new)]
 
+    def _tick_takeover(self, tk, t0: float) -> bool:
+        try:
+            frames = tk(self.now())
+        except Exception:  # noqa: BLE001
+            log.exception("bulb check frame failed")
+            return False
+        if frames is None:
+            return False
+        self.last_colors = [_px(frames.get(p.mac), p.local) for p in self.layout.pixels]
+        if self.live or self.takeover_live:
+            for mac, frame in frames.items():
+                self.output.send_frame(mac, frame)
+        self.stats["frames"] += 1
+        self.stats["render_ms"] = round((time.perf_counter() - t0) * 1000, 2)
+        return True
+
     def tick(self):
         t0 = time.perf_counter()
+        tk = self.takeover
+        if tk is not None and self._tick_takeover(tk, t0):
+            return
         cols = self.render(self.now())
         if self.blackout:
             cols = [(0.0, 0.0, 0.0)] * len(cols)

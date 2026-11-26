@@ -37,6 +37,16 @@ H705E, checks it in one tap, and adds it as a run without touching Eaves, Peak, 
 their zones. If it never answers on the LAN, paste a Govee API key there and add it with
 *Govee cloud (slow)*. Nothing changes for the show until you add it.
 
+## After a repair: Bulb check
+
+More → *Bulb check* in the app (details in [BULB_CHECK.md](BULB_CHECK.md)): walk each run
+ten bulbs at a time from the yard, then one at a time, and tap *This one is dark or wrong*;
+a red/green/blue/white colour test shows bulbs with a bad colour. Marked bulbs stay dark and
+the chases, words and the sleigh run straight past them. Sections you re-hung can be marked,
+gap-checked and re-mapped with the camera on their own. The check gives the house back by
+itself after 4 minutes without a tap, and always before a scheduled show (so a check at
+5:55 pm on Thanksgiving can't hold up the 6 pm show). Nothing is marked until you mark it.
+
 ## Project diary
 
 * Phase 1: diagnostics (`python -m goveelights diag`): discovery, bulb counts, walker and
