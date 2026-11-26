@@ -640,7 +640,8 @@ class Controller:
                         key = f"{t.get('league')}:{t.get('team')}"
                         if now >= next_game.get(key, 0):
                             next_game[key] = now + self._poll_game(t, key)
-                            livedata.set_games(self.games)    # for the scoreboard text effect
+                            # for the scoreboard text effect, held back like the celebrations
+                            livedata.update_game(key, self.games.get(key), g.get("delay", 30))
                 for item in list(self._pending):
                     if now >= item[0]:
                         self._pending.remove(item)

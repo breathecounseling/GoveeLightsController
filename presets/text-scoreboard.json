@@ -4,14 +4,14 @@
   "layers": [
     {
       "effect": "chase",
-      "target": ["Front gable outline", "Flat eaves", "Lower roofline"],
+      "target": ["Eaves", "Lower roofline"],
       "params": {"colors": ["#ff4f00", "#2050ff"], "spacing": 4, "width": 2, "speed": 3, "axis": "strip"}
     },
     {
       "effect": "text",
       "target": "Peak",
       "params": {"source": "score", "text": "GO BRONCOS!", "colors": ["#ffffff"], "color_mode": "solid",
-                 "speed": 4, "sparkle": 0.1, "border": "twinkle", "border_color": "#2050ff", "score_detail": true}
+                 "speed": 5.5, "sparkle": 0.1, "border": "twinkle", "border_color": "#2050ff", "score_detail": true}
     }
   ]
 }

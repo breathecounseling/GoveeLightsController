@@ -4,14 +4,14 @@
   "layers": [
     {
       "effect": "glitter",
-      "target": ["Front gable outline", "Flat eaves", "Lower roofline"],
-      "params": {"colors": ["#ffd060", "#8090ff", "#ffffff"], "level": 0.2, "shimmer": 0.7, "length": 24, "speed": 3}
+      "target": ["Eaves", "Lower roofline"],
+      "params": {"colors": ["#ffb000", "#2060ff", "#ffffff"], "level": 0.1, "shimmer": 0.7, "length": 24, "speed": 3}
     },
     {
       "effect": "text",
       "target": "Peak",
       "params": {"text": "HAPPY NEW YEAR!", "colors": ["#ffc000", "#ffffff", "#40a0ff"],
-                 "color_mode": "letters", "speed": 4, "sparkle": 0.5, "border": "marquee",
+                 "color_mode": "letters", "speed": 5.5, "sparkle": 0.5, "border": "marquee",
                  "border_color": "#ffd060"}
     }
   ]

@@ -202,10 +202,11 @@ class TextEffectTests(unittest.TestCase):
         self.assertEqual(scrolltext.build_message(P, 0)[0], "GO BRONCOS")
         livedata.set_games({"nfl:DEN": GAME, "junk": "x"})
         msg, extra = scrolltext.build_message(P, 0)
-        self.assertEqual(msg, "DEN 17  PIT 10")
+        self.assertEqual(msg, "DEN 17 - PIT 10")
         self.assertEqual(extra["accent"][:2], (0, 6))
+        self.assertEqual(extra["dim"], (6, 9))
         P2 = EFFECTS["text"].resolve({"source": "score", "score_detail": True})
-        self.assertEqual(scrolltext.build_message(P2, 0)[0], "DEN 17  PIT 10  10:32 3RD")
+        self.assertEqual(scrolltext.build_message(P2, 0)[0], "DEN 17 - PIT 10  10:32 3RD")
         livedata.set_games({"nfl:DEN": {**GAME, "score": "bad"}})
         self.assertEqual(scrolltext.build_message(P, 0)[0], "GO BRONCOS")
 
@@ -249,11 +250,222 @@ class TextEffectTests(unittest.TestCase):
                 valid(self, sc.render(k / 20, L), L.n)
 
 
+def drive(steps, L=None, params=None, target="Peak", st=None, t0=0.0, tr0=0.0, fps=20.0, cache=None):
+    """Run the effect directly with the engine's travel integration; steps is a list of
+    (seconds, param overrides). Returns (frames, state, t, travel)."""
+    L = L or house()
+    fx = EFFECTS["text"]
+    idx = L.indices(target) if target else []
+    st = {} if st is None else st
+    cache = {} if cache is None else cache
+    t, tr, frames = t0, tr0, []
+    base = {"sparkle": 0, "border": "off", **(params or {})}
+    for secs, over in steps:
+        P = fx.resolve({**base, **over})
+        for _ in range(int(round(secs * fps))):
+            dt = 1.0 / fps
+            t += dt
+            tr += P["speed"] * dt
+            P["_travel"] = tr
+            frames.append(fx.fn(t, Ctx(L, idx, t, dt, 120, cache), P, st))
+    return frames, st, t, tr
+
+
+def change(a, b, idx):
+    return sum(abs(x - y) for i in idx for x, y in zip(a[i], b[i]))
+
+
+class ScrollRobustnessTests(unittest.TestCase):
+    def setUp(self):
+        self._now = scrolltext._now
+        self.L = house()
+        self.peak = self.L.indices("Peak")
+
+    def tearDown(self):
+        scrolltext._now = self._now
+
+    def test_speed_reversal_keeps_text_on_screen(self):
+        for a, b in ((5, -5), (-5, 5), (3.5, -3.5)):
+            frames, st, _, _ = drive([(60, {"speed": a}), (20, {"speed": b})], L=self.L)
+            after = frames[60 * 20:]
+            # the display is never dark for longer than one pass of the message
+            W = font.layout("MERRY CHRISTMAS").width * 1.2 * 0.7
+            limit = int((19 + W) / (abs(b) * 0.7) * 20)
+            run_dark = worst = 0
+            for f in after:
+                run_dark = 0 if lit(f, self.peak) else run_dark + 1
+                worst = max(worst, run_dark)
+            self.assertLess(worst, limit, (a, b))
+            self.assertGreater(sum(1 for f in after if lit(f, self.peak)), len(after) // 2, (a, b))
+            # and the text turns round smoothly: no jump at the reversal
+            k = 60 * 20
+            typical = sorted(change(frames[j], frames[j + 1], self.peak) for j in range(k - 200, k - 1))[150]
+            self.assertLess(change(frames[k - 1], frames[k], self.peak), 3 * typical + 1, (a, b))
+
+    def test_stop_and_start(self):
+        frames, st, _, _ = drive([(10, {}), (3, {"speed": 0}), (6, {})], L=self.L)
+        k = 10 * 20
+        self.assertTrue(all(lit(f, self.peak) for f in frames[k + 10:k + 60]))     # still: centred text
+        # fading between scroll and still: no single-frame jump
+        diffs = [change(frames[j], frames[j + 1], self.peak) for j in range(k - 5, k + 15)]
+        self.assertLess(max(diffs), 40)
+        self.assertTrue(any(lit(f, self.peak) for f in frames[k + 61:]))          # starts scrolling again
+
+    def test_live_message_change_waits_for_next_pass(self):
+        # the clock goes 9:59 -> 10:00 mid-scroll: the copy on screen keeps its text
+        now = [time.mktime(datetime.datetime(2026, 12, 1, 9, 59, 50).timetuple())]
+        scrolltext._now = lambda: now[0]
+        frames, st, t, tr = drive([(4, {})], L=self.L, params={"source": "clock"})
+        before = [c["msg"] for c in st["copies"]]
+        self.assertIn("9:59", before)
+        now[0] += 15
+        more, st, t2, tr2 = drive([(0.05, {})], L=self.L, params={"source": "clock"}, st=st, t0=t, tr0=tr)
+        self.assertEqual([c["msg"] for c in st["copies"]][:len(before)], before)
+        typical = sorted(change(frames[j], frames[j + 1], self.peak) for j in range(40, 79))[30]
+        self.assertLess(change(frames[-1], more[0], self.peak), 2 * typical + 1)
+        drive([(30, {})], L=self.L, params={"source": "clock"}, st=st, t0=t2, tr0=tr2)
+        self.assertIn("10:00", [c["msg"] for c in st["copies"]])
+
+    def test_still_message_cross_fades(self):
+        now = [time.mktime(datetime.datetime(2026, 12, 1, 9, 59, 50).timetuple())]
+        scrolltext._now = lambda: now[0]
+        frames, st, t, tr = drive([(1, {"speed": 0})], L=self.L, params={"source": "clock"})
+        now[0] += 15
+        more, st, _, _ = drive([(1, {"speed": 0})], L=self.L, params={"source": "clock"}, st=st, t0=t, tr0=tr)
+        diffs = [change(a, b, self.peak) for a, b in zip([frames[-1]] + more, more)]
+        self.assertGreater(sum(diffs), 10)                       # it did change
+        self.assertLess(max(diffs), 0.35 * sum(diffs))           # ... over several frames
+        self.assertEqual(st["copies"][-1]["msg"], "10:00")
+
+    def test_editing_text_restarts_cleanly(self):
+        frames, st, t, tr = drive([(5, {})], L=self.L)
+        drive([(10, {"text": "HO HO HO"})], L=self.L, st=st, t0=t, tr0=tr)
+        self.assertEqual(st["copies"][-1]["msg"], "HO HO HO")
+        self.assertFalse(any(c["msg"] == "MERRY CHRISTMAS" for c in st["copies"]))
+
+    def test_speed_and_size_are_in_zigzag_bulbs(self):
+        _, st, t, tr = drive([(2, {"speed": 4})], L=self.L)
+        c = st["copies"][0]
+        x0 = scrolltext._copy_x(c, {"xc": 0}, tr * 0.7, 0)
+        _, st, _, tr2 = drive([(1, {"speed": 4})], L=self.L, st=st, t0=t, tr0=tr)
+        x1 = scrolltext._copy_x(c, {"xc": 0}, tr2 * 0.7, 0)
+        self.assertAlmostEqual(x0 - x1, 4 * 0.7, delta=0.05)     # 4 zigzag bulbs (0.7 apart) a second
+        for prm in EFFECTS["text"].params:
+            if prm.name in ("speed", "size"):
+                self.assertIn("zigzag bulbs", prm.help)
+
+    def test_window_fade_dims_the_flanks(self):
+        p = {"text": "MMMMMMMMMMMMMMMM", "speed": 5, "color_mode": "solid", "colors": ["#ffffff"]}
+        full, _, _, _ = drive([(8, {})], L=self.L, params={**p, "window": "full"})
+        fade, _, _, _ = drive([(8, {})], L=self.L, params={**p, "window": "fade"})
+        rows = geometry.rows(self.L, "Peak")
+        top = rows[4]
+        xl, xr = min(self.L.pixels[i].x for i in top), max(self.L.pixels[i].x for i in top)
+        flank = [i for i in rows[0] if self.L.pixels[i].x < xl - 3 or self.L.pixels[i].x > xr + 3]
+        centre = [i for r in rows[:5] for i in r if xl <= self.L.pixels[i].x <= xr]
+        self.assertTrue(flank)
+        a, b = full[-1], fade[-1]
+        self.assertEqual([b[i] for i in centre], [a[i] for i in centre])
+        self.assertGreater(sum(max(a[i]) for i in flank), 0)
+        self.assertLess(sum(max(b[i]) for i in flank), 0.3 * sum(max(a[i]) for i in flank))
+
+    def test_huge_travel_jump_and_tiny_text(self):
+        L = self.L
+        fx = EFFECTS["text"]
+        st, cache = {}, {}
+        for tr in (0.0, 1e7, -1e7, 3.0):
+            P = fx.resolve({"text": ".", "gap": 0, "size": 0.8})
+            P["_travel"] = tr
+            valid(self, fx.fn(1.0, Ctx(L, self.peak, 1.0, 0.05, 120, cache), P, st), L.n)
+            self.assertLessEqual(len(st["copies"]), 80)
+
+    def test_days_until_leap_day(self):
+        for y in (2025, 2026, 2027, 2029):
+            now = time.mktime(datetime.datetime(y, 3, 1, 12).timetuple())
+            target = next(datetime.date(yy, 2, 29) for yy in range(y, y + 5) if yy % 4 == 0)
+            self.assertEqual(scrolltext.days_until("02-29", now), (target - datetime.date(y, 3, 1)).days, y)
+
+    def test_team_colour_skips_navy(self):
+        c = scrolltext._team_colour({"colors": ["#0a2343", "#fc4c02"]})
+        self.assertGreater(c[0], 0.9)
+        self.assertLess(c[2], 0.1)                               # Broncos orange, not sky blue
+        self.assertIsNone(scrolltext._team_colour({"colors": ["#0a2343", "#102010"]}))
+        scrolltext._team_colour({"colors": ["bad", None, 3]})           # never raises
+        self.assertGreater(scrolltext._team_colour({"colors": ["#c8102e", "#000000"]})[0], 0.9)
+
+
+class ScoreTests(unittest.TestCase):
+    def setUp(self):
+        self._games = livedata.LIVE["games"]
+        livedata.set_games({})
+
+    def tearDown(self):
+        livedata.LIVE["games"] = self._games
+        livedata._queue.clear()
+
+    def test_flash_only_when_we_score(self):
+        L = house()
+        livedata.set_games({"nfl:DEN": GAME})
+        frames, st, t, tr = drive([(1, {})], L=L, params={"source": "score"})
+        livedata.set_games({"nfl:DEN": {**GAME, "opp_score": 17}})
+        frames, st, t, tr = drive([(0.1, {})], L=L, params={"source": "score"}, st=st, t0=t, tr0=tr)
+        self.assertEqual(st["flash"], 0)
+        self.assertGreater(st["dip"], 0.9)
+        livedata.set_games({"nfl:DEN": {**GAME, "opp_score": 17, "score": 20}})
+        frames, st, t, tr = drive([(0.1, {})], L=L, params={"source": "score"}, st=st, t0=t, tr0=tr)
+        self.assertGreater(st["flash"], 0.9)
+        self.assertEqual(st["flash_rgb"][0], 1.0)                # the team's orange
+        # the flash is visible even with white letters: background and top row light up
+        P = {"source": "score", "colors": ["#ffffff"], "color_mode": "solid", "border": "twinkle"}
+        _, st2, t, tr = drive([(1, {})], L=L, params=P)
+        livedata.set_games({"nfl:DEN": {**GAME, "opp_score": 17, "score": 27}})
+        fl, st2, _, _ = drive([(1, {})], L=L, params=P, st=st2, t0=t, tr0=tr)
+        rows = geometry.rows(L, "Peak")
+        self.assertTrue(any(max(f[i]) > 0.2 and f[i][2] < 0.1 for f in fl[:20] for i in rows[0]))
+        self.assertTrue(any(f[i][0] > 0.6 and f[i][2] < 0.2 for f in fl[:20] for i in rows[-1]))
+
+    def test_delay_holds_scores_back(self):
+        livedata.update_game("nfl:DEN", GAME, delay=30)
+        self.assertIsNone(livedata.current_game())
+        self.assertIsNone(livedata.current_game(time.time() + 29))
+        self.assertEqual(livedata.current_game(time.time() + 31)["score"], 17)
+        livedata.update_game("nfl:DEN", {**GAME, "score": 24}, delay=30)
+        self.assertEqual(livedata.current_game(time.time() + 1)["score"], 17)
+        self.assertEqual(livedata.current_game(time.time() + 31)["score"], 24)
+        livedata.update_game("nfl:DEN", None, delay=30)            # ignored
+        livedata.update_game("nfl:DEN", {**GAME, "score": 31}, delay="junk")   # no delay
+        self.assertEqual(livedata.current_game(time.time() + 32)["score"], 31)
+
+    def test_stale_and_failed_data_is_not_shown_as_live(self):
+        livedata.update_game("nfl:DEN", GAME)
+        now = time.time()
+        self.assertIsNotNone(livedata.current_game(now + 60))
+        livedata.update_game("nfl:DEN", {**GAME, "error": "timeout"})
+        self.assertIsNotNone(livedata.current_game(now + 60))      # one failure: still recent data
+        self.assertIsNone(livedata.current_game(now + livedata.STALE_IN + 5))
+        # a team removed from the config is never refreshed, so it goes stale too
+        livedata.set_games({})
+        livedata.update_game("nfl:KC", {**GAME, "team": "KC", "id": "9"})
+        self.assertIsNone(livedata.current_game(time.time() + livedata.STALE_IN + 5))
+
+    def test_final_score_stays_for_a_while(self):
+        post = {**GAME, "state": "post", "score": 24, "detail": "Final", "id": "402"}
+        livedata.update_game("nfl:DEN", post)
+        self.assertEqual(livedata.current_game()["state"], "post")
+        P = EFFECTS["text"].resolve({"source": "score", "score_detail": True})
+        msg, extra = scrolltext.build_message(P, time.time())
+        self.assertEqual(msg, "FINAL DEN 24 - PIT 10")
+        self.assertEqual(extra["accent"][:2], (6, 12))
+        self.assertIsNone(livedata.current_game(time.time() + livedata.FINAL_FOR + 60))
+        livedata.set_games({"nfl:DEN": {**post, "id": "77", "date": "2020-01-01T18:00Z"}})
+        self.assertIsNone(livedata.current_game())
+
+
 class ControllerHookTests(unittest.TestCase):
     def test_controller_publishes_games(self):
         import inspect
         from goveelights import controller
-        self.assertIn("livedata.set_games", inspect.getsource(controller.Controller._live_loop))
+        self.assertIn("livedata.update_game", inspect.getsource(controller.Controller._live_loop))
 
 
 if __name__ == "__main__":

@@ -29,6 +29,9 @@ COLOR_MODES = ["letters", "words", "rainbow", "flow", "solid"]
 SOURCES = ["custom", "clock", "score", "days"]
 BORDERS = ["twinkle", "marquee", "glow", "off"]
 CLOCKS = ["12h", "12h am/pm", "24h"]
+WINDOWS = ["fade", "full"]
+FADE_S = 0.4              # cross-fade when a still message changes, or the text is edited
+FLANK = 0.2               # 'fade' window: letter strength on the far flanks
 
 _now = _time.time          # patched by tests
 
@@ -57,7 +60,7 @@ def parse_date(s: str) -> tuple[int, int]:
 def days_until(mmdd: str, now: float) -> int:
     m, d = parse_date(mmdd)
     today = _dt.date.fromtimestamp(now)
-    for year in (today.year, today.year + 1, today.year + 2, today.year + 4):
+    for year in range(today.year, today.year + 5):     # 02-29 can be up to 4 years away
         try:
             target = _dt.date(year, m, d)
         except ValueError:                           # 02-29 in a non-leap year
@@ -68,26 +71,32 @@ def days_until(mmdd: str, now: float) -> int:
 
 
 def game_text(g: dict, detail: bool) -> tuple[str, str] | None:
-    """('DEN 17', 'PIT 10[ Q3 ...]') for a game dict, or None if it is unusable."""
+    """('DEN 17', 'PIT 10[  3RD 4:12]') for a game dict, or None if it is unusable."""
     try:
         ours = f"{str(g['team']).upper()} {int(g.get('score', 0))}"
         theirs = f"{str(g.get('opponent', '')).upper()} {int(g.get('opp_score', 0))}".strip()
     except (KeyError, TypeError, ValueError):
         return None
-    if detail and g.get("detail"):
+    if detail and g.get("detail") and g.get("state") == "in":
         theirs += "  " + str(g["detail"]).replace(" - ", " ")
     return ours, theirs
 
 
+SEP = " - "               # between the two teams' scores, drawn dim
+SEP_RGB = (0.38, 0.38, 0.38)
+
+
 def build_message(P: dict, now: float) -> tuple[str, dict]:
     """The message to show and extras: {"accent": (start, end, colour)} (team colours
-    for our side of a score) and {"score_key": ...} to spot score changes."""
+    for our side of a score), {"dim": (start, end)} (the separator between the scores)
+    and {"score_key": ...} to spot score changes."""
     src, text, extra = P.get("source", "custom"), str(P.get("text", "")), {}
     label = str(P.get("label", "")).strip() or "XMAS"
     days = days_until(P.get("date", "12-25"), now)
     game = livedata.current_game() if (src == "score" or "{score}" in text) else None
     gt = game_text(game, bool(P.get("score_detail"))) if game else None
-    score = f"{gt[0]}  {gt[1]}" if gt else ""
+    pre = "FINAL " if gt and game.get("state") == "post" else ""
+    score = f"{pre}{gt[0]}{SEP}{gt[1]}" if gt else ""
     if src == "clock":
         text = "{time}"
     elif src == "days":
@@ -95,7 +104,10 @@ def build_message(P: dict, now: float) -> tuple[str, dict]:
             text = f"{days} DAY{'S' if days != 1 else ''} TO {label}"
     elif src == "score" and gt:
         text = score
-        extra["accent"] = (0, len(font.normalise(gt[0])), _team_colour(game))
+        a0 = len(font.normalise(pre))
+        a1 = a0 + len(font.normalise(gt[0]))
+        extra["accent"] = (a0, a1, _team_colour(game))
+        extra["dim"] = (a1, a1 + len(font.normalise(SEP)))
         extra["score_key"] = (game.get("id"), game.get("score"), game.get("opp_score"))
     if "{" in text:
         text = (text.replace("{time}", _clock(P.get("clock", "12h"), now)).replace("{days}", str(days))
@@ -103,15 +115,28 @@ def build_message(P: dict, now: float) -> tuple[str, dict]:
     return text.upper(), extra
 
 
+def _luma(c) -> float:
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+
+
 def _team_colour(g: dict):
+    """The team's colour as a bright LED colour. Dark colours (navy, forest green,
+    maroon) read as off or turn into odd hues when brightened, so the first colour
+    that is genuinely bright is used; failing that the brighter one if it is not dark."""
+    cands = []
     for h in (g.get("colors") or [])[:2]:
         try:
             c = hex_to_rgb(h)
         except (TypeError, ValueError, AttributeError):
             continue
-        if max(c) > 0.25:                            # team colours like navy read as off on LEDs
+        if _luma(c) >= 0.18:
             m = max(c)
             return (c[0] / m, c[1] / m, c[2] / m)
+        cands.append(c)
+    c = max(cands, key=max, default=None)
+    if c is not None and max(c) >= 0.5:
+        m = max(c)
+        return (c[0] / m, c[1] / m, c[2] / m)
     return None
 
 
@@ -163,12 +188,16 @@ def _display(layout, target, idx: list[int], cache: dict) -> dict:
     pitch = dx[len(dx) // 2] if dx else 1.0
     xs = [c[1] for c in cells]
     top = text_rows[-1] if text_rows else []
+    tl = min(px[i].x for i in top) if top else 0.0
+    tr = max(px[i].x for i in top) if top else 0.0
     d = {
         "cells": cells, "border": border, "rest": [i for i in idx if i not in used], "rows": nr,
         "pitch": max(0.2, min(2.0, pitch)),
         "xl": min(xs) if xs else 0.0, "xr": max(xs) if xs else 0.0,
-        # centre of the full-height part of the window (the top text row)
-        "xc": (min(px[i].x for i in top) + max(px[i].x for i in top)) / 2 if top else 0.0,
+        # the full-height part of the window (under the top text row) and its centre
+        "xc": (tl + tr) / 2, "tl": tl, "tr": tr,
+        # per text bulb: how far outside the full-height part it is (house units)
+        "out": [max(0.0, tl - x, x - tr) for _, x, _ in cells],
     }
     cache[key] = d
     return d
@@ -178,7 +207,7 @@ def _letter_colours(bm: font.Bitmap, P: dict, clock: float, extra: dict) -> list
     """Colour of each glyph of the message (None for spaces)."""
     cols, mode = P["colors"] or [WHITE], P["color_mode"]
     out, n = [], 0
-    accent = extra.get("accent")
+    accent, dim = extra.get("accent"), extra.get("dim")
     for k, ch in enumerate(bm.chars):
         if ch == " ":
             out.append(None)
@@ -195,6 +224,8 @@ def _letter_colours(bm: font.Bitmap, P: dict, clock: float, extra: dict) -> list
             c = HEART_RGB
         if accent and accent[2] is not None and accent[0] <= k < accent[1]:
             c = accent[2]
+        if dim and dim[0] <= k < dim[1]:
+            c = SEP_RGB
         out.append(c)
         n += 1
     if mode == "words":                              # fill per word (needs the word numbers)
@@ -209,6 +240,10 @@ def _letter_colours(bm: font.Bitmap, P: dict, clock: float, extra: dict) -> list
             for k in range(accent[0], min(accent[1], len(out))):
                 if out[k] is not None:
                     out[k] = accent[2]
+        if dim:
+            for k in range(dim[0], min(dim[1], len(out))):
+                if out[k] is not None:
+                    out[k] = SEP_RGB
     return out
 
 
@@ -225,11 +260,15 @@ def _letter_colours(bm: font.Bitmap, P: dict, clock: float, extra: dict) -> list
           help="letters: each letter the next colour; words: each word; rainbow: a rainbow along the "
                "message; flow: colours drift across the display; solid: all the first colour"),
     Param("background", "color", "#000000", help="behind the letters (keep it dark so the text reads)"),
-    Param("speed", "number", 3.5, "Scroll speed", -15, 15, 0.25,
-          help="bulb widths per second; 0 holds the text still, centred; negative scrolls to the right"),
-    Param("size", "number", 0.85, "Letter width", 0.6, 1.6, 0.05,
-          help="width of one font column in bulb units: bigger letters are bolder but fewer fit"),
-    Param("gap", "int", 10, "Gap before repeating", 0, 60, 1, help="blank columns before the message repeats"),
+    Param("speed", "number", 5.0, "Scroll speed", -20, 20, 0.25,
+          help="zigzag bulbs per second; 0 holds the text still, centred; negative scrolls to the right"),
+    Param("size", "number", 1.2, "Letter width", 0.8, 2.3, 0.05,
+          help="width of one font column, in zigzag bulbs: bigger letters are bolder but fewer fit"),
+    Param("gap", "int", 10, "Gap before repeating", 0, 60, 1,
+          help="blank font columns before the message comes round again"),
+    Param("window", "choice", "fade", "Edges", options=WINDOWS,
+          help="fade: scrolling letters are full strength where the zigzag is tall enough for all 5 rows and "
+               "only a soft preview on the low, wide flanks (easiest to read); full: the same everywhere"),
     Param("brightness", "number", 1.0, "Brightness", 0.1, 1, 0.05, help="of the letters"),
     Param("sparkle", "number", 0.25, "Glints", 0, 1, 0.05,
           help="random bulbs in the letters flash bright, like glitter catching the light"),
@@ -251,107 +290,216 @@ def scroll_text(t, ctx, P, state):
     D = _display(layout, _target_key(ctx), ctx.idx, ctx.cache)
     clock = ctx.clock
     dt = min(0.1, max(0.0, ctx.dt or 0.0))
+    pitch = D["pitch"]
+    cw = P["size"] * pitch                              # one font column, in house units
+    h = pitch / (2 * cw)                                # half a bulb's footprint, in columns
+    speed = float(P.get("speed", 0.0))
+    sign = 0 if abs(speed) < 1e-6 else (1 if speed > 0 else -1)
+    tr = travel(t, P) * pitch                           # house units scrolled (positive = leftwards)
+
+    # ---- message (live sources refresh every frame; the font layout is cached by string)
+    msg, extra = build_message(P, _now())
+    _score_events(state, extra, P, dt)
+    copies = _update_copies(state, P, D, msg, extra, sign, tr, cw, dt)
+
+    # ---- celebration when our score goes up; a short dip when theirs does
+    flash, fcol = state.get("flash", 0.0), state.get("flash_rgb") or P["border_color"]
+    strobe = flash * (0.5 + 0.5 * math.cos(2 * math.pi * clock * 3.0)) if flash else 0.0
     bg = P["background"]
+    if strobe:
+        bg = lerp(bg, scale(fcol, 0.45), strobe)
     for i in ctx.idx:
         frame[i] = bg
 
-    # ---- message (live sources refresh every frame; layout is cached by string)
-    now = _now()
-    msg, extra = build_message(P, now)
-    bm = font.layout(msg)
-    W = bm.width
-    if "origin" not in state:                           # start fresh: text enters from the edge
-        state["origin"] = travel(t, P)
-    sk = extra.get("score_key")
-    if sk is not None:
-        prev = state.get("score_key")
-        if prev is not None and prev[0] == sk[0] and prev != sk:
-            state["flash"] = 1.0                        # the score changed: celebrate
-        state["score_key"] = sk
-    flash = state["flash"] = max(0.0, state.get("flash", 0.0) - dt / 4.0)
-
-    cw = P["size"]
-    speed = float(P.get("speed", 0.0))
-    tc = (travel(t, P) - state["origin"]) / cw          # columns scrolled so far
-    period = W + max(0, P["gap"])
-    h = D["pitch"] / (2 * cw)                           # half a bulb's footprint, in columns
-    inv = 1.0 / (2 * h)
-    still = abs(speed) < 1e-6
-    if still:
-        base, sign = (D["xc"] - W * cw / 2) / cw, 0
-    elif speed > 0:
-        base, sign = D["xr"] / cw + h - tc, 1           # column 0 starts just off the right edge
-    else:
-        base, sign = (D["xl"] - W * cw) / cw - h - tc, -1   # last column starts just off the left
-
-    # ---- per-glyph colours, then each text bulb by coverage of lit columns
-    lcols = _letter_colours(bm, P, clock, extra) if W else []
+    # ---- each text bulb by how much of its footprint lit glyph columns cover
     flow = P["color_mode"] == "flow"
     pal = P["colors"] or [WHITE]
-    span = max(1.0, D["xr"] - D["xl"])
-    br = P["brightness"]
+    xl = D["xl"]
+    span = max(1.0, D["xr"] - xl)
+    br = P["brightness"] * (1.0 - 0.6 * strobe) * (1.0 - 0.45 * state.get("dip", 0.0))
     glint = P["sparkle"] * 0.12
     seed = P["seed"]
     gt = clock * 3.0
-    cols_, letters = bm.cols, bm.letter
-    strobe = flash * (0.55 + 0.45 * math.cos(2 * math.pi * clock * 3.0)) if flash else 0.0
-    if W:
-        for i, x, gr in D["cells"]:
-            q = x / cw - base
-            lo, hi = q - h, q + h
+    fade = P["window"] == "fade" and sign != 0        # a still word is shown whole
+    inv = 1.0 / (2 * h)
+    draw = []                                           # (x of column 0, width, weight, bitmap, colours)
+    for c in copies:
+        if c["w"] > 0 and c["bm"].width:
+            draw.append((_copy_x(c, D, tr, cw), c["bm"].width, c["w"], c["bm"],
+                         _letter_colours(c["bm"], P, clock, c["extra"])))
+    if draw:
+        for (i, x, gr), out in zip(D["cells"], D["out"]):
             r = g = b = cov = 0.0
-            c = math.floor(lo)
-            while c < hi:
-                ov = min(hi, c + 1) - max(lo, c)
-                if ov > 0:
-                    if still:
-                        cm = c if 0 <= c < W else -1
-                    else:
-                        k = c // period
-                        cm = c - k * period
-                        if (sign > 0 and k < 0) or (sign < 0 and k > 0) or cm >= W:
-                            cm = -1
-                    if cm >= 0 and cols_[cm] >> gr & 1:
-                        col = lcols[letters[cm]] if letters[cm] >= 0 else None
+            for x0, W, w, bm, lcols in draw:
+                q = (x - x0) / cw
+                lo, hi = q - h, q + h
+                if hi <= 0 or lo >= W:
+                    continue
+                cols_, letters = bm.cols, bm.letter
+                c = max(0, math.floor(lo))
+                while c < hi and c < W:
+                    if cols_[c] >> gr & 1:
+                        ov = (min(hi, c + 1) - max(lo, c)) * w
+                        col = lcols[letters[c]] if letters[c] >= 0 else None
                         if flow or col is None:
-                            col = palette(pal, (x - D["xl"]) / span * 0.6 - clock * 0.08)
+                            col = palette(pal, (x - xl) / span * 0.6 - clock * 0.08)
                         r += col[0] * ov
                         g += col[1] * ov
                         b += col[2] * ov
                         cov += ov
-                c += 1
-            if cov <= 0:
+                    c += 1
+            if cov <= 1e-6:
                 continue
+            col = (r / cov, g / cov, b / cov)
             cov = min(1.0, cov * inv)
-            col = (r * inv / cov, g * inv / cov, b * inv / cov)
             if glint:
                 ph = gt + hash01(i, seed, 5)
                 kb = math.floor(ph)
                 if hash01(i, kb, seed) < glint:
                     col = lerp(col, WHITE, 0.75 * (1.0 - (ph - kb)) ** 2)
-            if strobe:
-                col = lerp(col, WHITE, strobe)
-            col = scale(col, br)
-            frame[i] = lerp(bg, col, cov * cov * (3 - 2 * cov))
+            k = br
+            if fade and out > cw:
+                k *= max(FLANK, 1.0 - (1.0 - FLANK) * (out - cw) / 2.0)
+            frame[i] = lerp(bg, scale(col, k), cov * cov * (3 - 2 * cov))
 
     # ---- the top row: border
     mode = P["border"]
-    if mode != "off" and D["border"]:
+    if D["border"] and (mode != "off" or flash):
         bc = P["border_color"]
-        for j, (i, x) in enumerate(D["border"]):
+        for i, x in D["border"]:
             if mode == "glow":
                 v = 0.35 + 0.08 * math.sin(2 * math.pi * (clock * 0.25 + x * 0.05))
             elif mode == "marquee":
                 # dots every 3 bulbs marching with the text
-                u = (x / D["pitch"] + (0 if still else (tc * cw) / D["pitch"])) / 3.0
+                u = (x + (0.0 if sign == 0 else tr)) / pitch / 3.0
                 f = u - math.floor(u)
                 v = 0.12 + 0.88 * clamp(1.0 - abs(f - 0.5) * 3.0)
-            else:
+            elif mode == "twinkle":
                 rate = 0.25 + 0.35 * hash01(i, seed, 11)
                 s = 0.5 + 0.5 * math.sin(2 * math.pi * (clock * rate + hash01(i, seed, 12)))
                 v = 0.1 + 0.9 * s ** 4
-            frame[i] = scale(bc, v)
+            else:
+                v = 0.0
+            c = scale(bc, v)
+            if flash:                                   # the top row strobes in the team colour
+                c = lerp(c, scale(fcol, 0.25 + 0.75 * (strobe / flash)), min(1.0, flash * 2.0))
+            frame[i] = c
     return frame
+
+
+def _score_events(state: dict, extra: dict, P: dict, dt: float):
+    """Flash when our score goes up (the controller already holds scores back to match the
+    TV); a brief dip of the letters when the other side scores."""
+    sk = extra.get("score_key")
+    if sk is not None:
+        prev = state.get("score_key")
+        if prev is not None and prev[0] == sk[0]:
+            try:
+                if sk[1] > prev[1]:
+                    state["flash"] = 1.0
+                    state["flash_rgb"] = (extra.get("accent") or (0, 0, None))[2] or P["border_color"]
+                elif sk[2] > prev[2]:
+                    state["dip"] = 1.0
+            except TypeError:                           # malformed scores: no celebration
+                pass
+        state["score_key"] = sk
+    state["flash"] = max(0.0, state.get("flash", 0.0) - dt / 4.0)
+    state["dip"] = max(0.0, state.get("dip", 0.0) - dt / 2.5)
+
+
+def _copy_x(c: dict, D: dict, tr: float, cw: float) -> float:
+    """Left edge (house units) of a copy of the message right now."""
+    if c["centre"]:
+        return D["xc"] - c["bm"].width * cw / 2
+    return c["p"] - tr if c["move"] else c["p"]
+
+
+def _new_copy(msg: str, extra: dict, p: float = 0.0, move: bool = True, centre: bool = False,
+              w: float = 1.0) -> dict:
+    return {"msg": msg, "extra": extra, "bm": font.layout(msg), "p": p, "move": move,
+            "centre": centre, "w": w, "dying": False}
+
+
+def _update_copies(state, P, D, msg, extra, sign, tr, cw, dt) -> list:
+    """The copies of the message on (or about to enter) the display.
+
+    Each copy keeps the message it was given when it entered, so text never changes
+    mid-word: a new time or score appears with the next pass. Copies live in house
+    units, so the text simply turns round when the speed changes sign. Editing the
+    message (or its source) fades the old text out while the new one enters; a still,
+    centred message cross-fades when it changes."""
+    copies = state.get("copies")
+    pkey = (P.get("text"), P.get("source"), P.get("date"), P.get("label"), P.get("clock"),
+            bool(P.get("score_detail")))
+    fresh = copies is None
+    if fresh:
+        copies = []
+    elif state.get("pkey") != pkey:                     # edited: fade the old text out
+        for c in copies:
+            c["dying"] = True
+    state["pkey"] = pkey
+    was = state.get("sign")
+    state["sign"] = sign
+    step = dt / FADE_S
+    live = [c for c in copies if not c["dying"]]
+
+    if sign == 0:
+        if was is not None and was != 0:                   # just stopped: fade the scroll out
+            for c in live:
+                c["dying"] = True
+            live = []
+        cur = live[0] if live else None
+        if cur is not None and cur["msg"] != msg:
+            cur["dying"] = True
+            cur = None
+        if cur is None:
+            cur = _new_copy(msg, extra, move=False, centre=True, w=1.0 if fresh else 0.0)
+            copies.append(cur)
+        cur["extra"] = extra
+    else:
+        if was == 0:                                    # just started: the centred text scrolls off
+            for c in live:
+                c["p"] = _copy_x(c, D, tr, cw) + tr
+                c["move"], c["centre"] = True, False
+        rb = D["xr"] + D["pitch"] / 2                   # outer edges of the end bulbs
+        lb = D["xl"] - D["pitch"] / 2
+        gap = max(0, P["gap"]) * cw
+        # drop copies that have left the window (either way)
+        copies = [c for c in copies if not c["move"] or
+                  (lb - cw < _copy_x(c, D, tr, cw) + c["bm"].width * cw and _copy_x(c, D, tr, cw) < rb + cw)]
+        live = sorted((c for c in copies if not c["dying"]), key=lambda c: _copy_x(c, D, tr, cw))
+        bm = font.layout(msg)
+        wu = max(bm.width * cw, cw)                     # spacing never collapses for empty text
+        for _ in range(64):
+            if sign > 0:                                # entering on the right, moving left
+                if live:
+                    last = live[-1]
+                    nxt = _copy_x(last, D, tr, cw) + max(last["bm"].width * cw, cw) + gap
+                    if nxt >= rb:
+                        break
+                else:
+                    nxt = rb
+                c = _new_copy(msg, extra, p=nxt + tr)
+                live.append(c)
+            else:                                       # entering on the left, moving right
+                if live:
+                    end = _copy_x(live[0], D, tr, cw) - gap
+                    if end <= lb:
+                        break
+                else:
+                    end = lb
+                c = _new_copy(msg, extra, p=end - wu + tr)
+                live.insert(0, c)
+            copies.append(c)
+        else:                                           # a huge jump in travel: start over
+            copies = [c for c in copies if c["dying"]]
+            copies.append(_new_copy(msg, extra, p=(rb if sign > 0 else lb - wu) + tr))
+
+    for c in copies:
+        c["w"] = max(0.0, c["w"] - step) if c["dying"] else min(1.0, c["w"] + step)
+    copies = [c for c in copies if not (c["dying"] and c["w"] <= 0)][-80:]
+    state["copies"] = copies
+    return copies
 
 
 def _target_key(ctx) -> tuple:
