@@ -562,16 +562,14 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                     raise ValueError("only WLED controllers can be removed here")
                 ctl.remove_device(b["id"])
                 return {"ok": True}
-            if a == "trim":
-                mac, tr = b["mac"], b.get("trim")
-                tr = [max(0.2, min(1.0, float(v))) for v in tr] if tr else None
-                with cfg.lock:
-                    cfg.device(mac)["trim"] = tr
-                    cfg.save()
-                r = ctl.engine.layout.run(mac)
-                if r:
-                    r.trim = tuple(tr) if tr else None
+            if a == "trim":                        # older colour trim: now the calibration's gain
+                tr = b.get("trim")
+                ctl.calibrate({"mac": b["mac"], "gain": [max(0.2, min(1.0, float(v))) for v in tr] if tr else [1, 1, 1]})
                 return {"ok": True}
+            if a == "calibrate":                   # More -> Match the runs
+                return {"ok": True, "cal": ctl.calibrate(b)}
+            if a == "match":
+                return {"ok": True, **ctl.match(str(b.get("action", "")), b.get("color"))}
             if a == "master":
                 ctl.set_master(b)
                 return {"ok": True}

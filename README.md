@@ -98,6 +98,31 @@ roofline. After setup each box is a straight line. To get the real shape:
 * Preview any preset on a layout file without lights:
   `python3 tools/preview.py christmas-tree --layout layouts/examples/gable-house.json`.
 
+## Match the runs (colour and brightness balance)
+
+Runs of different ages or batches can show the same "warm white" or "red" a little
+differently, and a long run can be dimmer at its far end. More → **Match the runs**:
+
+1. Tap a colour (warm white, cool white, red, green, blue, gold). Every run shows it at
+   once, over whatever is playing. If the lights were off, they switch on for the test.
+2. Look from the street. On any run that looks off, tap **A bit warmer / cooler /
+   brighter / dimmer**. Each tap shows on the lights straight away. "A bit brighter" on a
+   run that is already at full makes the other runs a little dimmer instead (a run can't
+   go brighter than its bulbs).
+3. **Fine-tune** has sliders for brightness, red, green, blue, mid-tones, and **Far end**:
+   if the far end of a run looks dimmer than the start, slide it up a little. The start
+   of the run then dims gently to match the far end.
+4. **Stop the test**. What was playing comes back (and lights that were off go off
+   again). The test also ends by itself after 3 minutes without the app open, when you
+   leave the More tab, or when a show or celebration starts. It won't start while a show
+   is playing.
+
+The settings are kept per run in the config (`"calibration": {"brightness", "gain":
+[r, g, b], "gamma", "fade"}` under the box) and apply to every look, show and picture at
+the very last step before the frame is sent, after the global brightness and late-night
+dimming. A run you never touched sends exactly what it did before. **Reset all runs**
+puts everything back. An older `"trim"` setting is read as the gain.
+
 ## Presets on your house
 
 The built-in presets were designed on a house with runs and zones called *Peak* (a zigzag
@@ -251,7 +276,7 @@ what is below what). They are plug-ins in `goveelights/effects_ext/`:
 * **Evolve** (Play → ✨ Evolve next to what's playing, or as a schedule program): plays a preset and every few minutes crossfades into a fresh
   variation of it (small, related changes), so the house never looks quite the same twice.
 * **Smoothness:** motion is anti-aliased between bulbs, dark fades are dithered so they don't
-  step, and each run has a colour-match trim (Colour match in settings, with a white test)
+  step, and each run can be balanced against the others (More → *Match the runs*, below)
   so all your boxes show the same white.
 
 * **Santa's sleigh:** a sleigh led by reindeer (red nose in front) flies over both gables

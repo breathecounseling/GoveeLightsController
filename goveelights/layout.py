@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from . import calibrate
+
 
 class Pixel:
     __slots__ = ("i", "n", "u", "run", "mac", "local", "ri", "rn", "ru",
@@ -32,6 +34,9 @@ class Run:
     hidden: set[int] = field(default_factory=set)
     geometry: list[list[float]] = field(default_factory=list)
     trim: tuple | None = None            # per-run colour gains (r, g, b), e.g. to warm up a bluish run
+    bright: float = 1.0                  # per-run brightness scale (calibrate.py)
+    rgamma: float = 1.0                  # per-run extra gamma (1 = off)
+    fade: float = 0.0                    # far-end fade compensation (0 = off)
     role: str | None = None              # a run added later says what it is (peak, roofline, porch, accent)
     guess: bool = False                  # geometry is a placeholder until camera mapping measures it
     follows: str | None = None           # opt-in: a run or zone it copies when a scene leaves it dark
@@ -327,10 +332,12 @@ class Layout:
             if not count:
                 dark += [mac, d.get("name")]
                 continue   # count not confirmed yet: not part of the strip
+            cal = calibrate.read(d)
             runs.append(Run(mac=mac, name=d.get("name") or mac, count=int(count),
                             reverse=bool(d.get("reversed")), hidden=set(d.get("hidden") or []),
                             geometry=d.get("geometry") or [],
-                            trim=tuple(float(v) for v in d["trim"]) if d.get("trim") else None,
+                            trim=tuple(cal["gain"]) if cal["gain"] != [1.0, 1.0, 1.0] else None,
+                            bright=cal["brightness"], rgamma=cal["gamma"], fade=cal["fade"],
                             role=d.get("role") if d.get("role") in ROLES else None,
                             guess=bool(d.get("geometry_guess")),
                             follows=str(d["follows"]) if d.get("follows") else None))
