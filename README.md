@@ -69,6 +69,11 @@ what is below what). They are plug-ins in `goveelights/effects_ext/`:
   *Ball drop at midnight* (clock mode, lands at local midnight: the PC must be on Mountain
   time) or *Ball drop (preview loop)* to try it.
 
+* **Starry night:** a deep-blue sky with twinkling stars and shooting stars streaking along
+  the gables. **Gift wrap:** the front is wrapped like a present: ribbon through the apex,
+  a bow on top, and it ties itself (and can unwrap into sparkles and rewrap).
+  **Advent calendar:** one more door lights each night in December; today's door sparkles.
+
 **The nightly experience:**
 * **Dusk intro** (Shows → Schedule → *Dusk intro*, minutes): when the lights come on at
   sunset, the house plays *Sky at dusk* for that long, then crossfades into the usual
@@ -77,8 +82,8 @@ what is below what). They are plug-ins in `goveelights/effects_ext/`:
   playing, the score scrolls on the zigzag in team colours every N minutes for a few
   seconds. Touchdown celebrations still take priority.
 * **Built-in shows:** *Christmas Eve spectacular* (about 9 min), *New Year's Eve countdown*
-  (ends exactly at midnight when played within 20 minutes of it) and *Winter wonderland
-  loop*. Play them as they are or copy one and edit the copy. To run the New Year's show
+  (ends exactly at midnight when played within 20 minutes of it), *Winter wonderland
+  loop* and *Santa's coming* (a looping Christmas Eve rotation with the sleigh). Play them as they are or copy one and edit the copy. To run the New Year's show
   automatically, add a showtime at 23:55 with date `12-31` and "only when on" unticked
   (it switches the lights on for the show if needed). See `goveelights/shows_builtin.py`.
 * **Featured tonight** (top of Play): the big scenes in one swipeable row.
@@ -119,8 +124,10 @@ lights are on.
 comets, hue sweep and colour wash, layered over whatever is playing.
 
 **Visitor page** (Shows → Live): a public page at `/visit/<secret>` with a printable QR
-sign. Neighbours pick from presets you approve (queued, one pick per cooldown), or hit
-"Make it sparkle". See REMOTE.md for making it public.
+sign. Neighbours see a live view of the house, pick from presets you approve (queued, one
+pick per cooldown, and they see their place in line), hit "Make it sparkle", **shake their
+phone for a snow flurry**, or **send one of eight colours** rippling out from the apex.
+Each of these can be switched off; all are rate limited. See REMOTE.md for making it public.
 
 **Schedule extras:** rules by date (MM-DD or holidays such as `thanksgiving+1` and
 `easter`), by weekday, or both, with their own on/off times (e.g. stay on until 12:30 on
