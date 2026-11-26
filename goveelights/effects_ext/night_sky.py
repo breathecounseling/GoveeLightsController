@@ -147,23 +147,18 @@ SN_HEAD_W = 1.25       # half-width of the meteor's anti-aliased leading edge (b
 def _sn_setup(ctx, st, P):
     L = ctx.layout
     idx = [i for i in ctx.idx if 0 <= i < len(L.pixels)]
-    key = (_sig(L, idx), round(P["stars"], 3), P["seed"])
-    if st.get("key") == key:
-        return
     px = L.pixels
     seed = P["seed"]
-    st["key"] = key
-    # ---- the stars: a sparse, fixed set; never two neighbours on the same strand
-    stars = {}
-    for i in idx:
-        h = hash01(i, seed, 501)
-        if h < P["stars"] and (i - 1) not in stars:
-            a, b, c = hash01(i, seed, 502), hash01(i, seed, 503), hash01(i, seed, 504)
-            stars[i] = (0.12 + 0.5 * a,                  # twinkle rate (Hz): each star its own pace
-                        b * 97.0,                        # phase
-                        0.45 + 0.55 * c * c,             # resting brightness: a few big stars
-                        hash01(i, seed, 505))            # colour pick
-    st["stars"] = stars
+    sig = _sig(L, idx)
+    # ---- the stars: a sparse, fixed set; never two neighbours on the same strand. Keyed on
+    # the share and the seed only, so modulating 'Stars' never disturbs the shooting stars.
+    skey = (sig, round(P["stars"], 3), seed)
+    if st.get("skey") != skey:
+        st["skey"] = skey
+        _sn_stars(st, idx, P["stars"], seed)
+    if st.get("key") == sig:
+        return
+    st["key"] = sig
     # ---- the sky: per-bulb noise coordinates (the sky drifts slowly between blue and indigo)
     st["sky"] = [(i, px[i].x * 0.085, px[i].y * 0.22) for i in idx]
     # ---- where shooting stars fly: the rooflines (highest first), else the top row
@@ -191,7 +186,20 @@ def _sn_setup(ctx, st, P):
     # the highest rooflines get nearly all the shooting stars; lower ones the odd one
     hi = max((s[2] for s in sky), default=0.0)
     st["tracks"] = [(pth, ap, w * math.exp(-(hi - top) / 2.0)) for pth, ap, top, w in sky]
-    st["meteors"] = []
+    st["meteors"] = []                                 # the tracks changed: old meteors are void
+
+
+def _sn_stars(st, idx, share, seed):
+    stars = {}
+    for i in idx:
+        h = hash01(i, seed, 501)
+        if h < share and (i - 1) not in stars:
+            a, b, c = hash01(i, seed, 502), hash01(i, seed, 503), hash01(i, seed, 504)
+            stars[i] = (0.12 + 0.5 * a,                  # twinkle rate (Hz): each star its own pace
+                        b * 97.0,                        # phase
+                        0.5 + 0.5 * c * c,               # resting brightness: a few big stars
+                        hash01(i, seed, 505))            # colour pick
+    st["stars"] = stars
 
 
 def _sn_spawn(st, rng, P, clock, delay=0.0, avoid=None):
@@ -237,11 +245,12 @@ def _sn_env(x: float, length: float) -> float:
 
 
 @frame_effect("starry_night", "Starry night", [
-    Param("sky", "color", "#0d2acc", "Sky colour", help="deep, saturated blue reads best on LEDs"),
-    Param("sky2", "color", "#3a10b0", "Second sky colour",
+    Param("sky", "color", "#0a1eff", "Sky colour", help="deep, saturated blue reads best on LEDs"),
+    Param("sky2", "color", "#3a10d0", "Second sky colour",
           help="the sky drifts slowly between the two (indigo by default)"),
-    Param("sky_level", "number", 0.4, "Sky brightness", 0, 1, 0.01,
-          help="keep it low so the stars stand out (very dark can read as off)"),
+    Param("sky_level", "number", 0.6, "Sky brightness", 0, 1, 0.01,
+          help="low enough for the stars to stand out, high enough to survive the late-night dim "
+               "(very dark reads as off)"),
     Param("drift", "number", 1.0, "Sky drift", 0, 5, 0.1, help="how fast the sky's colours wander; 0 = still"),
     Param("stars", "number", 0.14, "Stars", 0, 0.5, 0.01, help="share of bulbs that are stars"),
     Param("star_colors", "colors", ["#ffffff", "#cfdcff", "#ffe2a8"], "Star colours",
@@ -252,10 +261,11 @@ def _sn_env(x: float, length: float) -> float:
     Param("twinkle_speed", "number", 1.0, "Twinkle speed", 0.1, 5, 0.1),
     Param("shooting_every", "number", 10, "Shooting star every (s)", 0, 300, 1,
           help="average seconds between shooting stars (a little irregular); 0 = none"),
-    Param("shooting_speed", "number", 32, "Shooting star speed (bulbs/s)", 10, 120, 1),
+    Param("shooting_speed", "number", 22, "Shooting star speed (bulbs/s)", 10, 120, 1),
     Param("tail", "number", 8, "Tail length (bulbs)", 1, 30, 0.5),
     Param("shooting_color", "color", "#ffffff", "Shooting star colour"),
-    Param("tail_color", "color", "#6fa0ff", "Tail colour", help="the tail fades from the head colour to this"),
+    Param("tail_color", "color", "#c8d8ff", "Tail colour",
+          help="the tail turns from the head colour to this as it fades; keep it pale so it reads"),
     Param("doubles", "number", 0.25, "Doubles", 0, 1, 0.05,
           help="chance that a second shooting star follows the first moments later"),
     Param("seed", "int", 3, "Seed", 0, 9999, 1, help="which bulbs are stars, and the shooting stars' paths"),
@@ -352,12 +362,13 @@ def starry_night(t, ctx, P, st):
                 else:
                     wh = e_head * math.exp(-dd / 0.8)
                     u = dd / tail
-                    wt = _sn_env(x - dd, ln) * mb * (1.0 - u) ** 1.5 * 0.85
-                    tcol = lerp(hc, tc, min(1.0, u * 2.2))
+                    wt = _sn_env(x - dd, ln) * mb * (1.0 - u) * 0.9
+                    tcol = lerp(hc, tc, min(1.0, u))
                     c = (hc[0] * wh + tcol[0] * wt, hc[1] * wh + tcol[1] * wt, hc[2] * wh + tcol[2] * wt)
                 i = order[j]
                 a = frame[i]
-                frame[i] = (max(a[0], c[0]), max(a[1], c[1]), max(a[2], c[2]))
+                k = 1.0 - 0.5 * min(1.0, max(c) * 1.5)    # the streak cuts through the sky behind it
+                frame[i] = (max(a[0] * k, c[0]), max(a[1] * k, c[1]), max(a[2] * k, c[2]))
         st["meteors"] = keep[-SN_MAX_METEORS:]
     return _clamp(frame, idx)
 
@@ -365,12 +376,13 @@ def starry_night(t, ctx, P, st):
 # ====================================================================== gift wrap
 GW_PALETTES = {
     #                        paper               pattern             ribbon              bow
-    "classic red & gold": ((1.0, 0.0, 0.0), (1.0, 0.36, 0.1), (1.0, 0.58, 0.0), (1.0, 0.75, 0.22)),
+    "classic red & gold": ((1.0, 0.0, 0.0), (0.7, 0.0, 0.05), (1.0, 0.68, 0.1), (1.0, 0.86, 0.45)),
     "green & silver": ((0.0, 0.75, 0.06), (0.35, 1.0, 0.0), (0.72, 0.8, 1.0), (0.9, 0.94, 1.0)),
     "blue & white": ((0.0, 0.1, 1.0), (0.0, 0.55, 1.0), (0.92, 0.94, 1.0), (1.0, 1.0, 1.0)),
 }
 GW_UNWRAP_S = 5.0      # how long an unwrap (untie, burst, settle) takes before rewrapping
-GW_RIBBON_HW = 1.0     # half-width of the vertical ribbon (bulbs)
+GW_RIBBON_HW = 1.4     # half-width of the vertical ribbon (bulbs): ~4 bulbs per zigzag row
+GW_PAPER_FLOOR = 0.3   # the zigzag keeps this much paper under the burst (dark reads as a glitch)
 
 
 def _gw_geometry(layout, idx: list[int]) -> dict:
@@ -397,18 +409,28 @@ def _gw_geometry(layout, idx: list[int]) -> dict:
     else:
         yc, hh = (min(ys) + max(ys)) / 2, 0.6
     cset = set(crown)
-    # the bow: the crown is the knot; the bulbs around it (not the zigzag) are its loops
-    bow = {}
+    # the bow: the crown is the knot. Each loop is the outline running down from the knot on
+    # one side plus the matching stretch of the zigzag's top row below it (a loop's two edges);
+    # the top-row bulb either side of the centre stays paper so knot, loops and the ribbon's
+    # tails (the centre of the top row) read apart.
+    bow, gaps = {}, set()
     for i in idx:
         d = math.hypot(px[i].x - ax, px[i].y - ay)
         if i in cset:
             bow[i] = 0.0
         elif i not in zset and d <= (3.3 if zig else 1.6):
             bow[i] = d
+    if zig and crown and len(zig[-1]) >= 5:
+        for i in zig[-1]:
+            dx = abs(px[i].x - ax)
+            if 1.4 <= dx <= 3.5:
+                bow[i] = math.hypot(px[i].x - ax, px[i].y - ay)
+            elif 0.75 <= dx < 1.4:
+                gaps.add(i)
     bow_r = max(bow.values(), default=0.0) or 1.0
     vcov, hcov = {}, {}
     for i in idx:
-        if i in bow:
+        if i in bow or i in gaps:
             continue
         p = px[i]
         v = 1.0 - _smooth((abs(p.x - ax) - GW_RIBBON_HW) / 0.6 + 0.5)
@@ -446,7 +468,7 @@ def _gw_geometry(layout, idx: list[int]) -> dict:
         if k % 3 == 1:
             dots.add(b)
         k += 1
-    out = {"zig": zset, "crown": crown, "ax": ax, "ay": ay, "yc": yc, "bow": bow, "bow_r": bow_r,
+    out = {"zig": zset, "crown": crown, "gaps": gaps, "ax": ax, "ay": ay, "yc": yc, "bow": bow, "bow_r": bow_r,
            "vcov": vcov, "hcov": hcov, "vrank": vrank, "dots": dots,
            "xl": min(xs), "xr": max(xs),
            "pos": {i: (px[i].x, px[i].y) for i in idx},
@@ -487,14 +509,15 @@ def _gw_timeline(clock: float, P: dict, st: dict) -> tuple[str, float]:
     Param("pattern", "choice", "stripes", "Paper pattern", options=["stripes", "dots", "plain"],
           help="diagonal stripes or polka dots on the paper, by position on the house"),
     Param("pattern_depth", "number", 0.7, "Pattern strength", 0, 1, 0.05, help="0 = plain paper"),
-    Param("stripe_width", "number", 3.0, "Stripe spacing (bulbs)", 1.5, 12, 0.5),
+    Param("stripe_width", "number", 5.5, "Stripe spacing (bulbs)", 1.5, 12, 0.5,
+          help="distance from one stripe to the next; about 5 gives stripes 2 bulbs wide"),
     Param("level", "number", 0.85, "Brightness", 0.05, 1, 0.01),
     Param("sheen", "number", 0.35, "Paper sheen", 0, 1, 0.05,
           help="a soft glint of light sweeping across the paper now and then"),
     Param("shimmer", "number", 0.6, "Bow shimmer", 0, 1, 0.05, help="glints on the bow and the ribbon"),
     Param("tie", "number", 7, "Tie the ribbon intro (s)", 0, 30, 0.5,
           help="when the scene starts the ribbon draws in from the edges, then the bow pops; 0 = no intro"),
-    Param("unwrap_every", "number", 0, "Unwrap every (s)", 0, 900, 5,
+    Param("unwrap_every", "number", 0, "Unwrap every (s)", 0, 900, 1,
           help="the ribbon unties, the zigzag bursts into sparkles, then it wraps itself again; 0 = never"),
     Param("seed", "int", 9, "Seed", 0, 9999, 1),
 ], "The front of the house wrapped like a present: wrapping paper with subtle diagonal stripes "
@@ -525,7 +548,7 @@ def gift_wrap(t, ctx, P, st):
         x = age / T
         paper_on = _smooth(x / 0.18)
         if st.get("rewrap"):                    # rewrapping: the porch and outline kept their paper
-            paper_zig, paper_on = paper_on, 0.5 + 0.5 * paper_on
+            paper_zig, paper_on = GW_PAPER_FLOOR + (1 - GW_PAPER_FLOOR) * paper_on, 0.5 + 0.5 * paper_on
         else:
             paper_zig = paper_on
         prog = _smooth((x - 0.15) / 0.55)
@@ -560,7 +583,7 @@ def gift_wrap(t, ctx, P, st):
         x, y = pos[i]
         if pat == "stripes":
             q = ((x + y * 1.1) / sw) % 1.0
-            m = 1.0 - _smooth((abs(q - 0.5) - 0.17) / 0.12 + 0.5)        # soft-edged stripe
+            m = 1.0 - _smooth((abs(q - 0.5) - 0.2) / 0.16 + 0.5)         # soft-edged stripe
         elif pat == "dots":
             m = 1.0 if i in dots else 0.0
         else:
@@ -571,7 +594,7 @@ def gift_wrap(t, ctx, P, st):
         v = lv * (paper_zig if i in zig else paper_on)
         if burst_t >= 0 and i in zig:
             dd = dist[i]
-            v *= 1.0 - _smooth((ring - dd) / 1.2 + 0.5)               # the ring eats the paper...
+            v *= 1.0 - (1 - GW_PAPER_FLOOR) * _smooth((ring - dd) / 1.2 + 0.5)   # the ring eats the paper...
         c = (c[0] * v, c[1] * v, c[2] * v)
         if sh_pos is not None and v > 0:
             u = (x - y * 0.6) - sh_pos
@@ -608,24 +631,28 @@ def gift_wrap(t, ctx, P, st):
             if cov <= 0:
                 continue
             gl = glint(i, clock, 0.5 * shim, 0.03, 0.3, seed + 1, 1)[0] if shim > 0 else 0.0
-            rc = (rib[0] * lv, rib[1] * lv, rib[2] * lv)
+            rl = min(1.0, lv * 1.15)                               # the ribbon outshines the paper
+            rc = (rib[0] * rl, rib[1] * rl, rib[2] * rl)
             rc = (rc[0] + (1 - rc[0]) * gl * 0.8, rc[1] + (1 - rc[1]) * gl * 0.8, rc[2] + (1 - rc[2]) * gl * 0.6)
             frame[i] = lerp(frame[i], rc, cov)
 
     # ---- bow
     bow, br = g["bow"], g["bow_r"]
+    knotc = lerp(bowc, WHITE, 0.45)
     if bow_on > 0:
         rise = (age * 2.5 if phase == "unwrap" else 0.0)          # unwrapping: the bow lifts away
         for i, d in bow.items():
             if pop_scale < 1.0 and d > br * pop_scale + 0.3:
                 continue
-            if d == 0.0:                                           # the knot: bright, breathing
+            if d == 0.0:                                           # the knot: whiter, breathing
                 v = 0.92 + 0.08 * math.sin(clock * 2.3 + i)
-            else:                                                  # the loops
-                v = 0.78 - 0.18 * d / br + 0.1 * math.sin(clock * 1.7 + d * 2.0)
+                bc = knotc
+            else:                                                  # the loops: full and shimmering
+                v = 0.95 - 0.1 * d / br + 0.05 * math.sin(clock * 1.7 + d * 2.0)
+                bc = bowc
             gl = glint(i, clock, 1.6 * shim, 0.02, 0.22, seed + 2, 2)[0] if shim > 0 else 0.0
-            v *= bow_on * lv
-            c = (bowc[0] * v, bowc[1] * v, bowc[2] * v)
+            v *= bow_on * min(1.0, lv * 1.15)
+            c = (bc[0] * v, bc[1] * v, bc[2] * v)
             hot = min(1.0, gl * 0.85 + flash + rise * hash01(i, flick, 9) * 0.3)
             frame[i] = (c[0] + (1 - c[0]) * hot, c[1] + (1 - c[1]) * hot, c[2] + (1 - c[2]) * hot * 0.85)
     elif phase == "tie" and T > 0:
@@ -645,6 +672,7 @@ def gift_wrap(t, ctx, P, st):
 
 # ====================================================================== advent calendar
 AD_ORDERS = ["bottom up", "top down", "scattered"]
+TODAY_PEAK = (1.0, 0.95, 0.8)    # today's door at the top of its pulse
 
 
 def _ad_doors(layout, idx: list[int]) -> dict:
@@ -744,7 +772,7 @@ def _ad_order(nd: int, mode: str, seed: int) -> list[int]:
     Param("pulse", "number", 2.6, "Pulse period (s)", 0.5, 10, 0.1),
     Param("sparkle", "number", 1.0, "Sparkle", 0, 3, 0.05, help="glitter on today's door (and on the 24th, everywhere)"),
     Param("closed_color", "color", "#ffc48a", "Closed doors", help="dim warm white placeholders"),
-    Param("closed_level", "number", 0.18, "Closed door brightness", 0, 0.6, 0.01,
+    Param("closed_level", "number", 0.25, "Closed door brightness", 0, 0.6, 0.01,
           help="keep it low but not too low: very dark reads as off"),
     Param("frame_color", "color", "#d00000", "Frame colour",
           help="the rest of the target (e.g. the gable outline and porch) frames the calendar"),
@@ -815,10 +843,11 @@ def advent(t, ctx, P, st):
                     frame[i] = (cc[0] * cl, cc[1] * cl, cc[2] * cl)
                 continue
             fl = math.exp(-pop / 0.35) if 0 <= pop < 3 else 0.0
-            v = 0.7 + 0.3 * pulse
+            v = 0.35 + 0.65 * pulse                            # a deep, slow breath...
+            top = lerp(tc, TODAY_PEAK, _smooth((pulse - 0.6) / 0.4))   # ...glowing near white at its peak
             for i in door:
                 gl = glint(i, clock, 1.4 * spk, 0.02, 0.2, seed + 2, 2)[0] if spk > 0 else 0.0
-                c = (tc[0] * v, tc[1] * v, tc[2] * v)
+                c = (top[0] * v, top[1] * v, top[2] * v)
                 hot = min(1.0, gl * 0.9 + fl)
                 frame[i] = (c[0] + (1 - c[0]) * hot, c[1] + (1 - c[1]) * hot, c[2] + (1 - c[2]) * hot * 0.8)
         else:                                                  # still closed

@@ -189,6 +189,48 @@ class StarryNightTests(unittest.TestCase):
         first = heads[0][1]
         self.assertGreater(L.pixels[first].y, 2.0)
 
+    def test_modulating_stars_keeps_shooting_stars(self):
+        """An LFO on 'Stars' changes it every frame: that must not wipe the shooting stars."""
+        import math
+        L = self.L
+        idx = L.indices("all")
+        base = EFFECTS["starry_night"].resolve({"shooting_every": 2, "doubles": 0, "twinkle": 0})
+        st, hot = {}, 0
+        eaves = L.indices("Eaves")
+        for k in range(200):
+            t = k * 0.05
+            P = dict(base, stars=0.14 + 0.05 * math.sin(t))
+            cols = step("starry_night", L, idx, P, st, t, 0.05 if k else 0.0)
+            if any(min(cols[i]) > 0.8 and i not in st["stars"] for i in eaves):
+                hot += 1
+        self.assertGreater(hot, 10)
+
+    def test_shooting_star_has_a_pale_fading_tail(self):
+        L = self.L
+        idx = L.indices("all")
+        P = EFFECTS["starry_night"].resolve({"shooting_every": 4, "doubles": 0, "twinkle": 0, "stars": 0})
+        st, best = {}, None
+        for k in range(200):
+            t = k * 0.04
+            cols = step("starry_night", L, idx, P, st, t, 0.04 if k else 0.0)
+            for m in st["meteors"]:
+                x = (t - m["t0"]) * m["v"]
+                if 6 < x < 10 and best is None:
+                    pth = st["tracks"][m["k"]][0]
+                    best = (cols, pth, m["s0"] + m["dir"] * x, m["dir"])
+        self.assertIsNotNone(best)
+        cols, pth, sh, d = best
+        sky = sum(cols[idx[0]]) / 3 + 0.02
+        # bulbs 1..4 behind the head: brighter than the sky, fading, and pale (not blue)
+        behind = []
+        for back in (1, 2, 3, 4):
+            j = min(range(len(pth.s)), key=lambda j: abs(pth.s[j] - (sh - d * back)))
+            behind.append(cols[pth.order[j]])
+        lums = [0.3 * c[0] + 0.6 * c[1] + 0.1 * c[2] for c in behind]
+        self.assertTrue(all(a >= b - 0.02 for a, b in zip(lums, lums[1:])), lums)
+        self.assertGreater(lums[3], 3 * (0.3 * cols[idx[0]][0] + 0.6 * cols[idx[0]][1] + 0.1 * cols[idx[0]][2]))
+        self.assertGreater(min(behind[2]), 0.25, (behind, sky))
+
     def test_none_when_disabled(self):
         L = self.L
         _, st = run("starry_night", L, "all", {"shooting_every": 0}, frames=400, dt_=0.1)
@@ -256,6 +298,63 @@ class GiftWrapTests(unittest.TestCase):
                 phases.append(st["phase"])
         self.assertEqual(phases[:5], ["tie", "wrapped", "unwrap", "tie", "wrapped"])
 
+    def test_bow_has_two_loops_and_a_knot(self):
+        L, idx = self.L, self.idx
+        cols, _ = run("gift_wrap", L, idx, {"tie": 0, "shimmer": 0, "sheen": 0}, frames=5)
+        g = ns._gw_geometry(L, idx)
+        top = ns._zigzag(L, idx)[-1]
+        ax = g["ax"]
+        left = [i for i in top if i in g["bow"] and L.pixels[i].x < ax]
+        right = [i for i in top if i in g["bow"] and L.pixels[i].x > ax]
+        self.assertGreaterEqual(len(left), 2)
+        self.assertGreaterEqual(len(right), 2)
+        self.assertEqual(len(g["gaps"]), 2)                            # knot and loops read apart
+        for i in g["gaps"]:
+            self.assertLess(cols[i][1], 0.2)                           # paper, not gold
+        for i in left + right:
+            self.assertGreater(cols[i][1], 0.6)                        # bright gold loops
+        knot = g["crown"][0]
+        self.assertGreater(cols[knot][2], cols[left[0]][2])            # whiter knot
+
+    def test_ribbon_contrasts_with_the_paper(self):
+        L, idx = self.L, self.idx
+        cols, _ = run("gift_wrap", L, idx, {"tie": 0, "shimmer": 0, "sheen": 0}, frames=5)
+        g = ns._gw_geometry(L, idx)
+        zig = ns._zigzag(L, idx)
+        for r in (0, 3, 4):                                            # rows outside the band
+            n = sum(1 for i in zig[r] if g["vcov"].get(i, 0) > 0.9)
+            self.assertTrue(3 <= n <= 5, (r, n))                       # a ribbon 3-5 bulbs wide
+        paper = [i for i in idx if i in g["zig"] and i not in g["vcov"] and i not in g["hcov"]
+                 and i not in g["bow"] and i not in g["gaps"]]
+        rib = [i for i in g["vcov"] if g["vcov"][i] > 0.9]
+        self.assertGreater(min(cols[i][1] for i in rib), max(cols[i][1] for i in paper) + 0.4)
+
+    def test_unwrap_never_leaves_the_zigzag_dark(self):
+        L, idx = self.L, self.idx
+        P = EFFECTS["gift_wrap"].resolve({"tie": 7, "unwrap_every": 20, "shimmer": 0, "sheen": 0})
+        zig = sorted(ns._gw_geometry(L, idx)["zig"])
+        st = {}
+        for k in range(int(45 / 0.05)):
+            cols = step("gift_wrap", L, idx, P, st, k * 0.05, 0.05 if k else 0.0)
+            if k * 0.05 > 1.5:
+                mean = sum(max(cols[i]) for i in zig) / len(zig)
+                self.assertGreater(mean, 0.15, (k * 0.05, st["phase"]))
+
+    def test_show_cue_ends_wrapped(self):
+        """In 'Santa's coming' the gift-wrap cue must hand over a tied present with its bow."""
+        from goveelights.shows_builtin import BUILTIN_SHOWS
+        cue = next(c for c in BUILTIN_SHOWS["Santa's coming"]["cues"] if c["preset"] == "gift-wrap")
+        with open("presets/gift-wrap.json", encoding="utf-8") as f:
+            layer = next(ly for ly in json.load(f)["layers"] if ly["effect"] == "gift_wrap")
+        P = EFFECTS["gift_wrap"].resolve(layer["params"])
+        L, idx = self.L, self.idx
+        st, phases = {}, []
+        for k in range(int(cue["seconds"] / 0.1) + 1):
+            step("gift_wrap", L, idx, P, st, k * 0.1, 0.1 if k else 0.0)
+            phases.append(st["phase"])
+        self.assertIn("unwrap", phases)                                # the show includes the unwrap
+        self.assertEqual(phases[-1], "wrapped")
+
     def test_palettes_differ(self):
         L, idx = self.L, self.idx
         seen = set()
@@ -306,10 +405,25 @@ class AdventTests(unittest.TestCase):
                 self.assertGreater(v, 0.5, k)                          # open: gold
                 self.assertGreater(cols[d[0]][0], cols[d[0]][2] * 3)
             elif k == 9:
-                self.assertGreater(v, 0.6)                             # today
+                self.assertGreater(v, 0.3)                             # today (low in its pulse)
             else:
-                self.assertLess(v, 0.25, k)                            # closed placeholder
-                self.assertGreater(v, 0.05, k)                         # ...but not off
+                self.assertLess(v, 0.32, k)                            # closed placeholder
+                self.assertGreater(v, 0.15, k)                         # ...but not off
+
+    def test_today_stands_out_from_the_open_doors(self):
+        L, idx = self.L, self.idx
+        P = EFFECTS["advent"].resolve({"day": 10, "intro": 0, "sparkle": 0, "order": "bottom up"})
+        doors = ns._ad_doors(L, idx)["doors"]
+        st, today, opened = {}, [], []
+        for k in range(int(P["pulse"] / 0.05) + 2):
+            cols = step("advent", L, idx, P, st, k * 0.05, 0.05 if k else 0.0)
+            today.append(cols[doors[9][0]])
+            opened.append(lum(cols[doors[3][0]]))
+        lums = [sum(c) / 3 for c in today]
+        self.assertGreater(max(lums) - min(lums), 0.4)                 # a deep pulse
+        peak = max(today, key=sum)
+        self.assertGreater(min(peak), 0.75)                            # near white at its peak
+        self.assertLess(min(lum(c) for c in today), min(opened))       # and below the open doors at its low
 
     def test_today_pulses_and_intro_opens_in_order(self):
         L, idx = self.L, self.idx

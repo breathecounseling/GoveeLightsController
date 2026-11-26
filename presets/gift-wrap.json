@@ -11,7 +11,7 @@
     {
       "effect": "gift_wrap",
       "target": ["Whole front gable", "Porch"],
-      "params": {"unwrap_every": 45}
+      "params": {"unwrap_every": 38}
     }
   ]
 }
