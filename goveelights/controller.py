@@ -1566,6 +1566,8 @@ class Controller:
         zones = [z.get("name") for z in self.cfg.data.get("zones") or [] if isinstance(z, dict) and z.get("name")]
         return {"boxes": addrun.candidates(self.cfg, L), "locations": addrun.locations(),
                 "zones": zones, "suggest": {k: addrun.suggest_zone(zones, k) for k in addrun.LOCATIONS},
+                "runs": [{"id": r.mac, "name": r.name} for r in L.runs if not self.cfg.devices[r.mac].get("added_run")],
+                "suggest_follow": {k: addrun.suggest_follow(L, zones, k) for k in addrun.LOCATIONS},
                 "cloud": self.cloud_state()}
 
     def cloud_state(self) -> dict:
@@ -1619,7 +1621,8 @@ class Controller:
     def add_run(self, b: dict) -> dict:
         res = addrun.add_run(self.cfg, self.engine.layout, str(b["mac"]), b.get("count"), str(b.get("where", "")),
                              str(b.get("name") or ""), b.get("join") or None, str(b.get("output") or "lan"),
-                             b.get("cloud") if isinstance(b.get("cloud"), dict) else None)
+                             b.get("cloud") if isinstance(b.get("cloud"), dict) else None,
+                             str(b["follows"]) if b.get("follows") else None)
         self.build_engine()
         return res
 

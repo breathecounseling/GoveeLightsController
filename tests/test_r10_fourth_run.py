@@ -90,7 +90,8 @@ class AddRunTests(unittest.TestCase):
         c = house_cfg(self)
         L3 = Layout.from_config(c)
         res = addrun.add_run(c, L3, NEW, 80, "porch", join="Porch")
-        self.assertEqual(res, {"name": "Porch run", "count": 80, "role": "porch", "joined": "Porch", "output": "lan"})
+        self.assertEqual(res, {"name": "Porch run", "count": 80, "role": "porch", "joined": "Porch", "output": "lan",
+                               "follows": None})
         d = c.device(NEW)
         self.assertEqual(d["pixel_count"], 80)
         self.assertGreater(d["order"], max(x["order"] for m, x in c.devices.items() if m != NEW))
@@ -212,6 +213,61 @@ class EveryPresetWithAFourthRun(unittest.TestCase):
     @unittest.skipUnless(OWNER_LAYOUT.exists(), "the owner's layout is not in this copy")
     def test_owner_house(self):
         self.check_house(OWNER_LAYOUT.relative_to(ROOT))
+
+
+class FollowAnotherRun(unittest.TestCase):
+    """Opt-in: a new run copies a run or zone in presets that leave it dark."""
+
+    def setup(self, follows):
+        cfg = house_cfg(self)
+        L3 = Layout.from_config(cfg)
+        zones = [z["name"] for z in cfg.data["zones"]]
+        if follows == "suggest":
+            follows = addrun.suggest_follow(L3, zones, "second roofline")
+        addrun.add_run(cfg, L3, NEW, 60, "second roofline", follows=follows)
+        return cfg, L3, Layout.from_config(cfg)
+
+    def test_presets_that_leave_it_dark_copy_the_run_it_follows(self):
+        cfg, L3, L4 = self.setup("suggest")
+        self.assertTrue(L4.run(NEW).follows)
+        run = L4.run(NEW)
+        n3 = L3.n
+        lit_before = lit_after = 0
+        for f in PRESET_FILES:
+            d = json.loads(f.read_text())
+            if f.stem == "dusk-to-night":
+                continue                                     # reads the clock: not repeatable
+            with self.subTest(preset=f.stem):
+                plain = frames(d, Layout.from_config(_without_follow(cfg)), 4, 0.5)
+                got = frames(d, L4, 4, 0.5)
+                # the other runs are exactly as without the setting
+                self.assertEqual([x[:n3] for x in got], [x[:n3] for x in plain])
+                lit_before += any(max(x[p.i]) > 0.02 for x in plain for p in run.pixels)
+                lit_after += any(max(x[p.i]) > 0.02 for x in got for p in run.pixels)
+                # a preset that lights the new run itself keeps its own look there
+                if any(max(x[p.i]) > 0 for x in plain for p in run.pixels):
+                    self.assertEqual(got, plain)
+        self.assertGreater(lit_after, lit_before + 5)
+
+    def test_bad_follow_and_undo(self):
+        cfg = house_cfg(self)
+        L3 = Layout.from_config(cfg)
+        before = json.dumps(cfg.data, sort_keys=True)
+        for bad in ("Nowhere", NEW):
+            with self.assertRaises(ValueError):
+                addrun.add_run(cfg, L3, NEW, 60, "porch", follows=bad)
+        self.assertEqual(json.dumps(cfg.data, sort_keys=True), before)
+        addrun.add_run(cfg, L3, NEW, 60, "porch", follows=L3.runs[0].mac)
+        self.assertEqual(Layout.from_config(cfg).run(NEW).follows, L3.runs[0].mac)
+        addrun.remove_run(cfg, NEW)
+        self.assertNotIn("follows", cfg.devices[NEW])
+
+
+def _without_follow(cfg):
+    c = copy.copy(cfg)
+    c.data = copy.deepcopy(cfg.data)
+    c.data["devices"][NEW].pop("follows", None)
+    return c
 
 
 class MapOnlyTheNewRun(unittest.TestCase):
@@ -347,7 +403,7 @@ class CloudOutputTests(unittest.TestCase):
         o = CloudRunOutput(GoveeCloud(lambda: key.key, transport=self.http), key,
                            {NEW: {"name": "Fourth", "hidden": [], "cloud": {"enabled": True, "sku": "H705E",
                                                                             "device": NEW, "segments": segments}}},
-                           thread=False, clock=self.clock)
+                           thread=False, clock=self.clock, horizon=lambda: 600.0)
         o.start()
         return o
 
@@ -491,6 +547,80 @@ class CloudOutputTests(unittest.TestCase):
         self.feed(o, (255, 0, 0))
         o.pump()
         self.assertEqual(self.http.controls()[-1]["value"], 0xFF0000)
+
+    def test_power_off_goes_out_after_the_daily_budget_is_spent(self):
+        o = self.out()
+        self.feed(o, (255, 0, 0))
+        o.pump()
+        o.usage["sent"] = o.daily_budget                     # a busy night used it all
+        self.clock.t += 120
+        self.feed(o, (0, 255, 0))
+        o.pump()
+        n = len(self.http.controls())
+        self.assertEqual(self.http.controls()[-1]["value"], 0xFF0000)      # colours freeze ...
+        o.stop()
+        self.clock.t += 1
+        o.pump()
+        self.assertEqual([(c["instance"], c["value"]) for c in self.http.controls()[n:]], [("powerSwitch", 0)])
+
+    def test_power_off_goes_out_while_waiting_for_govees_reset(self):
+        o = self.out()
+        self.http.replies = [(200, {"x-ratelimit-remaining": "50"}, b'{"code": 200}')]
+        self.feed(o, (255, 0, 0))
+        o.pump()
+        self.clock.t += 30
+        self.feed(o, (0, 255, 0))
+        o.pump()
+        n = len(self.http.controls())
+        o.stop()
+        self.clock.t += 1
+        o.pump()
+        self.assertEqual([(c["instance"], c["value"]) for c in self.http.controls()[n:]], [("powerSwitch", 0)])
+
+    def test_a_busy_show_is_paced_to_last_the_night(self):
+        o = self.out(segments=15)
+        end = self.clock.t + 7 * 3600.0                      # dusk to midnight
+        o.horizon = lambda: max(60.0, end - self.clock.t)
+        o.daily_budget = 1000                                # (at full speed this lasts ~4 h)
+        cols = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0)]
+        paces, hourly = [], []
+        for k in range(7 * 3600 // 5):                       # a fast rainbow, a pump every 5 s
+            self.clock.t += 5
+            o.send_frame(NEW, [cols[(k // 9 + i // 15) % 4] for i in range(60)])     # moves every 45 s
+            o.pump()
+            if k % 720 == 719:                               # each hour
+                paces.append(o.status()["every_s"])
+                hourly.append(o.usage["sent"])
+        self.assertLessEqual(o.usage["sent"], o.daily_budget)
+        self.assertGreater(o.usage["sent"], o.daily_budget * 0.6)   # but it does use most of it
+        self.assertGreater(paces[0], cloud.MIN_ROUND_S)             # slower than full speed
+        # every hour, the last one too, still changed colour (no freezing at 5.5 h)
+        per_hour = [b - a for a, b in zip([0] + hourly, hourly)]
+        self.assertTrue(all(n >= 60 for n in per_hour), per_hour)
+
+    def test_low_budget_sends_the_main_colour_only(self):
+        o = self.out(segments=15)
+        o.usage["sent"] = o.daily_budget - 50
+        o.send_frame(NEW, [(255, 0, 0)] * 32 + [(0, 0, 255)] * 28)
+        o.pump()
+        self.assertNotIn("segmentedColorRgb", [c["instance"] for c in self.http.controls()])
+        self.assertIn("colorRgb", [c["instance"] for c in self.http.controls()])
+
+    def test_reset_header_in_milliseconds_and_long_waits_are_capped(self):
+        o = self.out()
+        far = (time.time() + 3600) * 1000
+        self.http.replies = [(200, {"x-ratelimit-remaining": "50", "x-ratelimit-reset": str(far)}, b'{"code": 200}')]
+        self.feed(o, (255, 0, 0))
+        o.pump()
+        self.assertLess(abs(o.cloud.day_reset - far / 1000), 1)
+        self.clock.t += 30
+        self.feed(o, (0, 255, 0))
+        o.pump()
+        self.assertLessEqual(o.status()["paused_for"], 3700)
+        o.cloud.day_reset, o.cloud.day_remaining, o.backoff_until = time.time() + 1e9, 10, 0
+        self.clock.t += 1
+        o.pump()
+        self.assertLessEqual(o.status()["paused_for"], cloud.MAX_WAIT_S)
 
     def test_hidden_bulbs_do_not_darken_it(self):
         o = self.out()
@@ -686,6 +816,55 @@ class ControllerFourthRun(unittest.TestCase):
         cid = id(ctl.cloud_out)
         ctl.build_engine()
         self.assertEqual(id(ctl.cloud_out), cid)             # one cloud thread for the app's lifetime
+
+    def _cloud_live(self):
+        r, ctl = self.make()
+        http = FakeHTTP(DEVS)
+        ctl.cloud_api.transport = http
+        ctl.cloud_set_key(CloudClientTests.KEY)
+        d = ctl.cloud_devices()[0]
+        ctl.add_run({"mac": NEW, "count": 50, "where": "porch", "output": "cloud",
+                     "cloud": {"sku": d["sku"], "device": d["device"], "segments": d["segments"]}})
+        ctl.play_preset("warm-white")
+        ctl.set_live(True)
+        ctl.engine.tick()
+        ctl.cloud_out.pump()
+        return r, ctl, http
+
+    def test_taking_a_lit_cloud_run_out_switches_it_off(self):
+        r, ctl, http = self._cloud_live()
+        n0 = len(http.controls())
+        ctl.remove_run(NEW)
+        ctl.cloud_out.pump(now=ctl.cloud_out.clock() + 100)
+        ctl.set_live(False)
+        ctl.cloud_out.pump(now=ctl.cloud_out.clock() + 200)
+        new = [(c["instance"], c["value"]) for c in http.controls()[n0:]]
+        self.assertEqual(new, [("powerSwitch", 0)])
+        self.assertEqual(ctl.cloud_out.retiring, {})
+
+    def test_a_cloud_run_never_lit_is_not_touched_when_taken_out(self):
+        r, ctl = self.make()
+        http = FakeHTTP(DEVS)
+        ctl.cloud_api.transport = http
+        ctl.cloud_set_key(CloudClientTests.KEY)
+        d = ctl.cloud_devices()[0]
+        ctl.add_run({"mac": NEW, "count": 50, "where": "porch", "output": "cloud",
+                     "cloud": {"sku": d["sku"], "device": d["device"], "segments": d["segments"]}})
+        ctl.remove_run(NEW)
+        ctl.cloud_out.pump()
+        self.assertEqual(http.controls(), [])
+
+    def test_a_failed_change_keeps_the_run(self):
+        r, ctl = self.make()
+        ctl.add_run({"mac": NEW, "count": 75, "where": "garage"})
+        before = json.dumps(ctl.cfg.data, sort_keys=True)
+        for bad in ({"join": "Nope"}, {"count": 0}, {"where": "moon"}, {"output": "cloud", "cloud": {}},
+                    {"output": "cloud", "cloud": {"sku": "H705E", "device": NEW, "segments": "x"}}):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                ctl.add_run({"mac": NEW, "count": 75, "where": "garage", **bad})
+            self.assertEqual(json.dumps(ctl.cfg.data, sort_keys=True), before)
+        self.assertEqual(ctl.cfg.devices[NEW]["pixel_count"], 75)
+        self.assertTrue(ctl.cfg.devices[NEW].get("added_run"))
 
     def test_server_endpoints(self):
         from goveelights.app_server import Server, make_handler

@@ -51,7 +51,8 @@ class FourthRunInTheBrowser(unittest.TestCase):
         self.addCleanup(srv.shutdown)
         shot = os.environ.get("FOURTH_RUN_SHOT", "")
         res = subprocess.run(["node", str(ROOT / "tests" / "ui_fourth_run.js"),
-                              f"http://127.0.0.1:{srv.server_address[1]}/", shot],
+                              f"http://127.0.0.1:{srv.server_address[1]}/", shot,
+                              os.environ.get("FOURTH_RUN_SHEET_SHOT", "")],
                              capture_output=True, text=True, timeout=120, env={**os.environ, "NODE_PATH": NODE_PATH})
         self.assertEqual(res.returncode, 0, res.stderr)
         out = json.loads(res.stdout.strip().splitlines()[-1])
@@ -61,6 +62,10 @@ class FourthRunInTheBrowser(unittest.TestCase):
         self.assertEqual(out["steps"], ["card", "check", "add sheet", "added", "key"])
         self.assertIn("ignores commands", out["verdict"])
         self.assertEqual((out["name"], out["join"]), ("Second roofline", "Lower roofline"))
+        # the check found it ignoring commands: the sheet starts on the cloud, warns on Wi-Fi
+        self.assertEqual((out["defaultOut"], out["lanWarn"], out["findDisabled"]), ("cloud", True, True))
+        self.assertEqual(out["follow"], "Lower roofline")     # suggested; the owner can pick "Leave it dark"
+        self.assertGreaterEqual(out["followH"], 44)
         self.assertIn("Second roofline", out["devInfo"])
         self.assertIn("7890", out["cloudText"])
         self.assertNotIn("abcd1234-ef56", out["cloudText"])

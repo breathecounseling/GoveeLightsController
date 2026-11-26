@@ -34,6 +34,7 @@ class Run:
     trim: tuple | None = None            # per-run colour gains (r, g, b), e.g. to warm up a bluish run
     role: str | None = None              # a run added later says what it is (peak, roofline, porch, accent)
     guess: bool = False                  # geometry is a placeholder until camera mapping measures it
+    follows: str | None = None           # opt-in: a run or zone it copies when a scene leaves it dark
     pixels: list[Pixel] = field(default_factory=list)   # visible, virtual order
 
     def positions(self) -> list[tuple[float, float]]:
@@ -323,7 +324,8 @@ class Layout:
                             geometry=d.get("geometry") or [],
                             trim=tuple(float(v) for v in d["trim"]) if d.get("trim") else None,
                             role=d.get("role") if d.get("role") in ROLES else None,
-                            guess=bool(d.get("geometry_guess"))))
+                            guess=bool(d.get("geometry_guess")),
+                            follows=str(d["follows"]) if d.get("follows") else None))
         return cls(runs, cfg.data.get("zones", []), cfg.data.get("target_aliases"), dark + _house_names(cfg))
 
     def summary(self) -> str:

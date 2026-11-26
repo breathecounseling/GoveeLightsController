@@ -27,7 +27,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from goveelights.cli import load_scene  # noqa: E402
-from goveelights.layout import Layout, Run  # noqa: E402
+from goveelights.layout import ROLES, Layout, Run  # noqa: E402
 
 
 HOUSE = ROOT / "layouts" / "house.json"
@@ -43,7 +43,8 @@ def house_layout(path=None) -> Layout:
     data = json.loads(Path(path or default_layout_file()).read_text(encoding="utf-8"))
     devs = data["devices"]
     runs = [Run(mac=m, name=d.get("name") or m, count=d["pixel_count"], reverse=d.get("reversed", False),
-                hidden=set(d.get("hidden", [])), geometry=d.get("geometry", []))
+                hidden=set(d.get("hidden", [])), geometry=d.get("geometry", []),
+                role=d.get("role") if d.get("role") in ROLES else None, follows=d.get("follows") or None)
             for m, d in devs.items() if d.get("pixel_count") and d.get("enabled", True) is not False]
     runs.sort(key=lambda r: devs[r.mac].get("order", 0))
     return Layout(runs, data.get("zones"), data.get("target_aliases"))

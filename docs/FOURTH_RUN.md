@@ -57,7 +57,18 @@ Back on the ground:
   halves the range (about 8 questions). Needs the box to answer realtime.
 * **Join a zone** (optional): e.g. a second roofline joined to *Lower roofline*. Every
   preset layer aimed at that zone then runs across both.
-* **How it's driven**: realtime over Wi-Fi (like the other runs) or the Govee cloud.
+* **When a preset leaves it dark** (optional): about a third of the built-in presets name
+  the original runs (candy cane is "Eaves" + "Accent" + "Peak", the peak and tree ones
+  aim at the gable), so they leave a new run black. Pick **Copy** and a run or zone, and
+  in any preset whose layers don't reach the new run, it shows that run's or zone's
+  colours stretched along its own bulbs. The sheet suggests the zone it would join (or a
+  run of its kind of place); "Leave it dark" turns it off. On layouts/house.json this
+  takes a second roofline from dark in 18 of 70 presets to 1, and a porch run from 23 to 5.
+  Presets that light the new run themselves keep their own look on it, and the other
+  runs are byte-for-byte the same either way (the tests check every preset).
+* **How it's driven**: realtime over Wi-Fi (like the other runs) or the Govee cloud. After
+  a check that found it ignoring commands, the sheet starts on the Govee cloud and warns
+  on the Wi-Fi choice (it would stay dark).
 
 What changes and what doesn't: the new run goes **last** in the strip, so the other runs
 keep their bulb numbers, and it gets a **straight placeholder line inside the house's
@@ -76,8 +87,10 @@ API (Govee Platform API v2):
 1. Get a key in the Govee Home app: Profile (👤) → ⚙ Settings → **Apply for API Key**; it
    arrives by email. Applying again replaces the old key.
 2. Paste it in **More → Fourth run → Govee cloud**. It's stored in `govee_cloud.json` next
-   to the config (owner-only permissions, gitignored), never in `govee_config.json`, never
-   logged, and the app only ever shows its last four characters.
+   to the config (gitignored), never in `govee_config.json`, never logged, and the app
+   only ever shows its last four characters. On Linux and macOS the file is made
+   owner-only (chmod 600); on Windows that setting does nothing, so the file gets the
+   folder's usual permissions: keep the app's folder in your own user profile.
 3. **Add it to the show** → *Govee cloud (slow)* → *Pick the light in your Govee account*.
 
 What it does: the show renders the run's bulbs like any other run; a separate output, on
@@ -91,8 +104,18 @@ Rate limits. Govee publishes: 10,000 requests per day per account, 10 control co
 minute per device, 10 device-list requests per minute ([rate limiting][rate]). This app
 stays well under: at most **6 commands a minute**, one round of changes every **20 s**,
 and **2,000 a day**; it pauses on HTTP 429 for the `Retry-After` time (or 1, 2, 4… minutes),
-pauses until Govee's reset when its `X-RateLimit-Remaining` drops below 300, and stops
-(until you paste a key again) when the key is rejected. The card shows today's count.
+pauses until Govee's reset when its `X-RateLimit-Remaining` drops below 300 (at most a
+day), and stops (until you paste a key again) when the key is rejected. The card shows
+today's count.
+
+A busy preset (twinkles, rainbows, plasma) would hit the 6-a-minute cap the whole time
+and spend the 2,000 in about five or six hours, which is less than a winter night from
+dusk. So the rounds are **paced**: what is left of today's 2,000 is spread over the hours
+until midnight (when the count resets; after midnight, until 6 am), and the card says
+when changes are slowed ("a change every 40 s"). With fewer than 150 left only the main
+colour is sent (no gradient). If the budget does run out, the run holds its last colour
+until midnight, but the **power-off at the end of the show always goes out**, budget or
+not, and so does the power-off when you take a lit cloud run out of the show.
 
 ## Research notes (Nov 2026)
 

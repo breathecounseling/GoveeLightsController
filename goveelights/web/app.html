@@ -2160,6 +2160,7 @@ function drawFourth(){
 }
 function frBox(b){
   const loc = frLoc(b.where);
+  if (b.realtime === undefined && !b.in_show && /^0\//.test((b.last_check || {}).status || '')) b.realtime = false;  // its last check
   const what = b.in_show ? `In the show: ${b.pixel_count} bulbs${loc ? ' · ' + esc(loc.label) : ''}${b.joined ? ' · part of ' + esc(b.joined) : ''}${b.cloud ? ' · <b class="warn">slow, Govee cloud</b>' : ''}`
     : 'Not in the show yet' + (b.ip ? ' · ' + esc(b.ip) : ' · no address yet');
   const el = h(`<div class="frb">
@@ -2187,6 +2188,7 @@ async function frCheck(b, out, btn){
   const r = await post('fourth/check', {mac: b.mac});
   btn.disabled = false; btn.textContent = t;
   if (!r){ out.innerHTML = ''; return }
+  b.realtime = r.status ? undefined : false;          // ignores commands: the Add sheet offers the cloud first
   const mark = ok => ok === true ? '<b class="ok">✓</b>' : ok === false ? '<b class="bad">✗</b>' : '<b class="dim">?</b>';
   out.innerHTML = `<ul class="frs">${r.steps.map(s => `<li>${mark(s.ok)} <b>${esc(s.step)}</b>: ${esc(s.say)}</li>`).join('')}</ul>
     <p class="frv">${esc(r.verdict)}</p>
@@ -2196,7 +2198,7 @@ async function frCheck(b, out, btn){
     if (a) out.querySelector('.frv').textContent = a.say;
     out.querySelectorAll('[data-y]').forEach(y => y.remove());
     post('fourth/release', {mac: b.mac});
-    if (x.dataset.y === '1') b.realtime = true;
+    b.realtime = x.dataset.y === '1';
   });
 }
 function frAdd(b){
@@ -2210,11 +2212,14 @@ function frAdd(b){
     <div class="row"><input type="number" id="frCount" min="1" max="255" inputmode="numeric" style="width:110px" value="${b.pixel_count || b.estimated_count || 50}"><button class="grow" id="frFind">Find the count</button></div>
     <div id="frFindBox"></div>
     <div class="grp">Join a zone (optional)</div>
-    <select id="frJoin"><option value="">Don't join a zone</option>${f.zones.map(z => `<option>${esc(z)}</option>`).join('')}</select>
+    <select id="frJoin" style="min-height:44px"><option value="">Don't join a zone</option>${f.zones.map(z => `<option>${esc(z)}</option>`).join('')}</select>
     <p class="help">e.g. a second roofline joined to "Lower roofline" makes roofline effects run along both.</p>
+    <div class="grp">When a preset leaves it dark</div>
+    <select id="frFollow" style="min-height:44px"><option value="">Leave it dark</option>${(f.runs || []).map(r => `<option value="${esc(r.id)}">Copy ${esc(r.name)}</option>`).join('')}${f.zones.map(z => `<option value="${esc(z)}">Copy ${esc(z)}</option>`).join('')}</select>
+    <p class="help">Presets written for three runs (candy cane, the peak ones…) don't light a new run. "Copy" shows that run's or zone's colours stretched along this one instead; the other runs look exactly the same.</p>
     <div class="grp">How it's driven</div>
-    <label class="row frr"><input type="radio" name="frOut" value="lan"> <span><b>Realtime over Wi-Fi</b>: per bulb, smooth, like the other three. Needs it to answer the check.</span></label>
-    <label class="row frr"><input type="radio" name="frOut" value="cloud"> <span><b>Govee cloud (slow)</b>: follows the show's colours a few times a minute, with a coarse gradient if the box supports segments. Needs an API key (below the checklist).</span></label>
+    <label class="row frr"><input type="radio" name="frOut" value="lan"> <span><b>Realtime over Wi-Fi</b>: per bulb, smooth, like the other three. Needs it to answer the check.${b.realtime === false ? '<br><span class="warn">Its last check: it ignores commands, so this would leave it dark. Fix LAN Control and check again first.</span>' : ''}</span></label>
+    <label class="row frr"><input type="radio" name="frOut" value="cloud"> <span><b>Govee cloud (slow)</b>: follows the show's colours a few times a minute, with a coarse gradient if the box supports segments; on a long, busy night the changes slow down so the day's requests last until midnight. Needs an API key (below the checklist).</span></label>
     <div id="frCloudPick"></div>
     <button class="pri" style="width:100%;margin-top:12px" id="frGo">${b.in_show ? 'Save and blink it' : 'Add and blink it'}</button>
   </div>`);
@@ -2223,12 +2228,14 @@ function frAdd(b){
   if (named) name.value = b.name;
   name.oninput = () => named = !!name.value.trim();
   const drawW = () => { W.innerHTML = ''; f.locations.forEach(l => { const c = h(`<button class="chip ${l.id === where ? 'on' : ''}">${esc(l.label)}</button>`);
-    c.onclick = () => { where = l.id; drawW(); if (!named) name.value = l.name; if (!b.in_show) join.value = f.suggest[l.id] || '' }; W.appendChild(c) }) };
+    c.onclick = () => { where = l.id; drawW(); if (!named) name.value = l.name; if (!b.in_show){ join.value = f.suggest[l.id] || ''; follow.value = sf[l.id] || '' } }; W.appendChild(c) }) };
   drawW(); if (!named) name.value = (frLoc(where) || {}).name || '';
   join.value = b.in_show ? (b.joined || '') : (f.suggest[where] || '');
+  const follow = el.querySelector('#frFollow'), sf = f.suggest_follow || {};
+  follow.value = b.in_show ? (b.follows || '') : (sf[where] || '');
   const radios = el.querySelectorAll('input[name=frOut]');
   const drawOut = () => { radios.forEach(r => r.checked = r.value === out); const cp = el.querySelector('#frCloudPick'); cp.innerHTML = '';
-    el.querySelector('#frFind').disabled = out === 'cloud';
+    el.querySelector('#frFind').disabled = out === 'cloud' || b.realtime === false;
     if (out !== 'cloud') return;
     if (!C.key_set){ cp.innerHTML = '<p class="help" style="color:var(--warn)">Save a Govee API key first (Fourth run card → Govee cloud).</p>'; return }
     const pick = h('<div><button style="width:100%" id="frLoadC">Pick the light in your Govee account</button><div id="frCList"></div></div>'); cp.appendChild(pick);
@@ -2241,7 +2248,7 @@ function frAdd(b){
   radios.forEach(r => r.onchange = () => { out = r.value; drawOut() }); drawOut();
   el.querySelector('#frFind').onclick = () => frFindCount(b, el.querySelector('#frFindBox'), el.querySelector('#frCount'));
   el.querySelector('#frGo').onclick = async () => {
-    const body = {mac: b.mac, count: +el.querySelector('#frCount').value, where, name: name.value.trim(), join: join.value || null, output: out};
+    const body = {mac: b.mac, count: +el.querySelector('#frCount').value, where, name: name.value.trim(), join: join.value || null, output: out, follows: follow.value || null};
     if (out === 'cloud'){ if (!cdev) return toast('Pick the light in your Govee account'); body.cloud = {sku: cdev.sku, device: cdev.device, segments: cdev.segments} }
     const r = await post('run/add', body); if (!r) return;
     toast(`${r.name}: ${r.count} bulbs${r.joined ? ', joined ' + r.joined : ''}`);
@@ -2273,7 +2280,7 @@ function frFindCount(b, box, input){
 }
 function drawCloud(){
   const C = (FOURTH && FOURTH.cloud) || {}, box = $('frCloud'); if (!box) return;
-  const use = C.runs && C.runs.length ? `<p class="help">Playing through the cloud: <b>${esc(C.runs.join(', '))}</b> · ${C.sent_today} of ${C.daily_budget} requests today (Govee allows ${C.govee_daily_limit}) · at most ${C.per_minute} a minute${C.paused_for ? ` · <span class="warn">paused ${fmtS(C.paused_for)}</span>` : ''}${C.stopped || C.last_error ? `<br><span class="warn">${esc(C.stopped || C.last_error)}</span>` : ''}</p>` : '';
+  const use = C.runs && C.runs.length ? `<p class="help">Playing through the cloud: <b>${esc(C.runs.join(', '))}</b> · ${C.sent_today} of ${C.daily_budget} requests today (Govee allows ${C.govee_daily_limit}) · at most ${C.per_minute} a minute${C.every_s > 21 ? ` · a change every ${Math.round(C.every_s)} s so today's requests last` : ''}${C.paused_for ? ` · <span class="warn">paused ${fmtS(C.paused_for)}</span>` : ''}${C.stopped || C.last_error ? `<br><span class="warn">${esc(C.stopped || C.last_error)}</span>` : ''}</p>` : '';
   box.innerHTML = '';
   const el = h(C.key_set ? `<div><p class="help">API key saved (<code>${esc(C.key)}</code>), kept in its own file next to the config, never in it.</p>${use}
       <button class="bad" id="frKeyDel">Remove the key</button></div>`

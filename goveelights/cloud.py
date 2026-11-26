@@ -12,7 +12,14 @@ under: at most CONTROL_PER_MIN commands a minute, one round of changes every
 MIN_ROUND_S seconds, and DAILY_BUDGET a day; it sends only what changed, and backs off
 on HTTP 429 (Retry-After) and when the day's remaining count gets low.
 
-The API key lives in its own secret file (govee_cloud.json next to the config, owner-only
+A busy preset would spend DAILY_BUDGET in about five or six hours at full speed, so the
+rounds are paced: what is left of today's budget is spread over the hours left until
+midnight (when it resets), so the colours change more slowly on a long night instead of
+freezing. Near the end of the budget only the main colour is sent (no gradient), and a
+power-off is always sent, budget or not, so the run never stays lit after the show.
+
+The API key lives in its own secret file (govee_cloud.json next to the config; made
+owner-only, chmod 600, on Linux and macOS; on Windows it gets the folder's usual
 permissions), never in the config, and is never logged or sent back to the browser.
 The render thread only adds frames into per-segment sums; all HTTP happens on this
 output's own thread.
@@ -42,6 +49,8 @@ CONTROL_PER_MIN = 6                 # ours, per device
 MIN_ROUND_S = 20.0                  # seconds between rounds of colour changes for one run
 MAX_COLOURS = 4                     # a "coarse gradient": at most this many segment colours
 LOW_REMAINING = 300                 # Govee's day counter this low: wait for its reset
+LOW_BUDGET = 150                    # ours this low: the main colour only, no gradient
+MAX_WAIT_S = 24 * 3600.0            # never pause longer than this for Govee's reset
 KEY_RE = re.compile(r"^[A-Za-z0-9-]{16,80}$")
 
 T_POWER = ("devices.capabilities.on_off", "powerSwitch")
@@ -52,7 +61,8 @@ T_SEGMENT = ("devices.capabilities.segment_color_setting", "segmentedColorRgb")
 
 # ------------------------------------------------------------------ key file
 class CloudKey:
-    """The Govee API key, in a file of its own (chmod 600), plus today's request count."""
+    """The Govee API key, in a file of its own (chmod 600 where the OS has it), plus
+    today's request count."""
 
     def __init__(self, path: Path | str):
         self.path = Path(path)
@@ -153,7 +163,8 @@ class GoveeCloud:
             if "x-ratelimit-remaining" in hdrs:
                 self.day_remaining = int(hdrs["x-ratelimit-remaining"])
             if "x-ratelimit-reset" in hdrs:
-                self.day_reset = float(hdrs["x-ratelimit-reset"])
+                r = float(hdrs["x-ratelimit-reset"])
+                self.day_reset = r / 1000.0 if r > 1e11 else r      # milliseconds, by the look of it
         except (TypeError, ValueError):
             pass
         if status == 429:
@@ -242,18 +253,24 @@ class CloudRunOutput:
     since the last round and sends what changed, within the rate budget."""
 
     def __init__(self, cloud: GoveeCloud, store: CloudKey | None = None, devices: dict | None = None,
-                 thread: bool = True, clock=time.monotonic):
+                 thread: bool = True, clock=time.monotonic, horizon=None):
         self.cloud = cloud
         self.store = store
-        self.devices: dict[str, dict] = devices or {}      # run id -> config entry with "cloud"
+        self.devices: dict[str, dict] = {}                 # run id -> config entry with "cloud"
         self.clock = clock
+        self.horizon = horizon or self.secs_left_tonight   # seconds today's budget must last
         self.lock = threading.Lock()
         self.acc: dict[str, list] = {}                     # run id -> [[r, g, b, n] per segment]
         self.sent: dict[str, dict] = {}                    # run id -> what the box was last told
         self.recent: dict[str, collections.deque] = {}    # run id -> command times (per minute)
         self.next_round: dict[str, float] = {}
+        self.retiring: dict[str, dict] = {}                # run id -> taken out of the show while lit
+        self._ids: dict[str, dict] = {}                    # run id -> its sku and device, kept apart
+        self.round_cost = 3.0                              # commands per round (running average)
+        self.every_s = MIN_ROUND_S                         # the current pace (see _pace)
         self.backoff_until = 0.0
         self.backoff_n = 0
+        self._low_wait = False                             # the backoff is Govee's daily count, not an error
         self.stopped_reason = ""                           # e.g. the key was rejected
         self.last_error = ""
         self.last_ok: float | None = None
@@ -269,6 +286,7 @@ class CloudRunOutput:
         self.per_min = CONTROL_PER_MIN
         self.min_round_s = MIN_ROUND_S
         self._th = None
+        self.set_devices(devices or {})
         if thread:
             self._th = threading.Thread(target=self._loop, name="govee-cloud", daemon=True)
             self._th.start()
@@ -276,6 +294,15 @@ class CloudRunOutput:
     # ------------------------------------------------ the Output interface
     def set_devices(self, devices: dict):
         with self.lock:
+            for k in self.devices:
+                ids = self._ids.pop(k, None)
+                if k not in devices and ids and self.sent.get(k, {}).get("power") == 1:
+                    self.retiring[k] = {"cloud": ids}      # switch it off on the next pass
+            for k, d in devices.items():
+                self.retiring.pop(k, None)
+                c = d.get("cloud") or {}
+                # (the config entry may change under us once the run is taken out)
+                self._ids[k] = {"sku": c.get("sku"), "device": c.get("device")}
             self.devices = dict(devices)
             self._hidden = {}
             for k in list(self.acc):
@@ -352,14 +379,38 @@ class CloudRunOutput:
         n = int(c.get("segments") or 0)
         return max(1, min(15, n)) if c.get("gradient", True) and n > 1 else 1
 
-    def _budget_left(self, run_id: str, now: float) -> int:
+    def _minute_left(self, run_id: str, now: float) -> int:
         q = self.recent.setdefault(run_id, collections.deque())
         while q and now - q[0] >= 60:
             q.popleft()
+        return max(0, self.per_min - len(q))
+
+    def _daily_left(self) -> int:
         today = date.today().isoformat()
         if self.usage.get("day") != today:
             self.usage = {"day": today, "sent": 0}
-        return max(0, min(self.per_min - len(q), self.daily_budget - int(self.usage.get("sent", 0))))
+        return max(0, self.daily_budget - int(self.usage.get("sent", 0)))
+
+    def _budget_left(self, run_id: str, now: float) -> int:
+        return min(self._minute_left(run_id, now), self._daily_left())
+
+    @staticmethod
+    def secs_left_tonight() -> float:
+        """Seconds the rest of today's budget should last: until local midnight (when it
+        resets) or, after midnight, until 6 am (no show runs on into the day)."""
+        t = time.localtime()
+        s = t.tm_hour * 3600 + t.tm_min * 60 + t.tm_sec
+        return float(max(60, (6 * 3600 - s) if s < 6 * 3600 else (86400 - s)))
+
+    def _pace(self) -> float:
+        """Seconds to the next round for one run: at least min_round_s, and slow enough
+        that what is left of today's budget lasts until midnight."""
+        n = max(1, sum(1 for d in self.devices.values() if (d.get("cloud") or {}).get("device")))
+        left = self._daily_left()
+        horizon = self.horizon()
+        spread = horizon * self.round_cost * n / left if left else horizon
+        self.every_s = round(max(self.min_round_s, min(3600.0, spread)), 1)
+        return self.every_s
 
     def desired(self, run_id: str) -> dict | None:
         """What the run showed on average since the last round: {power, brightness, colour,
@@ -401,23 +452,40 @@ class CloudRunOutput:
         [(run id, instance, value)] of the commands sent (for tests and the status)."""
         now = self.clock() if now is None else now
         done = []
-        if self.stopped_reason or now < self.backoff_until:
+        if self.stopped_reason:
+            return done
+        # waiting for Govee's daily reset still lets a power-off through (it has a few left)
+        power_only = now < self.backoff_until
+        if power_only and not (self._low_wait and (self.retiring or self.want_power == 0)):
             return done
         if not (self.store is None or self.store.present):
             return done
         if self.cloud.day_remaining is not None and self.cloud.day_remaining < LOW_REMAINING:
             reset = self.cloud.day_reset
-            wait = max(600.0, (reset - time.time()) if reset else 3600.0)
+            wait = min(MAX_WAIT_S, max(600.0, (reset - time.time()) if reset else 3600.0))
             self._backoff(now, wait, f"Govee's daily count is nearly used up ({self.cloud.day_remaining} left)")
+            self._low_wait = True
             self.cloud.day_remaining = None
-            return done
-        for run_id, d in list(self.devices.items()):
+            if not (self.retiring or self.want_power == 0):
+                return done
+            power_only = True
+        with self.lock:
+            runs = [(k, d, True) for k, d in self.retiring.items()] + [(k, d, False) for k, d in self.devices.items()]
+        for run_id, d, retiring in runs:
             c = d.get("cloud") or {}
             if not c.get("device") or not c.get("sku"):
+                self.retiring.pop(run_id, None)
                 continue
             sent = self.sent.setdefault(run_id, {})
             cmds = []
-            if run_id in self.flash:
+            if power_only and not retiring and self.want_power != 0:
+                continue
+            if retiring:
+                if sent.get("power") == 0:
+                    self.retiring.pop(run_id, None)
+                    continue
+                cmds = [(T_POWER, 0, {"power": 0})]
+            elif run_id in self.flash and not power_only:
                 self.flash.discard(run_id)
                 cmds = [(T_POWER, 1, {"power": 1}), (T_BRIGHT, 100, {"brightness": 100}),
                         (T_COLOUR, 0xFFFFFF, {"colq": _q((255, 255, 255)), "segq": None})]
@@ -435,11 +503,17 @@ class CloudRunOutput:
                     if self.want_power == 1 and sent.get("power") != 1:
                         cmds = [(T_POWER, 1, {"power": 1})]
                 else:
-                    self.next_round[run_id] = now + self.min_round_s
+                    if self._daily_left() < LOW_BUDGET:
+                        want.pop("segments", None)            # the main colour only: one command
                     cmds = self._diff(want, sent)
+                    self.round_cost = 0.8 * self.round_cost + 0.2 * max(1, len(cmds))
+                    self.next_round[run_id] = now + self._pace()
             for cap, value, upd in cmds:
-                if self._budget_left(run_id, now) <= 0:
-                    break                                     # the rest goes in a later round
+                left = self._budget_left(run_id, now)
+                # the rest goes in a later round; a power-off goes out even when today's
+                # budget is spent (Govee's own limit is five times ours)
+                if left <= 0 and not (cap == T_POWER and value == 0 and self._minute_left(run_id, now) > 0):
+                    break
                 try:
                     self.cloud.control(c["sku"], c["device"], cap, value)
                 except CloudError as e:
@@ -453,6 +527,8 @@ class CloudRunOutput:
                 self.last_ok, self.last_error, self.backoff_n = time.time(), "", 0
                 if self.cloud.day_remaining is not None and self.cloud.day_remaining < LOW_REMAINING:
                     break                                     # the next pass waits for Govee's reset
+            if retiring and sent.get("power") == 0:
+                self.retiring.pop(run_id, None)
         if self.store and self._dirty_usage and (self._dirty_usage >= 20 or self.want_power == 0 or self._quit):
             self._dirty_usage = 0
             self.store.save_usage(self.usage)
@@ -499,6 +575,7 @@ class CloudRunOutput:
 
     def _backoff(self, now: float, secs: float, why: str):
         self.backoff_until = now + secs
+        self._low_wait = False
         self.last_error = why
         log.warning("Govee cloud: %s; pausing %d s", why, secs)
 
@@ -520,7 +597,7 @@ class CloudRunOutput:
         return {"runs": [d.get("name") or k for k, d in self.devices.items()],
                 "sent_today": int(self.usage.get("sent", 0)), "daily_budget": self.daily_budget,
                 "govee_daily_limit": GOVEE_DAILY_LIMIT, "per_minute": self.per_min,
-                "every_s": self.min_round_s,
+                "every_s": self.every_s, "budget_left": self._daily_left(),
                 "paused_for": max(0, round(self.backoff_until - now)) if now < self.backoff_until else 0,
                 "stopped": self.stopped_reason, "last_error": self.last_error,
                 "last_ok_ago": round(time.time() - self.last_ok) if self.last_ok else None}

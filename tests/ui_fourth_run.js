@@ -39,11 +39,17 @@ const { chromium } = require('playwright');
     await page.click('#frBoxes .frb button[data-a="add"]');
     await page.waitForSelector('#sheet.on #frGo');
     out.steps.push('add sheet');
+    out.defaultOut = await page.evaluate(() => (document.querySelector('#sheet input[name=frOut]:checked') || {}).value);
+    out.lanWarn = await page.evaluate(() => !!document.querySelector('#sheet input[name=frOut][value=lan] ~ span .warn'));
+    out.findDisabled = await page.evaluate(() => document.querySelector('#frFind').disabled);
     await page.click('#sheet .chip:has-text("Second roofline")');
     out.join = await page.inputValue('#frJoin');
+    out.follow = await page.inputValue('#frFollow');
+    out.followH = await page.evaluate(() => Math.round(document.querySelector('#frFollow').getBoundingClientRect().height));
     out.name = await page.inputValue('#frName');
     await page.check('#sheet input[name=frOut][value=cloud]');
     await width('add sheet');
+    if (process.argv[4]) { await page.locator('#sheet').screenshot({ path: process.argv[4] }).catch(() => {}) }
     await touch('#sheet .fr button', 'sheet');
     await page.check('#sheet input[name=frOut][value=lan]');
     await page.fill('#frCount', '64');

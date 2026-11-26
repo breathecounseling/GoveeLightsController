@@ -8,7 +8,9 @@
   placeholder shape inside the house's current outline (so the other runs keep their
   positions too) until camera mapping measures it. Presets that light only named runs
   and zones therefore look exactly as before on the other runs; only "all" layers,
-  the zone it joined and its role's stand-ins change. remove_run() undoes it.
+  the zone it joined and its role's stand-ins change. Optionally (follows) it copies
+  another run or zone in any preset that leaves it dark (Scene.render), which changes
+  nothing on the other runs either. remove_run() undoes it.
 * answer_check(): "Is it answering now?" in plain words: the discovery scan, the status
   command and a realtime (razer) test frame, plus the Govee cloud when a key is saved.
 """
@@ -40,7 +42,7 @@ LOCATIONS = {
               "zones": ()},
 }
 _PREV_KEYS = ("name", "pixel_count", "order", "geometry", "geometry_guess", "hidden", "enabled", "role",
-              "location", "cloud", "reversed")
+              "location", "cloud", "reversed", "follows")
 
 def locations() -> list[dict]:
     return [{"id": k, "label": v["label"], "role": v["role"], "name": v["name"]} for k, v in LOCATIONS.items()]
@@ -52,6 +54,23 @@ def suggest_zone(zones: list[str], where: str) -> str | None:
             if w in z.lower():
                 return z
     return None
+
+def suggest_follow(layout, zones: list[str], where: str) -> str | None:
+    """What a run at `where` would most naturally copy in a preset that leaves it dark:
+    the zone it would join, else a run of its kind of place, else the first run. Run ids
+    (not names) so a rename doesn't break it."""
+    z = suggest_zone(zones, where)
+    if z:
+        return z
+    runs = [r for r in getattr(layout, "runs", ()) if not r.role]       # the original runs
+    if not runs:
+        return None
+    role = LOCATIONS.get(where, {}).get("role")
+    for nm in layout._by_role(role) if role else []:
+        r = layout.run(nm)
+        if r in runs:
+            return r.mac
+    return runs[0].mac
 
 def guess_geometry(layout, where: str, count: int) -> list[list[float]]:
     """A straight placeholder line for the new run inside the house's current outline."""
@@ -93,13 +112,15 @@ def candidates(cfg, layout=None) -> list[dict]:
                     "wifi_fw": fw.get("wifiVersionSoft") or "", "pixel_count": d.get("pixel_count"),
                     "estimated_count": d.get("estimated_count"), "in_show": mac in in_show, "added": added,
                     "where": d.get("location") or "", "cloud": bool((d.get("cloud") or {}).get("enabled")),
-                    "joined": (d.get("added_run") or {}).get("joined"),
+                    "joined": (d.get("added_run") or {}).get("joined"), "follows": d.get("follows"),
                     "last_check": ((d.get("diag") or {}).get("answer_check") or {}).get("value")})
     return out
 
 def add_run(cfg, layout, mac: str, count, where: str, name: str = "", join: str | None = None,
-            output: str = "lan", cloud: dict | None = None) -> dict:
-    """Make `mac` a new run (see the module doc). Returns {"name", "count", "role", "joined"}."""
+            output: str = "lan", cloud: dict | None = None, follows: str | None = None) -> dict:
+    """Make `mac` a new run (see the module doc). Returns {"name", "count", "role", "joined"}.
+    follows (opt-in): another run (its id) or a zone whose colours this run copies in
+    any preset that leaves it dark; the other runs are not changed either way."""
     if where not in LOCATIONS:
         raise ValueError(f"where must be one of: {', '.join(LOCATIONS)}")
     count = int(count)
@@ -109,8 +130,19 @@ def add_run(cfg, layout, mac: str, count, where: str, name: str = "", join: str 
         raise ValueError("output must be 'lan' or 'cloud'")
     if output == "cloud" and not ((cloud or {}).get("device") and (cloud or {}).get("sku")):
         raise ValueError("pick the light from your Govee account first")
+    if output == "cloud":
+        try:
+            segs = max(0, min(15, int((cloud or {}).get("segments") or 0)))
+        except (TypeError, ValueError):
+            raise ValueError("segments must be a number") from None
     loc = LOCATIONS[where]
     with cfg.lock:
+        zones = [z for z in cfg.data.get("zones") or [] if isinstance(z, dict) and z.get("name")]
+        if join and join not in {z["name"] for z in zones}:
+            raise ValueError(f"no zone called {join!r}")     # (checked before anything changes)
+        if follows and (follows == mac or (follows not in {z["name"] for z in zones} and not (
+                follows in cfg.devices and cfg.devices[follows].get("pixel_count")))):
+            raise ValueError("it can follow one of the other runs or a zone")
         d = cfg.devices.get(mac)
         if d is None:
             if output != "cloud" or not cloud:
@@ -123,15 +155,12 @@ def add_run(cfg, layout, mac: str, count, where: str, name: str = "", join: str 
         others = {m: x for m, x in cfg.devices.items() if m != mac}
         if layout is not None and mac in {r.mac for r in layout.runs} and not d.get("added_run"):
             raise ValueError(f"{d.get('name') or mac} is already part of the show")
-        zones = [z for z in cfg.data.get("zones") or [] if isinstance(z, dict) and z.get("name")]
         taken = {x.get("name") for x in others.values() if x.get("name")} | {z["name"] for z in zones}
         if d.get("added_run"):                      # changing an earlier add: start from before it
             _undo(cfg, mac, d, save=False)
         prev = {k: copy.deepcopy(d[k]) for k in _PREV_KEYS if k in d}
         auto = cfg.auto_name(mac, d) or not d.get("name")
         nm = _unique(name or (loc["name"] if auto else d.get("name")), taken)
-        if join and join not in {z["name"] for z in zones}:
-            raise ValueError(f"no zone called {join!r}")
         # the layout without this box: its outline and the end of the strip
         base = layout
         if base is not None and mac in {r.mac for r in base.runs}:
@@ -144,9 +173,13 @@ def add_run(cfg, layout, mac: str, count, where: str, name: str = "", join: str 
         if output == "cloud":
             c = cloud or {}
             d["cloud"] = {"enabled": True, "sku": str(c["sku"]), "device": str(c["device"]),
-                          "segments": max(0, min(15, int(c.get("segments") or 0))), "gradient": True}
+                          "segments": segs, "gradient": True}
         else:
             d.pop("cloud", None)
+        if follows:
+            d["follows"] = str(follows)
+        else:
+            d.pop("follows", None)
         if join:
             for z in zones:
                 if z["name"] == join:
@@ -155,7 +188,8 @@ def add_run(cfg, layout, mac: str, count, where: str, name: str = "", join: str 
         cfg.save()
     log.info("added run %s (%d bulbs, %s%s%s)", nm, count, where, f", joined {join}" if join else "",
              ", Govee cloud" if output == "cloud" else "")
-    return {"name": nm, "count": count, "role": loc["role"], "joined": join, "output": output}
+    return {"name": nm, "count": count, "role": loc["role"], "joined": join, "output": output,
+            "follows": follows or None}
 
 def _undo(cfg, mac: str, d: dict, save: bool = True):
     info = d.get("added_run") or {}
