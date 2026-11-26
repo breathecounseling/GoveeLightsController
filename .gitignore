@@ -11,3 +11,4 @@ govee_auth.json.*.tmp
 goveelights.log
 .claude/worktrees/
 user_presets/
+hologram_clips/

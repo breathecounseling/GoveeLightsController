@@ -215,6 +215,14 @@ microphone hears the music and the house keeps time with it:
 * `python3 tools/preview.py music-pulse --audio 120` previews a preset with a made-up
   120 BPM song.
 
+**Hologram fans** (More → Hologram fans): makes looping clips for spinning LED hologram
+fans on the porch rail (Santa's sleigh, jack-o'-lantern, fireworks, snow globe...) in the
+house's colours, for one fan or a spliced row / square of fans, as GIF, MP4 (if ffmpeg is
+installed) and PNG frames. The clips are made in a separate low-priority process, so the
+lights keep running smoothly. CLI: `python -m goveelights hologram --list`. Buying,
+safety and loading tips: [docs/HOLOGRAM_FANS.md](docs/HOLOGRAM_FANS.md). Fans can't be
+driven live; the files are loaded in the fan's own app.
+
 **Run in the background on Windows:** for always-on, `python -m goveelights install-service`
 (admin PowerShell; starts at boot with no login, restarts if it stops; it also adds
 firewall rules for UDP 4002 and the web port on Private networks, because the boot task
