@@ -256,10 +256,24 @@ def _log_file() -> Path | None:
 
 
 def build(ctl, now: datetime | None = None, password_set: bool | None = None) -> dict:
-    cfg = ctl.cfg.data
     now = now or datetime.now().astimezone()
     if now.tzinfo is None:
         now = now.astimezone()
+    try:
+        return _build(ctl, now, password_set)
+    except Exception as e:                    # noqa: BLE001 - the page must always get an answer
+        logging.getLogger(__name__).exception("tonight plan failed")
+        c = _check("plan", FAIL, "Tonight's plan can't be worked out", str(e) or type(e).__name__,
+                   "Check the schedule settings", "sched")
+        return {"date": now.date().isoformat(), "day": "Tonight", "current": False, "enabled": False,
+                "headline": "Something in the settings stops the plan being worked out", "timeline": [],
+                "showtimes": [], "events": [], "games": [], "weather": {"enabled": False},
+                "visitor": {"enabled": False}, "dim": None, "checks": [c],
+                "summary": {OK: 0, WARN: 0, FAIL: 1}, "generated": now.isoformat(timespec="seconds")}
+
+
+def _build(ctl, now: datetime, password_set) -> dict:
+    cfg = ctl.cfg.data
     sch = cfg.get("schedule") or {}
     sch = sch if isinstance(sch, dict) else {}
     try:
@@ -275,20 +289,33 @@ def build(ctl, now: datetime | None = None, password_set: bool | None = None) ->
                          "kind": kind, "detail": detail})
 
     enabled = bool(sch.get("enabled"))
+    failed = False
     try:
         d, on, off, current = evening(now, sch)
+        prog, rule_name = sched.program_for(d, sch) if on != off else (None, "")
+        prule = _program_rule(d, sch)
+        why_prog = ("holiday calendar: " if prule.get("calendar") else "rule: ") + str(
+            prule.get("name") or "unnamed") if prule else "usual program"
+        on_why, off_why = on_reason(d, sch), off_reason(d, sch)
     except Exception as e:                    # noqa: BLE001 - a broken schedule is a check, not a crash
+        failed = True
         d, on, off, current = now.date(), now, now, False
-        checks.append(_check("schedule", FAIL, "Schedule can't be worked out", str(e),
+        prog, rule_name, why_prog, on_why, off_why = None, "", "schedule error", "", ""
+        checks.append(_check("schedule", FAIL, "Schedule can't be worked out", str(e) or type(e).__name__,
                              "Open the schedule and fix the times", "sched"))
-    prog, rule_name = sched.program_for(d, sch) if on != off else (None, "")
-    prule = _program_rule(d, sch)
-    why_prog = ("holiday calendar: " if prule and prule.get("calendar") else "rule: ") + (
-        prule.get("name") or "unnamed") if prule else "usual program"
+    morning_off = None
+    if enabled and not failed:
+        try:
+            ev = sched.evaluate(now, sch)
+            if ev.get("rule") == "morning" and ev.get("active"):
+                morning_off = datetime.fromisoformat(ev["off"])
+        except Exception:                     # noqa: BLE001
+            morning_off = None
     plan = {"date": d.isoformat(), "day": fmt_day(d, now.date()), "current": current, "enabled": enabled,
             "on": on.isoformat(timespec="minutes"), "off": off.isoformat(timespec="minutes"),
-            "on_text": fmt_time(on), "off_text": fmt_time(off), "on_why": on_reason(d, sch),
-            "off_why": off_reason(d, sch), "program": prog, "program_name": names.program(prog),
+            "on_text": fmt_time(on), "off_text": fmt_time(off), "on_why": on_why,
+            "off_why": off_why, "program": prog, "program_name": names.program(prog),
+            "morning_now": morning_off is not None,
             "program_detail": names.program_detail(prog), "program_why": why_prog, "rule": rule_name}
 
     # --- what happens through the evening
@@ -308,24 +335,35 @@ def build(ctl, now: datetime | None = None, password_set: bool | None = None) ->
             at(on, f"Lights on: {names.program(prog)}", "on", "; ".join(
                 x for x in (plan["on_why"], plan["program_detail"]) if x))
     span_start = now if current else on
-    st_out = []
+    st_out, missed = [], []
     for k, st in enumerate(cfg.get("showtimes") or []):
         if not isinstance(st, dict) or not st.get("enabled", True):
             continue
         when_on = st.get("only_when_on", True)
+        name = str(st.get("show", ""))
         if when_on:
             if not (enabled and prog):
                 continue
             ts = showtime_times(st, span_start, off)
+            if not ts:                                # would it have fired tonight, outside the lit hours?
+                noon = datetime(d.year, d.month, d.day, 12, 0).astimezone()
+                day_ts = showtime_times(st, noon, noon + timedelta(days=1))
+                if day_ts and all(t < on or t >= off for t in day_ts):
+                    t0 = day_ts[0]
+                    why = (f"before the lights come on at {fmt_time(on)}" if t0 < on
+                           else f"after the lights go off at {fmt_time(off)}")
+                    missed.append(f"{name} at {fmt_time(t0)} is {why}")
         else:                                         # switches the lights on for itself
             ts = showtime_times(st, max(now, on - timedelta(hours=6)), off + timedelta(hours=6))
         if not ts:
             continue
-        name = str(st.get("show", ""))
-        exists = ctl.show_def(name) is not None
+        sh = ctl.show_def(name)
+        exists = sh is not None
+        loops = bool(isinstance(sh, dict) and sh.get("end") == "loop")
         st_out.append({"index": k, "show": name, "times": [t.isoformat(timespec="minutes") for t in ts[:48]],
-                       "text": describe_times(ts), "forced": not when_on, "exists": exists})
-        note = "switches the lights on for it" if not when_on else ""
+                       "text": describe_times(ts), "forced": not when_on, "exists": exists, "loops": loops})
+        note = "; ".join(x for x in ("switches the lights on for it" if not when_on else "",
+                                     "loops until lights-off (replaces the program)" if loops else "") if x)
         if len(ts) <= 3:
             for t in ts:
                 at(t, f"Show: {name}", "show", note)
@@ -435,6 +473,8 @@ def build(ctl, now: datetime | None = None, password_set: bool | None = None) ->
     # --- headline
     if not enabled:
         head = "Schedule is off · the lights won't come on by themselves"
+    elif failed:
+        head = "Schedule has an error · open the schedule to fix it"
     elif not prog:
         head = f"{plan['day']}: lights stay off ({why_prog})"
     elif current:
@@ -442,6 +482,9 @@ def build(ctl, now: datetime | None = None, password_set: bool | None = None) ->
     else:
         lead = "On" if plan["day"] == "Tonight" else f"{plan['day']}: on"
         head = f"{lead} at {fmt_time(on)} ({plan['on_why']}) · {names.program(prog)} · off at {fmt_time(off)}"
+    if morning_off is not None and not current:
+        head = f"On now (morning) · off at {fmt_time(morning_off)} · " + (
+            head.replace("On at", "Tonight: on at", 1) if head.startswith("On at") else head)
     plan["headline"] = head
 
     # --- checks
@@ -454,10 +497,14 @@ def build(ctl, now: datetime | None = None, password_set: bool | None = None) ->
         if ou and ou > now:
             checks.append(_check("schedule", WARN, "Schedule paused",
                                  f"A manual change paused it until {fmt_time(ou)}.", "Tap Resume in the schedule", "sched"))
-        else:
+        elif not failed:
             checks.append(_check("schedule", OK, "Schedule on", f"{plan['day']}: {fmt_time(on)} – {fmt_time(off)}"))
-    checks += _program_checks(sch, d, prog, names)
+    if not failed:
+        checks += _program_checks(sch, d, prog, names)
     checks += _show_checks(ctl, cfg, st_out, names)
+    if missed:
+        checks.append(_check("showtimes", WARN, "A showtime won't play tonight", "; ".join(missed[:3]),
+                             "Move the showtime into the lit hours", "showtimes"))
     try:
         checks.append(_check("clock", *tz_check(float(sch.get("lat", 40.3764)), float(sch.get("lon", -104.6922)), on),
                              fix="Set the PC's time zone in Windows Settings → Time & language", jump=""))
@@ -498,35 +545,46 @@ def _device_checks(ctl, now: datetime) -> list[dict]:
     seen = getattr(ctl.diag, "seen", {}) or {}
     t = now.timestamp()
     up = t - float(getattr(ctl, "started", t) or t)
+    govee = {m: dv for m, dv in devs.items() if dv.get("kind", "govee") != "wled"}
+    wled = [dv.get("name") or m for m, dv in devs.items() if dv.get("kind") == "wled"]
     dead, quiet = [], []
-    for mac, dv in devs.items():
+    for mac, dv in govee.items():
         name = dv.get("name") or mac
         h = (ctl.health or {}).get(mac) or {}
-        last = max(float(seen.get(mac) or 0), float(h.get("seen") or 0))
+        last_disc, last_poll = float(seen.get(mac) or 0), float(h.get("seen") or 0)
+        last = max(last_disc, last_poll)
+        # missed status polls only count if nothing newer has been heard: the health loop
+        # runs only while the lights are live, so an old miss count lingers after lights-off
+        heard_since = last_disc > last_poll and t - last_disc <= SEEN_FRESH_S
         if not dv.get("ip"):
             dead.append(f"{name} (no address)")
-        elif h.get("miss", 0) >= 2:
+        elif h.get("miss", 0) >= 2 and not heard_since:
             dead.append(f"{name} (not answering)")
         elif not last:
             (quiet if up < 90 else dead).append(name)
         elif t - last > SEEN_FRESH_S:
             dead.append(f"{name} (last seen {round((t - last) / 60)} min ago)")
-    if dead:
-        out.append(_check("boxes", FAIL, f"{len(dead)} of {len(devs)} boxes not responding", ", ".join(dead),
-                          "Check power and Wi-Fi, then Diagnostics → Scan", "devices"))
-    elif quiet:
+    n = len(govee)
+    if govee and dead:
+        out.append(_check("boxes", FAIL, f"{len(dead)} of {n} box{'es' if n != 1 else ''} not responding",
+                          ", ".join(dead), "Check power and Wi-Fi, then Diagnostics → Scan", "devices"))
+    elif govee and quiet:
         out.append(_check("boxes", WARN, "Waiting for the boxes to answer", ", ".join(quiet),
                           "Give it a minute after starting the app", "devices"))
-    else:
-        out.append(_check("boxes", OK, f"All {len(devs)} boxes responding"))
+    elif govee:
+        out.append(_check("boxes", OK, f"All {n} box{'es' if n != 1 else ''} responding"))
+    if wled:
+        out.append(_check("wled", OK, "WLED lights (not checked here)", ", ".join(wled)
+                          + ": the app can't poll WLED for health; check them in Devices if they stay dark"))
     nocount = [dv.get("name") or m for m, dv in devs.items() if not dv.get("pixel_count")]
     runs = list(getattr(ctl.engine.layout, "runs", []) or [])
     if nocount:
         out.append(_check("counts", FAIL, "Bulb count unknown", ", ".join(nocount) + " won't light up",
                           "Count the bulbs in diagnostics", "devices"))
     else:
-        out.append(_check("counts", OK, "Bulb counts known", " + ".join(str(r.count) for r in runs) + " bulbs"
-                          if runs else ""))
+        out.append(_check("counts", OK, "Bulb counts known", " · ".join(
+            f"{r.name} {r.count - len([k for k in r.hidden if 0 <= k < r.count])}" for r in runs) + " bulbs"
+            if runs else ""))
     flat = [r.name for r in runs if not r.geometry]
     if flat:
         out.append(_check("layout", WARN, "Not placed on the house", ", ".join(flat) +

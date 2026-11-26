@@ -14,7 +14,7 @@ preset that isn't there. Nights no rule claims play the schedule's usual program
 from __future__ import annotations
 
 import copy
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from . import schedule as sched
 
@@ -178,14 +178,55 @@ def merge(cal: dict, sch: dict, playlists: dict, showtimes: list, preset_ids=(),
         if 0 <= k < len(sch["rules"]) and isinstance(sch["rules"][k], dict):
             sch["rules"][k]["enabled"] = False
             sch["rules"][k][OFF_TAG] = True           # so taking the calendar out turns it back on
-    sch["rules"] = sch["rules"] + copy.deepcopy(cal["rules"])
+    cal_rules = copy.deepcopy(cal["rules"])
     for name, pl in cal["playlists"].items():
-        playlists[name] = copy.deepcopy(pl)
-    showtimes = showtimes + copy.deepcopy(cal["showtimes"])
+        mine = name
+        k = 1
+        while mine in playlists:                      # the user's own playlist of that name stays theirs
+            mine = f"{name} (calendar{f' {k}' if k > 1 else ''})"
+            k += 1
+        playlists[mine] = copy.deepcopy(pl)
+        if mine != name:
+            for r in cal_rules:
+                if r["program"].get("playlist") == name:
+                    r["program"]["playlist"] = mine
+    late = _after_noon(sch.get("off_time", "23:00"))
+    for r in cal_rules:                               # a later usual off time wins (e.g. New Year's Eve)
+        if r.get("off_time") and late is not None and late > (_after_noon(r["off_time"]) or 0):
+            del r["off_time"]
+    sch["rules"] = sch["rules"] + cal_rules
+    showtimes = showtimes + [_fit_showtime(copy.deepcopy(st), sch) for st in cal["showtimes"]]
     ids = set(preset_ids)
     if not program_ok(sch.get("default"), ids, playlists) and ("warm-white" in ids or not ids):
         sch["default"] = dict(DEFAULT_PROGRAM)
     return sch, playlists, showtimes
+
+
+def _after_noon(hm) -> int | None:
+    """Minutes after noon for 'HH:MM' (so 00:30 is later than 23:00)."""
+    try:
+        t = sched._hm(hm)
+    except (ValueError, TypeError, AttributeError):
+        return None
+    return (t.hour * 60 + t.minute - 720) % 1440
+
+
+def _fit_showtime(st: dict, sch: dict, today: date | None = None) -> dict:
+    """A one-shot, only-when-on showtime that would fire before this schedule switches the
+    lights on (a fixed on time, a sunset offset) is moved to just after lights-on."""
+    if not (st.get("only_when_on", True) and st.get("date") and st.get("from") == st.get("to")):
+        return st
+    try:
+        today = today or date.today()
+        d = next_range({"from": st["date"], "to": st["date"]}, today)[0]
+        on, off = sched.window(d, sch)
+        t = datetime.combine(d, sched._hm(st["from"])).astimezone()
+        if t < on and on.date() == d and on.hour < 21:     # a later 'on' is a mis-set clock: leave it
+            on += timedelta(minutes=1, seconds=59)
+            st["from"] = st["to"] = f"{on.hour:02d}:{on.minute:02d}"
+    except Exception:                                 # noqa: BLE001 - keep the time it came with
+        pass
+    return st
 
 
 def reenable(sch: dict) -> list[str]:
@@ -242,21 +283,30 @@ def fmt_range(rng: tuple[date, date] | None, days=None) -> str:
 def shadows(sch: dict, cal: dict, today: date, days: int = 366) -> list[dict]:
     """The user's own rules that would hide calendar nights over the coming year (they
     come first): [{"index", "name", "from", "to", "nights", "factory"}]."""
+    from .config import DEFAULTS
+    factory = [r for r in DEFAULTS["schedule"]["rules"]]
     own = strip(sch, {}, [])[0]["rules"]
+    is_f = [r in factory for r in own]
     cal_rules = cal["rules"]
     count: dict[int, int] = {}
+    # Counted as the preview offers it: the factory rules (pre-ticked to switch off) are
+    # taken as off when counting the user's other rules; each factory rule is counted as
+    # if it were the only one of them left on.
     for k in range(days):
         d = today + timedelta(days=k)
         c = next((r for r in cal_rules if sched.rule_matches(r, d)), None)
         if c is None:
             continue
-        for i, r in enumerate(own):
-            if isinstance(r, dict) and "program" in r and sched.rule_matches(r, d):
-                if r.get("program") != c["program"]:
-                    count[i] = count.get(i, 0) + 1
-                break
-    from .config import DEFAULTS
-    factory = [r for r in DEFAULTS["schedule"]["rules"]]
+        hits = [i for i, r in enumerate(own) if isinstance(r, dict) and "program" in r
+                and r.get("enabled", True) is not False and sched.rule_matches(r, d)]
+        first_own = next((i for i in hits if not is_f[i]), None)
+        for i in hits:
+            if is_f[i] and first_own is not None and first_own < i:
+                continue                              # a rule of the user's own comes before it anyway
+            if not is_f[i] and i != first_own:
+                continue
+            if own[i].get("program") != c["program"]:
+                count[i] = count.get(i, 0) + 1
     return [{"index": i, "name": own[i].get("name") or f"Rule {i + 1}", "from": own[i].get("from", ""),
              "to": own[i].get("to", ""), "nights": n, "factory": own[i] in factory}
             for i, n in sorted(count.items())]

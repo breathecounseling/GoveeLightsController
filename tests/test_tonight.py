@@ -428,5 +428,114 @@ class ApiTests(_Denver, unittest.TestCase):
             post("calendar/apply", {"disable": "x"})
 
 
+# ------------------------------------------------------------------ review fixes
+class ReviewFixTests(_Denver, unittest.TestCase):
+    def rig(self, now, **extra):
+        cfg = {"schedule": {**SCH, "rules": []}, **extra}
+        r = Rig(self, now.astimezone(), cfg)
+        r.ctl.started -= 3600
+        r.ctl.diag.seen = {m: r.clock.t - 30 for m in r.ctl.cfg.devices}
+        return r
+
+    def by(self, p, cid):
+        return [c for c in p["checks"] if c["id"] == cid]
+
+    def test_old_missed_polls_dont_outlive_fresh_discovery(self):
+        r = self.rig(datetime(2026, 12, 2, 12, 0))
+        macs = list(r.ctl.cfg.devices)
+        r.ctl.health[macs[2]] = {"miss": 3, "seen": r.clock.t - 13 * 3600}     # left over from last night
+        self.assertEqual(self.by(r.ctl.tonight(), "boxes")[0]["level"], "ok")
+        r.ctl.diag.seen[macs[2]] = r.clock.t - 13 * 3600                      # and nothing heard since
+        c = self.by(r.ctl.tonight(), "boxes")[0]
+        self.assertEqual(c["level"], "fail")
+        self.assertIn("not answering", c["detail"])
+
+    def test_wled_is_not_held_to_govee_discovery(self):
+        r = self.rig(datetime(2026, 12, 2, 12, 0))
+        r.ctl.cfg.devices["wled:aa"] = {"kind": "wled", "ip": "10.0.0.9", "pixel_count": 50, "name": "Tree WLED"}
+        p = r.ctl.tonight()
+        c = self.by(p, "boxes")[0]
+        self.assertEqual((c["level"], c["title"]), ("ok", "All 3 boxes responding"))
+        self.assertIn("Tree WLED", self.by(p, "wled")[0]["detail"])
+
+    def test_bulb_counts_are_visible_bulbs_by_run(self):
+        p = self.rig(datetime(2026, 12, 2, 12, 0)).ctl.tonight()
+        self.assertEqual(self.by(p, "counts")[0]["detail"], "Eaves 93 · Peak 108 · Accent 60 bulbs")
+
+    def test_nye_off_time_never_cuts_a_later_usual_off(self):
+        c = cal.build(IDS, SHOWS)
+        for off, want in (("23:00", (0, 30)), ("00:15", (0, 30)), ("01:00", (1, 0)), ("02:00", (2, 0))):
+            sch, _, _ = cal.merge(c, {**SCH, "off_time": off}, {}, [], IDS)
+            o = sched.window(date(2027, 12, 31), sch)[1]
+            self.assertEqual((o.hour, o.minute), want, off)
+
+    def test_santa_moves_after_a_late_lights_on_and_tonight_warns_if_missed(self):
+        c = cal.build(IDS, SHOWS)
+        _, _, sts = cal.merge(c, {**SCH, "on": "time", "on_time": "17:30"}, {}, [], IDS)
+        santa = next(s for s in sts if s["show"] == "Santa's coming")
+        self.assertEqual((santa["from"], santa["to"]), ("17:31", "17:31"))
+        _, _, sts = cal.merge(c, dict(SCH), {}, [], IDS)                       # sunset ~4:40: unchanged
+        self.assertEqual(next(s for s in sts if s["show"] == "Santa's coming")["from"], "17:15")
+        r = self.rig(datetime(2026, 12, 24, 12, 0), schedule={**SCH, "on": "time", "on_time": "17:30"}, showtimes=[
+            {"show": "Santa's coming", "from": "17:15", "to": "17:15", "date": "12-24", "only_when_on": True}])
+        p = r.ctl.tonight()
+        w = [x for x in self.by(p, "showtimes") if x["level"] == "warn"]
+        self.assertTrue(w, p["checks"])
+        self.assertIn("Santa's coming at 5:15 pm is before the lights come on at 5:30 pm", w[0]["detail"])
+        self.assertEqual(w[0]["jump"], "showtimes")
+
+    def test_looping_show_says_it_takes_over(self):
+        r = self.rig(datetime(2026, 12, 24, 12, 0), showtimes=[
+            {"show": "Santa's coming", "from": "17:15", "to": "17:15", "date": "12-24", "only_when_on": True}])
+        p = r.ctl.tonight()
+        x = next(x for x in p["timeline"] if x["label"] == "Show: Santa's coming")
+        self.assertIn("loops until lights-off", x["detail"])
+        self.assertTrue(p["showtimes"][0]["loops"])
+
+    def test_shadow_counts_assume_factory_rules_switched_off(self):
+        c = cal.build(IDS, SHOWS)
+        rules = copy.deepcopy(DEFAULTS["schedule"]["rules"]) + [
+            {"name": "Fridays", "days": [4], "program": {"preset": "comets"}}]
+        sh = {x["name"]: x for x in cal.shadows({**SCH, "rules": rules}, c, date(2026, 11, 1))}
+        merged, _, _ = cal.merge(c, {**SCH, "rules": rules}, {}, [], IDS,
+                                 disable=[i for i, r in enumerate(rules) if r in DEFAULTS["schedule"]["rules"]])
+        hidden = 0
+        for k in range(366):
+            d = date(2026, 11, 1) + timedelta(days=k)
+            cr = next((r for r in c["rules"] if sched.rule_matches(r, d)), None)
+            if cr and sched.program_for(d, merged)[1] == "Fridays":
+                hidden += 1
+        self.assertEqual(sh["Fridays"]["nights"], hidden)
+        self.assertGreater(sh["Christmas"]["nights"], 30)
+
+    def test_users_playlist_of_the_same_name_survives(self):
+        c = cal.build(IDS, SHOWS)
+        mine = {"Holiday: Christmas": {"items": [{"preset": "comets", "minutes": 3}]}}
+        sch, pls, sts = cal.merge(c, dict(SCH), copy.deepcopy(mine), [], IDS)
+        self.assertEqual(pls["Holiday: Christmas"], mine["Holiday: Christmas"])
+        self.assertTrue(pls["Holiday: Christmas (calendar)"]["calendar"])
+        self.assertEqual(sched.program_for(date(2026, 12, 28), sch)[0], {"playlist": "Holiday: Christmas (calendar)"})
+        self.assertEqual(cal.merge(c, sch, pls, sts, IDS)[1], pls)             # a second tap: the same
+        self.assertEqual(cal.strip(sch, pls, sts)[1], mine)
+
+    def test_broken_schedule_is_one_clear_fail(self):
+        r = self.rig(datetime(2026, 12, 2, 12, 0), schedule={**SCH, "off_time": "bad"})
+        p = r.ctl.tonight()
+        self.assertEqual(p["headline"], "Schedule has an error · open the schedule to fix it")
+        self.assertEqual([c["level"] for c in self.by(p, "schedule")], ["fail"])
+        r2 = self.rig(datetime(2026, 12, 2, 12, 0), schedule={**SCH, "rules": [
+            {"name": "Odd", "from": 5, "to": 7, "program": {"preset": "comets"}}]})
+        p2 = r2.ctl.tonight()
+        json.dumps(p2)
+        self.assertIn("fail", [c["level"] for c in p2["checks"]])
+
+    def test_morning_window_is_on_now(self):
+        r = self.rig(datetime(2026, 12, 2, 6, 30), schedule={
+            **SCH, "morning": {"enabled": True, "on_time": "06:00", "off": "time", "off_time": "07:30"}})
+        p = r.ctl.tonight()
+        self.assertTrue(p["morning_now"])
+        self.assertTrue(p["headline"].startswith("On now (morning) · off at 7:30 am · Tonight: on at 4:"), p["headline"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1192,7 +1192,7 @@ async function calendarSheet(){
   openSheet('📅 Holiday calendar', el);
 }
 async function afterCalendar(){
-  SCH = await get('schedule'); schedForm(); PL = await get('playlists'); plSelect();
+  PL = await get('playlists'); plSelect(); SCH = await get('schedule'); schedForm();   // playlists first: the rule editor checks them
   const x = await get('extras'); EXTRAS.showtimes = x.showtimes || []; drawShowtimes(); loadTonight(); setTimeout(refresh, 300) }
 
 // ------------------------------------------------------------- paint mode
