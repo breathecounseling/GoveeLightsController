@@ -100,7 +100,17 @@ home screen.
 * With no password set, tunnel requests are refused outright.
 * Passwords are stored as PBKDF2-SHA256 hashes and sessions as SHA-256 hashes, in
   `govee_auth.json`, which is kept out of git.
-* 5 wrong passwords from one address lock it out for 10 minutes.
+* 5 wrong passwords from one address lock it out for 10 minutes. When many addresses
+  guess at once, every try is slowed down instead of blocked, so strangers can't lock
+  *you* out. That also means the app alone can't stop someone with thousands of
+  addresses from guessing slowly: **Cloudflare Access (step 4) is what really keeps
+  them out**, so don't skip it.
+* "No login on home Wi-Fi" only counts when the address bar shows the PC's IP address
+  or a home name (`localhost`, `DESKTOP-1234`, `pc.local`, `pc.lan`). A web page that
+  re-points its own domain at your PC gets no free pass. If you reach the PC at home by
+  some other name, list it in the config under `"server": {"hosts": ["name"]}`.
+* The stand-alone diagnostic tool (`python -m goveelights diag`) has no password, so it
+  only answers on home Wi-Fi and refuses anything that comes through the tunnel.
 * Every change request needs a header other websites can't send (CSRF protection), and
   pages refuse to be framed.
 * **More → Security:** change the password, *Sign out all devices*, or require login

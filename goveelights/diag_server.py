@@ -14,6 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from . import protocol as p
+from .auth import Auth
 from . import winconsole
 from .config import Config
 from .lan import GoveeLan
@@ -295,7 +296,11 @@ class App:
 
 
 def make_handler(app: App):
+    hosts = list(app.cfg.data["server"].get("hosts", []))
+
     class H(BaseHTTPRequestHandler):
+        timeout = 30
+
         def log_message(self, fmt, *a):
             log.debug("%s " + fmt, self.address_string(), *a)
 
@@ -304,10 +309,22 @@ def make_handler(app: App):
             self.send_header("Content-Type", ctype)
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(body)))
+            self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
             self.wfile.write(body)
 
+        def _home_only(self) -> bool:
+            """This tool has no login: it answers only direct requests from the home network
+            (never through the tunnel, never to a web page posing under its own domain)."""
+            if Auth.direct_lan(self, hosts):
+                return True
+            self.close_connection = True
+            self._send(403, b'{"ok":false,"error":"the diagnostic tool only works from the home network"}')
+            return False
+
         def do_GET(self):
+            if not self._home_only():
+                return
             if self.path in ("/", "/index.html"):
                 return self._send(200, (WEB / "diag.html").read_bytes(), "text/html; charset=utf-8")
             if self.path == "/api/state":
@@ -317,11 +334,22 @@ def make_handler(app: App):
             self._send(404, b'{"error":"not found"}')
 
         def do_POST(self):
+            if not self._home_only():
+                return
+            try:
+                ln = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                ln = -1
+            if self.headers.get("Transfer-Encoding") is not None or not 0 <= ln <= 1_000_000:
+                self.close_connection = True
+                return self._send(413, b'{"ok":false,"error":"bad request size"}')
+            raw = self.rfile.read(ln) if ln else b""
+            if self.headers.get("X-Requested-With") != "lights":     # CSRF guard, as in the app
+                return self._send(403, b'{"ok":false,"error":"missing request header"}')
             if not self.path.startswith("/api/"):
                 return self._send(404, b'{"error":"not found"}')
             try:
-                ln = int(self.headers.get("Content-Length") or 0)
-                body = json.loads(self.rfile.read(ln) or b"{}")
+                body = json.loads(raw or b"{}")
                 res = app.handle(self.path[5:], body)
                 self._send(200, json.dumps(res).encode())
             except (KeyError, ValueError, OSError, TypeError) as e:

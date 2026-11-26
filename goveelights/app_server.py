@@ -119,6 +119,7 @@ def validate_schedule(sch) -> None:
 def make_handler(ctl: Controller, on_quit, auth: Auth):
     class H(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
+        timeout = 30          # a client that goes quiet mid-request can't hold a thread forever
 
         def log_message(self, fmt, *a):
             log.debug("%s " + fmt, self.address_string(), *a)
@@ -327,7 +328,9 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
             except ValueError:
                 ln = -1
             vis = self._visitor(path)
-            limit = 10_000 if vis is not None else 1_000_000
+            auth.refresh()
+            small = vis is not None or not auth.authorized(self)   # visitors, logins, strangers
+            limit = 10_000 if small else 1_000_000
             if self.headers.get("Transfer-Encoding") is not None:      # chunked bodies aren't read
                 self.close_connection = True
                 return self._json({"ok": False, "error": "Content-Length required"}, 411)
@@ -375,9 +378,15 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                     auth.end_session(auth.cookie(self))
                     return self._json({"ok": True}, 200, {"Set-Cookie": f"{COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"})
                 if path == "/api/auth/password":
-                    if auth.password_set and not auth.check_password(str(b.get("current", ""))):
-                        auth.record_fail(auth.client_ip(self))
-                        return self._json({"ok": False, "error": "current password is wrong"}, 403)
+                    if auth.password_set:              # same limit as logging in
+                        ip = auth.client_ip(self)
+                        tries = auth.begin_attempt(ip)
+                        if tries is None:
+                            return self._json({"ok": False, "error": "too many attempts, wait 10 minutes"}, 429)
+                        time.sleep(tries[1])
+                        if not auth.check_password(str(b.get("current", ""))):
+                            return self._json({"ok": False, "error": "current password is wrong"}, 403)
+                        auth.attempt_ok(ip, tries[0])
                     auth.set_password(str(b.get("new", "")))
                     return self._json({"ok": True})
                 if path == "/api/auth/lan":
@@ -408,12 +417,14 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
 
         def _login(self, b: dict):
             ip = auth.client_ip(self)
-            if not auth.allow_attempt(ip):
+            tries = auth.begin_attempt(ip)     # counted as a failure until it proves right
+            if tries is None:
                 return self._json({"ok": False, "error": "too many attempts, wait 10 minutes"}, 429)
+            time.sleep(tries[1])
             if not auth.password_set or not auth.check_password(str(b.get("password", ""))):
-                auth.record_fail(ip)
                 time.sleep(0.6)
                 return self._json({"ok": False, "error": "wrong password"}, 403)
+            auth.attempt_ok(ip, tries[0])
             token, ttl = auth.new_session()
             cookie = f"{COOKIE}={token}; Path=/; Max-Age={ttl}; HttpOnly; SameSite=Lax" + ("; Secure" if self._https() else "")
             log.info("login from %s", ip)
@@ -614,6 +625,7 @@ def main(argv=None):
         raise SystemExit(msg)
     ctl = Controller(cfg, a.bind_ip or "")
     auth = Auth(Path(os.environ.get("GOVEE_AUTH", Path(cfg.path).with_name("govee_auth.json"))))
+    auth.hosts = list(cfg.data["server"].get("hosts", []))    # extra home names for this PC
     done = threading.Event()
 
     def quit_(*_):

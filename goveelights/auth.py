@@ -4,7 +4,9 @@ Rules (default deny):
   * Requests that arrive through a proxy or tunnel (they carry headers such as
     Cf-Connecting-IP / X-Forwarded-For) always need a login.
   * Direct requests from your home network (private addresses, or this PC
-    itself) may skip the login ("lan_without_login", default on).
+    itself) may skip the login ("lan_without_login", default on), but only when the
+    Host header names the PC by an address or home-network name, so a web page that
+    re-points its own domain at the PC (DNS rebinding) gets no such trust.
   * With no password set, remote requests are refused outright.
   * Every POST must carry the header X-Requested-With: lights. Browsers will
     not let another website add that header, which blocks cross-site request
@@ -16,12 +18,14 @@ session tokens are stored only as SHA-256 hashes.
 """
 from __future__ import annotations
 
+import functools
 import hashlib
 import hmac
 import ipaddress
 import json
 import os
 import secrets
+import socket
 import threading
 import time
 from collections import deque
@@ -36,6 +40,45 @@ PRIVATE = [ipaddress.ip_network(n) for n in ("10.0.0.0/8", "172.16.0.0/12", "192
                                               "fd00::/8", "::1/128")]
 
 
+# Names a stranger on the internet can't point at this PC (DNS rebinding needs a domain
+# the attacker controls, so it never arrives with one of these in the Host header).
+LOCAL_SUFFIXES = (".local", ".lan", ".home", ".home.arpa", ".internal", ".localdomain")
+
+
+def local_host(host: str | None, extra=()) -> bool:
+    """True if a Host header names this PC the way someone at home would: an IP address,
+    a bare machine name (localhost, DESKTOP-1234), a home-network name such as pc.local,
+    or a name listed in extra. A web page whose own domain has been re-pointed at the PC
+    (DNS rebinding) carries its domain here instead, so it gets no LAN trust."""
+    if host is None:                      # not a browser (every browser sends Host)
+        return True
+    h = host.strip().lower()
+    if h.startswith("["):                 # [::1]:8080
+        h = h[1:h.find("]")] if "]" in h else h[1:]
+    elif h.count(":") == 1:
+        h = h.rsplit(":", 1)[0]
+    h = h.rstrip(".")
+    if not h:
+        return False
+    try:
+        ipaddress.ip_address(h)
+        return True
+    except ValueError:
+        pass
+    if "." not in h or h.endswith(LOCAL_SUFFIXES):
+        return True
+    names = {str(x).strip().lower().rstrip(".") for x in extra}
+    return h in names or h == _fqdn()
+
+
+@functools.lru_cache(maxsize=1)
+def _fqdn() -> str:
+    try:
+        return socket.getfqdn().lower().rstrip(".")
+    except OSError:
+        return ""
+
+
 def _h(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
@@ -48,6 +91,7 @@ class Auth:
         self.data = {}
         self.fails: dict[str, deque] = {}
         self.all_fails: deque = deque()
+        self.hosts: list[str] = []        # extra Host names that count as home (server.hosts)
         self._load()
 
     # ------------------------------------------------------------ storage
@@ -176,7 +220,13 @@ class Auth:
 
     def trusted(self, handler) -> bool:
         """Direct request from the home network (never through a proxy/tunnel)."""
-        if not self.data.get("lan_without_login", True) or self.proxied(handler):
+        return bool(self.data.get("lan_without_login", True)) and self.direct_lan(handler, self.hosts)
+
+    @classmethod
+    def direct_lan(cls, handler, hosts=()) -> bool:
+        """Came straight from a home-network address, not through a proxy, addressed to
+        this PC by a home-network name (see local_host)."""
+        if cls.proxied(handler) or not local_host(handler.headers.get("Host"), hosts):
             return False
         try:
             ip = ipaddress.ip_address(handler.client_address[0])
@@ -205,17 +255,45 @@ class Auth:
         for k in [k for k, q in self.fails.items() if not q or q[-1] < now - 600]:
             del self.fails[k]
 
+    GLOBAL_SLOW = 30          # failures from everyone in 10 minutes before each try is slowed
+    SLOW_DELAY = 3.0
+
     def allow_attempt(self, ip: str) -> bool:
+        """Per-client limit only: 5 failures per 10 minutes. There is deliberately no hard
+        global limit, or a handful of addresses could lock the owner out (see begin_attempt)."""
         now = time.time()
         with self.lock:
             self._prune(now)
             q = self.fails.get(self.rate_key(ip))
             while q and q[0] < now - 600:
                 q.popleft()
-            return len(q or ()) < 5 and len(self.all_fails) < 30
+            return len(q or ()) < 5
 
-    def record_fail(self, ip: str):
-        now = time.time()
+    def begin_attempt(self, ip: str):
+        """Check and count a password try in one step, so a parallel burst can't have many
+        tries checked before the first failure is recorded. Returns None when the client is
+        over its limit, else (stamp, delay): wait delay seconds before checking the password
+        (non-zero while many failures arrive from everywhere), and pass stamp to
+        attempt_ok() if the password was right."""
+        with self.lock:
+            if not self.allow_attempt(ip):
+                return None
+            now = time.time()
+            delay = self.SLOW_DELAY if len(self.all_fails) >= self.GLOBAL_SLOW else 0.0
+            self.record_fail(ip, now)
+            return now, delay
+
+    def attempt_ok(self, ip: str, stamp: float):
+        """The try begun at stamp was right: it no longer counts as a failure."""
+        with self.lock:
+            for q in (self.fails.get(self.rate_key(ip)), self.all_fails):
+                try:
+                    q.remove(stamp)
+                except (AttributeError, ValueError):
+                    pass
+
+    def record_fail(self, ip: str, now: float | None = None):
+        now = time.time() if now is None else now
         with self.lock:
             self.fails.setdefault(self.rate_key(ip), deque()).append(now)
             self.all_fails.append(now)
@@ -223,6 +301,8 @@ class Auth:
                 self._prune(now)
 
     def status(self, handler) -> dict:
+        if not self.authorized(handler):          # strangers learn only what the login page needs
+            return {"password_set": self.password_set, "trusted": False, "logged_in": False}
         return {"password_set": self.password_set, "trusted": self.trusted(handler),
                 "logged_in": self.session_ok(self.cookie(handler)), "proxied": self.proxied(handler),
                 "lan_without_login": bool(self.data.get("lan_without_login", True)),
