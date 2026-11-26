@@ -1,0 +1,9 @@
+{
+  "name": "Twin coasters",
+  "tags": ["Party", "Holiday"],
+  "layers": [
+    {"effect": "coaster", "target": "Eaves", "params": {"cars": 2, "colors": ["#ff1010", "#10ff30"]}},
+    {"effect": "coaster", "target": "Accent", "blend": "lighten",
+     "params": {"cars": 2, "colors": ["#ffb000", "#2060ff"], "gravity": 40, "seed": 7}}
+  ]
+}
