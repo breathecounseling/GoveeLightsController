@@ -8,55 +8,43 @@
     {
       "effect": "solid",
       "params": {
-        "color": "#000c40"
+        "color": "#000a50"
       }
     },
     {
       "effect": "bursts",
+      "target": ["North wall", "Front eave", "South wall", "Garage", "Garage peak"],
       "blend": "lighten",
       "params": {
-        "colors": ["#ff0010", "#ffffff", "#1030ff", "#ff00c0", "#00e0ff"],
-        "interval": 0.4,
-        "life": 1.5,
-        "burst_speed": 24,
-        "ring": 4,
+        "colors": ["#ff0010", "#00ff30", "#1030ff", "#ff00c0", "#ffa000", "#00e0ff"],
+        "interval": 0.5,
+        "life": 1.0,
+        "burst_speed": 30,
+        "ring": 7,
         "seed": 9
-      },
-      "fx": [
-        {
-          "type": "trails",
-          "params": {
-            "length": 0.35
-          }
-        }
-      ]
+      }
     },
     {
-      "effect": "bursts",
-      "target": "Peak",
+      "effect": "fireworks",
+      "target": "all",
       "blend": "lighten",
       "params": {
-        "colors": ["#ff0010", "#ffffff", "#1030ff", "#ff00c0", "#00e0ff"],
-        "interval": 0.6,
-        "life": 1.4,
-        "burst_speed": 9,
-        "ring": 2.5,
-        "seed": 23
-      },
-      "fx": [
-        {
-          "type": "trails",
-          "params": {
-            "length": 0.3
-          }
-        }
-      ]
+        "colors": ["#ff0010", "#00ff30", "#1838ff", "#ff00c0", "#ffa000", "#00e0ff"],
+        "rate": 70,
+        "burst_size": 60,
+        "burst_speed": 34,
+        "trail": 0.08,
+        "crackle": 0.25,
+        "embers": 0.3,
+        "launch_zone": "Lower roofline",
+        "seed": 9
+      }
     },
     {
       "effect": "sparkle",
       "params": {
-        "rate": 10,
-        "decay": 0.2
+        "rate": 6,
+        "decay": 0.12
       },
       "blend": "add",
       "opacity": 0.9

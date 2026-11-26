@@ -8,7 +8,7 @@
     {
       "effect": "solid",
       "params": {
-        "color": "#0a1840"
+        "color": "#0420a0"
       }
     },
     {
@@ -35,15 +35,16 @@
       "params": {
         "colors": [
           "#ffffff",
-          "#cfd8ff",
-          "#e6f0ff"
+          "#f0f4ff",
+          "#ffffff"
         ],
         "level": 0,
         "shimmer": 0.6,
-        "density": 0.6,
-        "decay": 0.16,
+        "density": 0.9,
+        "attack": 0.01,
+        "decay": 0.09,
         "whiteness": 1,
-        "bloom": 0.55
+        "bloom": 0.45
       },
       "blend": "lighten"
     }

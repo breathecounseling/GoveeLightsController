@@ -10,13 +10,13 @@
       "effect": "glitter",
       "params": {
         "colors": [
-          "#ffb030",
-          "#ff9a20",
-          "#ffc850"
+          "#ffa000",
+          "#ff8c00",
+          "#ffb000"
         ],
-        "sparkle": "#fff6e0",
-        "whiteness": 0.85,
-        "level": 0.45,
+        "sparkle": "#fff0c0",
+        "whiteness": 0.4,
+        "level": 0.6,
         "density": 0.5,
         "bloom": 0.35
       },
@@ -29,14 +29,15 @@
       "effect": "fizz",
       "params": {
         "colors": [
-          "#ff9a20",
-          "#fff0c0",
-          "#ffd070"
+          "#ff8c00",
+          "#ffd000",
+          "#ffe880"
         ],
-        "level": 0.25,
-        "rise": 3.5,
-        "density": 2.2,
-        "decay": 0.16
+        "level": 0.14,
+        "rise": 2.6,
+        "columns": 1.0,
+        "density": 1.3,
+        "decay": 0.24
       },
       "target": "Peak"
     }

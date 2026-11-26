@@ -10,8 +10,8 @@
     {
       "effect": "text",
       "target": "Peak",
-      "params": {"text": "GO BRONCOS!", "colors": ["#ff4f00", "#3a78ff"], "color_mode": "words",
-                 "speed": 5.5, "sparkle": 0.2, "border": "marquee", "border_color": "#1040ff"}
+      "params": {"text": "GO BRONCOS!", "colors": ["#ff4f00", "#1040ff"], "color_mode": "words",
+                 "speed": 4.0, "size": 1.4, "sparkle": 0.1, "border": "marquee", "border_color": "#1040ff"}
     }
   ]
 }

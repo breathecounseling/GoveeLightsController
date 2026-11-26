@@ -5,9 +5,13 @@
     {
       "effect": "twinkle",
       "target": ["North wall", "Front eave", "South wall", "Accent"],
-      "params": {"colors": ["#ffc020", "#fff0a0", "#ff7000"], "background": "#001250", "density": 0.2, "duration": 2.5, "seed": 19}
+      "params": {"colors": ["#ffc020", "#ffa000", "#ff7000"], "background": "#0020a0", "density": 0.3, "duration": 2.0, "seed": 19}
     },
-    {"effect": "solid", "target": "Peak", "params": {"color": "#00a020"}},
+    {
+      "effect": "gradient",
+      "target": "Peak",
+      "params": {"colors": ["#00a020", "#00c030", "#40b000", "#00c030"], "length": 6, "speed": 0.6, "axis": "y"}
+    },
     {
       "effect": "embers",
       "target": "Whole front gable",
