@@ -1932,8 +1932,8 @@ class Controller:
             elif self.playlist and now >= self.playlist["next_at"]:
                 self._advance()
             self._evolve_tick(now)
-        self.bulbcheck.tick(now)
             self._match_tick(now)
+        self.bulbcheck.tick(now)
         self._events_tick()
         self._showtimes_tick()
 
