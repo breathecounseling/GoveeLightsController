@@ -9,7 +9,7 @@ import random
 import re
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from . import evolve as evo
@@ -298,6 +298,7 @@ class Controller:
         with self.lock:
             if manual:
                 self._manual()
+                self.interrupt = None                 # as play_scene: the owner's pick ends a show/celebration
             self.evolve = None
             self.playlist = {"name": name, "order": order, "idx": -1, "next_at": 0.0, "fade": float(pl.get("fade", 2))}
             self._advance(first=True, fade=fade)
@@ -358,7 +359,7 @@ class Controller:
                 self.interrupt = {"scene": self.scene_dict, "playing": self.playing, "live": self.engine.live}
             self.interrupt["until"] = time.time() + seconds
             self.interrupt["label"] = label
-            for k in ("show", "visitor", "scoreboard"):
+            for k in ("show", "visitor", "scoreboard", "event"):
                 self.interrupt.pop(k, None)
             self.engine.set_scene(Scene.from_dict(d, self.user_palettes), fade, transition=transition)
             self.playing = {"kind": "event", "name": label}
@@ -466,7 +467,9 @@ class Controller:
 
     def _show_until(self, st: dict, cues: list[dict]) -> float:
         rest = sum(self._cue_secs(c) for c in cues[st["idx"] + 1:])
-        return 10 ** 12 if st["loop"] else st["next_at"] + rest + 3
+        if st["loop"]:
+            return float(st.get("stop_at") or 10 ** 12)
+        return st["next_at"] + rest + 3
 
     def play_show(self, name: str, manual: bool = True, force_live: bool | None = None) -> bool:
         show = self.show_def(name)
@@ -568,9 +571,26 @@ class Controller:
                 # A scoreboard or visitor pick stands aside (queued picks resume after the show).
                 if self.play_show(stt["show"], manual=False, force_live=not stt.get("only_when_on", True)):
                     self._showtimes_done.add(key)
-            except (KeyError, ValueError) as e:
+                    self._limit_forced_loop(now, b)
+            except (KeyError, ValueError, OSError) as e:
                 self._showtimes_done.add(key)
                 log.warning("showtime failed: %s", e)
+
+    def _limit_forced_loop(self, now: datetime, to):
+        """A loop show that a showtime switched the lights on for would otherwise run
+        forever (the schedule never sees a change while the lights are meant to be off):
+        it stops at the end of the showtime's 'to' minute, after at least one full pass."""
+        with self.lock:
+            it = self.interrupt
+            st = (it or {}).get("show")
+            if not st or not st.get("loop") or it.get("live"):
+                return
+            end = now.replace(hour=to.hour, minute=to.minute, second=0, microsecond=0)
+            if end < now - timedelta(minutes=1):
+                end += timedelta(days=1)                  # a window that crosses midnight
+            cues = self._show_cues(self.show_def(st["name"]))
+            st["stop_at"] = max(end.timestamp() + 60, time.time() + sum(self._cue_secs(c) for c in cues))
+            it["until"] = self._show_until(st, cues)
 
     # ------------------------------------------------------------- pad
     def pad(self, action: str, on: bool | None = None, color: str = "#ff2000") -> str:
@@ -767,23 +787,33 @@ class Controller:
             except (KeyError, ValueError):
                 continue
             key = (ev.get("name"), at.isoformat())
-            if self._show_owns(at.timestamp()):        # e.g. the New Year's show counts down itself
-                self._events_done.update({("cd",) + key, ("party",) + key})
-                continue
             secs = (at - now).total_seconds()
+            if self._show_owns(at.timestamp()):        # e.g. the New Year's show counts down itself
+                # Only what the show has actually reached is done: if a celebration (or
+                # anything else) cuts the show off before then, the event still happens.
+                st = self.interrupt["show"]
+                j = st.get("anchor_idx")
+                if j is not None and st.get("idx", 0) >= j:
+                    self._events_done.add(("cd",) + key)
+                if secs <= 0.5:
+                    self._events_done.add(("party",) + key)
+                continue
             cd = float(ev.get("countdown", 0))
             if cd > 0 and 0 < secs <= cd and ("cd",) + key not in self._events_done:
                 self._events_done.add(("cd",) + key)
-                self.start_interrupt(shows.countdown_scene(at.timestamp(), int(cd), int(ev.get("digits", 10))),
-                                     secs + 0.5, f"{ev.get('name')} countdown", force_live=ev.get("lights_on", True))
+                if self.start_interrupt(shows.countdown_scene(at.timestamp(), int(cd), int(ev.get("digits", 10))),
+                                        secs + 0.5, f"{ev.get('name')} countdown",
+                                        force_live=ev.get("lights_on", True)):
+                    self.interrupt["event"] = True     # pinned to a moment: lights-off time waits for it
             elif -2 < secs <= 0.5 and ("party",) + key not in self._events_done and float(ev.get("minutes", 0)) > 0:
                 self._events_done.add(("party",) + key)
                 try:
                     d = self.presets.get(ev.get("celebrate", "fireworks"))
                 except (OSError, ValueError):
                     d = shows.celebration("win", ["#ffd700", "#ffffff"])[0]
-                self.start_interrupt(d, float(ev["minutes"]) * 60, ev.get("name", "Celebration"),
-                                     force_live=ev.get("lights_on", True))
+                if self.start_interrupt(d, float(ev["minutes"]) * 60, ev.get("name", "Celebration"),
+                                        force_live=ev.get("lights_on", True)):
+                    self.interrupt["event"] = True
             # "days to go" reminders while the lights are on
             days = (at.date() - now.date()).days
             if (ev.get("reminders") and self.engine.live and not self.interrupt
@@ -835,8 +865,9 @@ class Controller:
         try:
             game = live.find_game(live.fetch_json(live.scoreboard_url(league)), team)
         except Exception as e:  # noqa: BLE001
-            self.games[key] = {**self.games.get(key, {}), "error": str(e)}
-            return 300
+            prev = self.games.get(key) or {}
+            self.games[key] = {**prev, "error": str(e)}
+            return 30 if prev.get("state") == "in" else 300       # one blip mid-game: retry soon
         prev = self.games.get(key)
         self.games[key] = {**game, "polled": time.time()} if game else {"state": "none", "team": team}
         if not game:
@@ -869,7 +900,10 @@ class Controller:
                      if k in teams and isinstance(v, dict) and v.get("state") == "in" and "error" not in v
                      and now - float(v.get("polled") or 0) < self.SCOREBOARD_FRESH), None)
         if every <= 0 or not g.get("enabled") or game is None:
-            self._scoreboard_at = None
+            if not (every > 0 and g.get("enabled") and any(
+                    k in teams and isinstance(v, dict) and v.get("state") == "in" and "error" in v
+                    for k, v in self.games.items())):
+                self._scoreboard_at = None            # a failed poll mid-game keeps the cadence
             return
         every = max(60.0, every)
         if self._scoreboard_at is None:
@@ -887,11 +921,15 @@ class Controller:
             self.interrupt["scoreboard"] = True
             self._scoreboard_at = now + max(every, secs + 30)
 
+    WEATHER_STALE = 45 * 60.0       # conditions older than this (fetches failing) are not shown
+
     def _apply_weather(self):
         w = self.cfg.data.get("weather", {})
         now = time.time()
         forced = {k for k, until in self._forced_weather.items() if until > now}
         cond = self.weather if w.get("enabled") else {}
+        if now - float(cond.get("at") or 0) > self.WEATHER_STALE:
+            cond = {}                                 # fetches failing for a while: drop old snow/storm/wind
         want = {}
         if (w.get("snow", True) and cond.get("snow")) or "snow" in forced:
             want["snow"] = ({"layers": [{"effect": "snowfall", "params": {"density": 0.8}}]}, "lighten", 1.0)
@@ -1048,7 +1086,10 @@ class Controller:
         while not self._stop.wait(1.0):
             try:
                 now = time.time()
-                self._tick_once(now)
+                try:
+                    self._tick_once(now)
+                except Exception:  # noqa: BLE001
+                    log.exception("controller tick failed")     # never let it starve the schedule
                 if now - last_sched >= 10:
                     last_sched = now
                     self._schedule_tick()
@@ -1093,8 +1134,8 @@ class Controller:
         if self.interrupt is not None:
             if key is not None:
                 return            # let the show/celebration finish; switch programs afterwards
-            if ((self.interrupt or {}).get("show") or {}).get("owns"):
-                return            # a show pinned to a moment (New Year's) finishes even after lights-off
+            if ((self.interrupt or {}).get("show") or {}).get("owns") or self.interrupt.get("event"):
+                return            # a show or event pinned to a moment (New Year's) finishes even after lights-off
             with self.lock:
                 self.interrupt = None             # lights-off time beats any show still running
         self._sched_key = key
