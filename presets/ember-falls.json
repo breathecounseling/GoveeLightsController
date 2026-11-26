@@ -2,6 +2,10 @@
   "name": "Ember falls",
   "tags": ["Ambient", "Holiday"],
   "layers": [
-    {"effect": "embers", "target": "Whole front", "params": {"rate": 12, "spill": 0.5, "spread": 0.8, "catch": 0.05}}
+    {"effect": "solid", "target": "all", "params": {"color": "#300800"}},
+    {"effect": "fire", "target": "all", "blend": "lighten",
+     "params": {"colors": ["#3a0c00", "#481200", "#6a1a00", "#902800"], "intensity": 1.0, "scale": 6, "speed": 0.6, "seed": 5}},
+    {"effect": "embers", "target": "Whole front", "blend": "lighten",
+     "params": {"rate": 12, "spill": 0.5, "spread": 0.8, "catch": 0.05}}
   ]
 }

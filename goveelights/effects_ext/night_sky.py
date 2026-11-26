@@ -767,6 +767,8 @@ def _ad_order(nd: int, mode: str, seed: int) -> list[int]:
           help="bottom up: the calendar fills toward the star, like the tree; scattered: like a real "
                "advent calendar"),
     Param("open_color", "color", "#ffa018", "Open doors", help="warm gold"),
+    Param("open_colors", "colors", [], "Open doors (alternating)",
+          help="optional: open doors take these colours in turn (e.g. red and green) instead of the one above"),
     Param("level", "number", 0.8, "Open door brightness", 0.05, 1, 0.01),
     Param("today_color", "color", "#ffd070", "Today's door", help="pulses and sparkles"),
     Param("pulse", "number", 2.6, "Pulse period (s)", 0.5, 10, 0.1),
@@ -805,6 +807,7 @@ def advent(t, ctx, P, st):
     today_k = max(1, min(nd, int(math.ceil(day * nd / 24.0)))) if nd else 0   # doors open, incl. today
     order = _ad_order(nd, P["order"], seed)
     oc, lv, tc = P["open_color"], P["level"], P["today_color"]
+    ocs = P.get("open_colors") or [oc]
     cc, cl = P["closed_color"], P["closed_level"]
     spk = P["sparkle"]
     per = P["pulse"]
@@ -818,6 +821,7 @@ def advent(t, ctx, P, st):
         door = doors[k]
         n_open = rank + 1
         if n_open < today_k:                                   # an open door
+            oc = ocs[k % len(ocs)]
             if intro:
                 a = since - rank * step
                 o = _smooth(a / 0.35)

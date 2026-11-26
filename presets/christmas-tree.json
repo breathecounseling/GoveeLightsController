@@ -9,9 +9,9 @@
       "effect": "twinkle",
       "params": {
         "colors": [
-          "#ffe0b0"
+          "#ffd890"
         ],
-        "background": "#ffc070",
+        "background": "#ff9a20",
         "density": 0.18,
         "duration": 3.0,
         "seed": 11
@@ -24,11 +24,14 @@
         "Garage peak"
       ],
       "blend": "normal",
-      "opacity": 0.2
+      "opacity": 0.45
     },
     {
       "effect": "tree",
-      "params": {},
+      "params": {
+        "intro": 3,
+        "glow_level": 0.3
+      },
       "target": "Whole front gable"
     },
     {

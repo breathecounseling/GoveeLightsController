@@ -178,6 +178,8 @@ STAR_WINDOW, STAR_FADE = 30.0, 3.0
     Param("sun_glow", "number", 0.6, "Sunset glow", 0, 1, 0.05,
           help="warm afterglow low on the side of the house where the sun went down"),
     Param("stars", "number", 0.12, "Stars", 0, 0.5, 0.01, help="share of the upper bulbs that twinkle once it's dark"),
+    Param("star_height", "number", 0.35, "Stars from height", 0, 1, 0.05,
+          help="stars only above this height (0 = the porch and flat eaves get stars too)"),
     Param("height", "choice", "blend", "Gradient over", options=["blend", "whole house", "each run"],
           help="whole house: porch = horizon, apex = zenith; each run: every run gets the full sky; "
                "blend: half of each, so the gables sweep from horizon to zenith and the porch stays warmest"),
@@ -208,7 +210,7 @@ def dusk(t, p, P):
         c = (c[0] * k, c[1] * k, c[2] * k)
     wn = sky["night"]
     st = P["stars"]
-    if wn > 0 and st > 0 and h > 0.35:
+    if wn > 0 and st > 0 and h > P["star_height"]:
         # the stars are re-chosen every STAR_WINDOW seconds, the old set fading out over
         # the last STAR_FADE s while the new one fades in: they appear, sparkle and fade
         win = math.floor(t / STAR_WINDOW)

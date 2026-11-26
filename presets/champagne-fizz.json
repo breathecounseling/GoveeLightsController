@@ -8,18 +8,35 @@
   "layers": [
     {
       "effect": "glitter",
-      "palette": "Champagne",
       "params": {
-        "level": 0.2,
-        "density": 0.4
+        "colors": [
+          "#ffb030",
+          "#ff9a20",
+          "#ffc850"
+        ],
+        "sparkle": "#fff6e0",
+        "whiteness": 0.85,
+        "level": 0.45,
+        "density": 0.5,
+        "bloom": 0.35
       },
-      "target": "Eaves"
+      "target": [
+        "Eaves",
+        "Accent"
+      ]
     },
     {
       "effect": "fizz",
       "params": {
+        "colors": [
+          "#ff9a20",
+          "#fff0c0",
+          "#ffd070"
+        ],
+        "level": 0.25,
         "rise": 3.5,
-        "density": 1.2
+        "density": 2.2,
+        "decay": 0.16
       },
       "target": "Peak"
     }

@@ -7,9 +7,11 @@
     {
       "effect": "dusk",
       "params": {
-        "clouds": 0.4,
+        "clouds": 0.65,
+        "speed": 1.4,
         "sun_glow": 0.7,
-        "stars": 0.12
+        "stars": 0.16,
+        "star_height": 0
       }
     }
   ]

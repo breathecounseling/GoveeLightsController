@@ -5,7 +5,8 @@
     {
       "effect": "ball_drop",
       "target": "all",
-      "params": {"mode": "loop", "seconds": 10, "celebrate": 20, "pause": 4}
+      "params": {"mode": "loop", "seconds": 10, "celebrate": 20, "pause": 1.5,
+                 "wait_glow": 0.5, "wait_chase": 0.4, "sky_color": "#0a24a0", "party_glow": 0.55}
     }
   ]
 }

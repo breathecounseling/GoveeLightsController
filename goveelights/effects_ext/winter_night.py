@@ -820,6 +820,15 @@ def _bd_burst(st, rng, x, y, n, speed, cols, up=False):
     Param("message", "text", "HAPPY NEW YEAR!", "Message",
           help="scrolls across the zigzag after the burst (empty = keep the glitter)"),
     Param("message_colors", "colors", ["#ffc000", "#ffffff", "#40a0ff"], "Message colours"),
+    Param("wait_glow", "number", 0.14, "Waiting glow", 0, 0.8, 0.01,
+          help="how bright the rest of the house glows (glow colour) while the ball waits"),
+    Param("wait_chase", "number", 0.0, "Waiting chase", 0, 1, 0.05,
+          help="slow bright bands of the glow colour travelling along the house while it waits"),
+    Param("sky_color", "color", "#000000", "Gable sky",
+          help="the zigzag's background behind the waiting ball (black = dark with a few stars); "
+               "it shimmers slowly and dims while the ball comes down so the digits read"),
+    Param("party_glow", "number", 0.12, "Celebration glow", 0, 0.8, 0.01,
+          help="how bright the gold glitter stays on the house through the celebration"),
     Param("seed", "int", 26, "Seed", 0, 9999, 1),
 ], "Times Square on the front gable: a glowing crystal ball waits at the apex star, then glides "
    "down the centre of the zigzag over the last seconds while the seconds count down in big "
@@ -920,6 +929,11 @@ def ball_drop(t, ctx, P, st):
         since = -r
         fade = _smooth(min(1.0, (cel - since) / 2.0))     # fade out at the end of the celebration
         _bd_boom(frame, st, ctx, P, since, fade)
+        if fade < 1.0 and (P["wait_glow"] > 0.14 or any(P["sky_color"])):
+            back = 1.0 - fade                       # hand back to the waiting scene, no dark gap
+            for i in rest:
+                _add(frame, i, P["glow_color"], back * _bd_wait_level(P, px[i], i, clock, seed))
+            _bd_wait_sky(frame, st, px, P, clock, seed, back)
     else:
         # the rest of the house: soft glitter while waiting; drains with the ball while it drops
         tick = 0.0
@@ -932,7 +946,7 @@ def ball_drop(t, ctx, P, st):
                 below = _smooth((by - p.y) / 1.5 + 0.5) if p.y > ybot - 0.5 else 1.0
                 lvl = 0.05 + 0.25 * below + 0.35 * tick
             else:
-                lvl = 0.14 + 0.05 * math.sin(clock * 0.8 + hash01(i, seed) * 6.28)
+                lvl = _bd_wait_level(P, p, i, clock, seed)
             g, _ = glint(i, clock, 0.08, 0.05, 0.4, seed, 1)
             c = lerp(gcol, WARM_WHITE, 0.6 * g)
             _add(frame, i, c, lvl + 0.5 * g)
@@ -948,10 +962,9 @@ def ball_drop(t, ctx, P, st):
                 for i in row:
                     _add(frame, i, dc, v)
         elif phase == "wait":
-            for i in zig:                            # a few stars waiting with the ball
-                g, _ = glint(i, clock, 0.05, 0.3, 0.6, seed + 3, 1)
-                if g > 0.02:
-                    _add(frame, i, (0.7, 0.8, 1.0), 0.35 * g)
+            _bd_wait_sky(frame, st, px, P, clock, seed, 1.0)
+        if phase == "drop":
+            _bd_wait_sky(frame, st, px, P, clock, seed, 0.3, stars=False)
         size = 1.0
         if phase == "wait" and P["mode"] == "clock" and r < N + 60:
             size += 0.15 * math.sin(clock * 6.3)   # the last minute: the waiting ball pulses
@@ -985,6 +998,35 @@ def ball_drop(t, ctx, P, st):
         elif o is not None:
             del glow[i]
     return _clamp(frame, idx)
+
+
+def _bd_wait_level(P, p, i, clock, seed) -> float:
+    """The rest of the house while the ball waits: a soft glow, with slow travelling bands."""
+    lvl = P["wait_glow"] + 0.05 * math.sin(clock * 0.8 + hash01(i, seed) * 6.28)
+    ch = P["wait_chase"]
+    if ch > 0:
+        w = (0.5 + 0.5 * math.sin(p.x * 0.3 - clock * 1.6)) ** 3
+        lvl = lvl * (1.0 - 0.5 * ch) + ch * 0.5 * w
+    return lvl
+
+
+def _bd_wait_sky(frame, st, px, P, clock, seed, k, stars=True):
+    """The zigzag behind the waiting ball: the sky colour with a slow shimmer down the rows,
+    and a few silver stars."""
+    sky = P["sky_color"]
+    lit = any(sky)
+    if lit:
+        for r, row in enumerate(st["rows"]):
+            for i in row:
+                s = 0.7 + 0.3 * math.sin(clock * 1.1 - r * 0.7 + hash01(i, seed, 5) * 1.5)
+                _add(frame, i, sky, k * s)
+    if not stars:
+        return
+    rate, amt = (0.12, 0.7) if lit else (0.05, 0.35)
+    for i in st["zig_idx"]:                         # a few stars waiting with the ball
+        g, _ = glint(i, clock, rate, 0.3, 0.6, seed + 3, 1)
+        if g > 0.02:
+            _add(frame, i, (0.7, 0.8, 1.0), k * amt * g)
 
 
 def _bd_show(r: float) -> float:
@@ -1104,7 +1146,7 @@ def _bd_boom(frame, st, ctx, P, since, fade):
     mw = _smooth((since - MSG_START) / 0.8) if msg else 0.0
     st["mw"] = mw * fade
     flash = math.exp(-since / 0.22)
-    goldl = 0.7 * math.exp(-since / 1.4) + 0.12
+    goldl = 0.7 * math.exp(-since / 1.4) + P["party_glow"]
     rate = 0.9 * math.exp(-since / 5.0) + 0.12
     base = lerp(GOLD, WHITE, flash)
     for i in ctx.idx:
