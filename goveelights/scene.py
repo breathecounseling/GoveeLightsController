@@ -87,14 +87,16 @@ def apply_palette(fx: Effect, P: dict, pal: list[Color]):
         P[p.name] = pal[k % len(pal)]
 
 
-def resolve_mod(fx: Effect, base: dict, mods: dict, clock: float, bpm: float, seed: int) -> dict:
+def resolve_mod(fx: Effect, base: dict, mods: dict, clock: float, bpm: float, seed: int,
+                beats: float | None = None, audio: dict | None = None) -> dict:
     if not mods:
         return base
     P = dict(base)
     for k, (name, spec) in enumerate(mods.items()):
         prm = next((p for p in fx.params if p.name == name), None)
         if prm and prm.kind in ("number", "int"):
-            P[name] = modulation.apply(spec, base[name], prm.min, prm.max, clock, bpm, seed + k, prm.kind == "int")
+            P[name] = modulation.apply(spec, base[name], prm.min, prm.max, clock, bpm, seed + k,
+                                       prm.kind == "int", beats, audio)
     return P
 
 
@@ -139,6 +141,7 @@ class Layer:
                                                                if k in ("type", "params", "mod", "enabled")})
                       for u in (self.fx or [])]
         self.clock: float | None = None
+        self.beats = 0.0                # beats elapsed on the tempo grid (integrated: tempo changes never jump)
         self.travel = 0.0
         self.state: dict = {}           # memory for frame effects (particles, snow…)
 
@@ -218,7 +221,7 @@ class Scene:
         self._layout = old._layout
         for a, b in zip(self.layers, old.layers):
             if a.effect == b.effect and b.clock is not None:
-                a.clock, a.travel, a.state = b.clock, b.travel, dup(b.state)
+                a.clock, a.travel, a.state, a.beats = b.clock, b.travel, dup(b.state), b.beats
                 for ua, ub in zip(a.units, b.units):
                     if ua.type == ub.type:
                         ua.state = dup(ub.state)
@@ -238,9 +241,13 @@ class Scene:
             self._cache[key] = cols or None
         return self._cache[key]
 
-    def render(self, t: float, layout: Layout, master: dict | None = None) -> list[Color]:
+    def render(self, t: float, layout: Layout, master: dict | None = None,
+               audio: dict | None = None) -> list[Color]:
         """Colour for every visible pixel, in virtual-strip order (floats, clamped).
-        master: {"speed": 1, "hue": 0, "palette": "", "bpm": 120}"""
+        master: {"speed": 1, "hue": 0, "palette": "", "bpm": 120}
+        audio: the music the phone hears this frame (audio.AudioState.snapshot) or None;
+        effects see it as ctx.audio, modulators with a music source follow it, and each
+        layer's beat grid (synced LFOs) is pulled onto the music's beat."""
         m = master or {}
         ms = float(m.get("speed", 1.0))
         bpm = float(m.get("bpm", 120))
@@ -271,9 +278,15 @@ class Scene:
             if L.clock is None:               # first frame: start "as if running since t=0"
                 L.clock = t * ms
                 L.travel = float(L.resolved.get("speed", 0.0)) * L.clock
+                L.beats = L.clock * bpm / 60.0
                 ldt = 0.0
             else:
                 L.clock += ldt
+                L.beats += ldt * bpm / 60.0
+                if audio and audio.get("phase") is not None and ldt > 0:
+                    # glide the beat grid onto the music's (wrapped error, ~0.25 s time constant)
+                    err = (audio["phase"] - L.beats + 0.5) % 1.0 - 0.5
+                    L.beats += err * min(1.0, 4.0 * ldt) * audio.get("presence", 1.0)
             P = L.resolved
             pal = master_pal or self._palette(L.palette)
             if pal and L.blend == "mask" and li:
@@ -281,7 +294,7 @@ class Scene:
             if pal:
                 P = dict(P)
                 apply_palette(L.gen, P, pal)
-            P = resolve_mod(L.gen, P, L.mod, L.clock, bpm, li * 7)
+            P = resolve_mod(L.gen, P, L.mod, L.clock, bpm, li * 7, L.beats, audio)
             if "speed" in P:
                 L.travel += float(P["speed"]) * ldt
                 if P is L.resolved:
@@ -289,7 +302,7 @@ class Scene:
                 P["_travel"] = L.travel
             fn, clock = L.gen.fn, L.clock
             if L.gen.frame:
-                frame = fn(clock, Ctx(layout, idx, clock, ldt, bpm, ctx_cache), P, L.state)
+                frame = fn(clock, Ctx(layout, idx, clock, ldt, bpm, ctx_cache, audio, L.beats), P, L.state)
                 if len(frame) != n:
                     frame = (list(frame) + [BLACK] * n)[:n]
             else:
@@ -297,14 +310,14 @@ class Scene:
                 for i in idx:
                     frame[i] = fn(clock, px[i], P)
             if L.units:
-                ctx = Ctx(layout, idx, clock, ldt, bpm, ctx_cache)
+                ctx = Ctx(layout, idx, clock, ldt, bpm, ctx_cache, audio, L.beats)
                 for ui, U in enumerate(L.units):
                     if U.enabled:
                         UP = U.resolved
                         if pal and any(p.kind == "colors" for p in U.fx.params):
                             UP = dict(UP)
                             apply_palette(U.fx, UP, pal)
-                        UP = resolve_mod(U.fx, UP, U.mod, clock, bpm, li * 7 + ui * 3 + 101)
+                        UP = resolve_mod(U.fx, UP, U.mod, clock, bpm, li * 7 + ui * 3 + 101, L.beats, audio)
                         frame = U.fx.fn(frame, ctx, UP, U.state)
             mode, o = (L.blend if li else "normal"), L.opacity
             if mode == "normal" and o == 1.0:

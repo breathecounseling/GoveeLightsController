@@ -157,6 +157,8 @@ class Controller:
                        brightness=float(self.ecfg.get("brightness", 1.0)))
             e.master.update(self.cfg.data.get("master", {}))
             e.dither = bool(self.ecfg.get("dither", True))
+            if old:
+                e.audio = old.audio                # a listening phone keeps its beat across a rebuild
             self._thumbs = {}
             if old and old.scene:
                 e.set_scene(old.scene)
@@ -223,6 +225,38 @@ class Controller:
             self.cfg.save()
         if "blackout" in b:
             self.engine.blackout = bool(b["blackout"])
+
+    def note_remote(self, host: str):
+        """Remember the https address the app was last opened at (the Cloudflare tunnel), so
+        a phone on the plain-http home address can be pointed there (the microphone only
+        works on a secure page)."""
+        import re
+        host = (host or "").strip().lower()
+        if not re.fullmatch(r"[a-z0-9.-]{1,253}(:\d{1,5})?", host):
+            return
+        url = "https://" + host
+        srv = self.cfg.data.setdefault("server", {})
+        if srv.get("remote_url") != url:
+            with self.cfg.lock:
+                srv["remote_url"] = url
+                self.cfg.save()
+
+    def beat(self, b: dict) -> dict:
+        """An update from a phone listening to the music (Play -> Listen): loudness, bass,
+        onsets and tempo. Its tempo becomes the master tempo (the one tap tempo sets; not
+        saved to the config, the music changes song to song) and effects see the music as
+        ctx.audio for a couple of seconds (see goveelights/audio.py). {"stop": true}: the
+        phone stopped listening, let go at once."""
+        e = self.engine
+        if b.get("stop") is True:
+            e.audio.clear()
+            return {"bpm": e.master.get("bpm")}
+        bpm = e.audio.update(b, now=e.wall())["bpm"]
+        if bpm is not None:
+            bpm = max(20.0, min(300.0, bpm))
+            if abs(bpm - float(e.master.get("bpm", 120.0))) >= 1.0:   # tiny wobbles don't retime anything
+                e.master["bpm"] = float(round(bpm))
+        return {"bpm": e.master.get("bpm")}
 
     @property
     def user_palettes(self) -> dict:
@@ -1548,6 +1582,8 @@ class Controller:
             "show": ((it or {}).get("show") or {}).get("name"),
             "dusk_intro": ({"left": max(0, round(di["until"] - time.time())), "then": di["program"]} if di else None),
             "visitor_queue": len(self.vqueue),
+            "remote_url": self.cfg.data.get("server", {}).get("remote_url", ""),
+            "music": round((e.audio.snapshot(e.wall()) or {}).get("presence", 0.0), 2),
             "health": {self.cfg.devices.get(m, {}).get("name", m): {
                 "ok": h["miss"] == 0, "reasserts_15min": len([t for t in h["reasserts"] if time.time() - t < 900]),
                 "paused": h["paused"]} for m, h in health.items()},

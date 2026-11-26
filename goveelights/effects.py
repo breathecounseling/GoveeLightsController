@@ -841,7 +841,7 @@ for _n, _d in LOOKS.items():
 
 
 # ------------------------------------------------------------ picker groups
-GROUP_ORDER = ["Scenes", "Physics", "Sparkle & glitter", "Along the lights", "Across the house (2D)",
+GROUP_ORDER = ["Scenes", "Physics", "Music", "Sparkle & glitter", "Along the lights", "Across the house (2D)",
                "Text, pictures & numbers", "Weather", "Texture & time", "Utility"]
 _GROUPS = {
     "Sparkle & glitter": ["glitter", "shimmer", "sequins", "fizz", "fireflies", "twinkle", "sparkle"],

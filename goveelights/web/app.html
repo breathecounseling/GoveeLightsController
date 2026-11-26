@@ -164,6 +164,12 @@ h2 .sp{flex:1}
 .pad button{padding:16px 4px;font-weight:700;font-size:13px;border-radius:14px;user-select:none;-webkit-user-select:none}
 .pad button.hold{background:#2e1065;border-color:#7c3aed}
 .pad button.act{filter:brightness(1.8)}
+#listenBtn.on{background:#2e1065;border-color:#7c3aed}
+#listenBtn.on.hit{background:#7c3aed}
+#listenBtn{flex:none;white-space:nowrap}
+#listenNote{font-size:12.5px;color:var(--dim);margin:0;line-height:1.35;min-width:0}
+#listenNote a{color:var(--blue)}
+.lvl{display:inline-block;vertical-align:middle;width:44px;height:6px;border-radius:9px;background:var(--p3);overflow:hidden;margin-left:6px}.lvl i{display:block;height:100%;width:0;background:#7c3aed}
 .cue{display:grid;grid-template-columns:1fr;gap:6px;background:var(--p2);border:1px solid var(--line);border-radius:12px;padding:8px;margin-bottom:8px}
 .cue .full{grid-column:1/-1}
 .cue .row{gap:6px}
@@ -251,6 +257,7 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
       <div class="knob"><label>Speed</label><input id="kSpd" type="range" min="0" max="3" step="0.05"><output id="oSpd"></output></div>
       <div class="knob"><label>Hue</label><input id="kHue" class="huetrack" type="range" min="0" max="1" step="0.005"><output id="oHue"></output></div>
       <div class="knob"><label>Tempo</label><div class="row"><button class="sm grow" id="tapBtn" onclick="tap()">Tap tempo</button><button class="sm" onclick="nudgeBpm(-1)">−</button><button class="sm" onclick="nudgeBpm(1)">+</button></div><output id="oBpm"></output></div>
+      <div class="row" style="gap:10px;margin-top:2px"><button class="sm" id="listenBtn" onclick="listenToggle()" aria-pressed="false" title="Listen to the music with this phone's microphone and keep the lights on the beat">🎤 Listen</button><p id="listenNote" class="grow">Lights follow the music this phone hears</p></div>
     </div>
     <div class="grp" style="margin-top:8px">Restyle with a palette</div>
     <div id="palChips" class="chips"></div>
@@ -633,6 +640,178 @@ function tap(){ const n = performance.now(); taps = taps.filter(t => n - t < 300
   if (taps.length >= 3){ const iv = (taps[taps.length-1]-taps[0])/(taps.length-1); const bpm = Math.round(60000/iv); post('master',{bpm}); $('oBpm').textContent = bpm }
   $('tapBtn').animate([{background:'#2563eb'},{background:''}],{duration:180}) }
 function nudgeBpm(d){ const b = Math.round((ST.master?.bpm||120)+d); post('master',{bpm:b}).then(refresh) }
+
+// ------------------------------------------------------------- listen: beat sync from the microphone
+/* The phone hears the music: onsets from the spectral flux of the low band (kick and bass)
+   against an adaptive threshold, the tempo from the onsets' inter-onset intervals (a comb
+   over 60-180 BPM with a mild preference for ~120, so a half/double-time octave settles
+   sensibly), and smoothed loudness and bass. Small updates go to /api/beat at most ~12 a
+   second; the server sets the master tempo, lines the beat grid up and lets effects follow.
+   The pure functions below are unit-tested with node (tests/test_beatsync.py). */
+function bandFlux(prev, cur, lo, hi){
+  let f = 0; const top = Math.min(hi, cur.length - 1);
+  for (let i = lo; i <= top; i++){ const d = cur[i] - (prev ? prev[i] : 0); if (d > 0) f += d }
+  return f / Math.max(1, top - lo + 1);
+}
+/* True when flux rises through mean + k·sd of the last `win` seconds (and the floor), at
+   most once per `gap` seconds; it must fall back under 70% of the threshold to re-arm. */
+function onsetPick(st, flux, t, opt){
+  const o = Object.assign({win: 1.5, k: 1.4, floor: 3, gap: 0.2}, opt || {});
+  const h = st.h || (st.h = []);
+  let n = h.length, mean = 0, sd = 0;
+  for (const x of h) mean += x[1]; mean = n ? mean / n : 0;
+  for (const x of h) sd += (x[1] - mean) ** 2; sd = n ? Math.sqrt(sd / n) : 0;
+  h.push([t, flux]); while (h.length && t - h[0][0] > o.win) h.shift();
+  const thr = Math.max(o.floor, mean + o.k * sd);
+  let hit = false;
+  if (t - h[0][0] < 0.25) return false;                   // still learning the room's level
+  if (flux > thr && !st.armedOff && (st.last == null || t - st.last >= o.gap)){ hit = true; st.last = t; st.armedOff = true }
+  else if (flux < thr * 0.7) st.armedOff = false;
+  return hit;
+}
+/* Tempo from onset times (seconds, ascending): {bpm, conf} or null. Every pair of onsets up
+   to 12 apart and 4 s votes for the tempos whose beat fits it a whole number of times, so
+   missed beats and extra hits don't throw it; jitter is absorbed by a 25 ms tolerance. */
+function estimateBpm(on, lo = 60, hi = 180){
+  if (!on || on.length < 4) return null;
+  const ioi = [];
+  for (let i = 0; i < on.length; i++) for (let j = i + 1; j < on.length && j <= i + 12; j++){
+    const d = on[j] - on[i]; if (d > 4) break; if (d >= 0.2) ioi.push(d) }
+  if (ioi.length < 3) return null;
+  const sg = 0.025, s2 = 2 * sg * sg;
+  const comb = bpm => { const p = 60 / bpm; let s = 0;
+    for (const d of ioi){ const n = Math.max(1, Math.round(d / p)), e = d - n * p; s += Math.exp(-e * e / s2) / (1 + 0.15 * (n - 1)) }
+    return s };
+  const prior = bpm => Math.exp(-0.5 * (Math.log2(bpm / 120) / 1.0) ** 2);
+  let best = lo, bs = -1;
+  for (let b = lo; b <= hi; b += 0.5){ const s = comb(b) * prior(b); if (s > bs){ bs = s; best = b } }
+  for (let b = best - 0.5; b <= best + 0.5; b += 0.05){ const s = comb(b) * prior(b); if (s > bs){ bs = s; best = b } }
+  // octave correction: a slow estimate whose double time fits as well is taken at double time
+  if (best < 80 && best * 2 <= hi && comb(best * 2) >= 0.9 * comb(best)) best *= 2;
+  if (best > 160 && best / 2 >= lo && comb(best / 2) >= 0.9 * comb(best)) best /= 2;
+  return {bpm: Math.round(best * 10) / 10, conf: Math.min(1, comb(best) / ioi.length * 1.6)};
+}
+/* Where `now` falls inside the beat (0..1), from the recent onsets on a `bpm` grid
+   (a recency-weighted circular mean, so stray hits barely move it). */
+function beatPhase(on, bpm, now){
+  const p = 60 / bpm; let x = 0, y = 0, w = 1;
+  for (let i = on.length - 1; i >= 0 && i >= on.length - 12; i--, w *= 0.8){
+    const a = 2 * Math.PI * ((on[i] / p) % 1); x += w * Math.cos(a); y += w * Math.sin(a) }
+  if (!x && !y) return 0;
+  const ph0 = Math.atan2(y, x) / (2 * Math.PI);
+  return (((now / p - ph0) % 1) + 1) % 1;
+}
+/* Envelope follower: quick attack, slower release (seconds). */
+function follow(prev, x, dt, att, rel){ const k = 1 - Math.exp(-dt / (x > prev ? att : rel)); return prev + (x - prev) * k }
+/* Auto-range: maps x into 0..1 between a slowly sinking peak and a slowly rising floor, so
+   a quiet room and a loud party both use the whole range. */
+function autoRange(st, x, dt){
+  if (st.hi == null){ st.hi = x + 0.05; st.lo = x }
+  st.hi = Math.max(x, st.hi - dt * 0.03); st.lo = Math.min(x, st.lo + dt * 0.03);
+  return Math.max(0, Math.min(1, (x - st.lo) / Math.max(0.08, st.hi - st.lo)));
+}
+
+let LS = {on: false};
+function listenSupport(){
+  if (!window.isSecureContext) return 'insecure';
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !(window.AudioContext || window.webkitAudioContext)) return 'unsupported';
+  return '';
+}
+function listenNote(html){ const n = $('listenNote'); html = html || 'Lights follow the music this phone hears'; if (n._h !== html) n.innerHTML = n._h = html }
+function listenExplain(why){
+  const r = ST.remote_url;
+  if (why === 'insecure') listenNote(`The mic only works on a secure page: open ${r ? `<a href="${esc(r)}">${esc(r)}</a>` : 'your https address (REMOTE.md)'} or localhost on the PC.`);
+  else listenNote('This browser can’t listen to the microphone. Try Safari or Chrome.');
+}
+function listenUI(){
+  const b = $('listenBtn'); b.classList.toggle('on', !!LS.on); b.setAttribute('aria-pressed', LS.on ? 'true' : 'false');
+  b.textContent = LS.on ? '🎤 Listening' : '🎤 Listen';
+}
+async function listenToggle(){
+  if (LS.on || LS.starting) return listenStop('');
+  const why = listenSupport(); if (why) return listenExplain(why);
+  LS = {on: false, starting: true}; listenNote('Asking for the microphone…');
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: false, noiseSuppression: false, autoGainControl: false}});
+  } catch (e) {
+    LS = {on: false};
+    const n = e && e.name;
+    listenNote(n === 'NotAllowedError' || n === 'SecurityError' ? 'Microphone permission was refused. Allow the microphone for this site in the browser’s settings, then tap Listen again.'
+      : n === 'NotFoundError' ? 'No microphone found on this device.' : 'Couldn’t start the microphone (' + esc(n || e) + ').');
+    return listenUI();
+  }
+  if (!LS.starting){ stream.getTracks().forEach(t => t.stop()); return }        // cancelled meanwhile
+  const AC = window.AudioContext || window.webkitAudioContext, ac = new AC();
+  try { await ac.resume() } catch (e) {}
+  const an = ac.createAnalyser(); an.fftSize = 2048; an.smoothingTimeConstant = 0;
+  ac.createMediaStreamSource(stream).connect(an);
+  const hz = ac.sampleRate / an.fftSize;
+  LS = {on: true, ac, an, stream, spec: new Uint8Array(an.frequencyBinCount), prev: new Uint8Array(an.frequencyBinCount),
+        td: new Float32Array(an.fftSize), lo: Math.max(1, Math.floor(40 / hz)), hi: Math.max(2, Math.ceil(180 / hz)),
+        win: an.fftSize / ac.sampleRate, t: performance.now() / 1000, st: {}, rL: {}, rB: {}, lvl: 0, bass: 0,
+        onsets: [], lastOnset: null, pending: false, bpm: null, cand: null, nextEst: 0, lastSend: 0, rtt: 80, busy: false, uiAt: 0};
+  stream.getTracks().forEach(t => t.onended = () => listenStop('The microphone stopped.'));
+  LS.timer = setInterval(listenTick, 15);
+  listenUI(); listenNote('Listening… play some music.');
+}
+function listenStop(msg){
+  const was = LS; LS = {on: false};
+  if (was.timer) clearInterval(was.timer);
+  if (was.stream) was.stream.getTracks().forEach(t => { t.onended = null; t.stop() });
+  if (was.ac) was.ac.close().catch(() => {});
+  if (was.on) fetch('/api/beat', {method: 'POST', keepalive: true, headers: {'Content-Type': 'application/json', 'X-Requested-With': 'lights'},
+    body: JSON.stringify({stop: true})}).catch(() => {});
+  listenUI(); listenNote(msg || '');
+}
+function listenTick(){
+  const L = LS; if (!L.on) return;
+  const now = performance.now() / 1000, dt = Math.min(0.2, now - L.t); L.t = now;
+  [L.prev, L.spec] = [L.spec, L.prev];
+  L.an.getByteFrequencyData(L.spec);
+  const flux = bandFlux(L.prev, L.spec, L.lo, L.hi);
+  let b = 0; for (let i = L.lo; i <= L.hi; i++) b += L.spec[i]; b /= (L.hi - L.lo + 1) * 255;
+  L.an.getFloatTimeDomainData(L.td);
+  let r = 0; for (let i = 0; i < L.td.length; i++) r += L.td[i] * L.td[i];
+  const db = 10 * Math.log10(r / L.td.length + 1e-12);
+  L.lvl = follow(L.lvl, autoRange(L.rL, Math.max(0, (db + 70) / 70), dt), dt, 0.05, 0.5);
+  L.bass = follow(L.bass, autoRange(L.rB, b, dt), dt, 0.02, 0.25);
+  if (onsetPick(L.st, flux, now)){
+    const t0 = now - L.win / 2;                       // the analysis window lags the sound
+    L.onsets.push(t0); L.lastOnset = t0; L.pending = true;
+    while (L.onsets.length && t0 - L.onsets[0] > 12) L.onsets.shift();
+    const bt = $('listenBtn'); bt.classList.add('hit'); setTimeout(() => bt.classList.remove('hit'), 90);
+  }
+  if (L.lastOnset != null && now - L.lastOnset > 6){ L.bpm = null; L.onsets = [] }   // the music stopped
+  if (now >= L.nextEst){
+    L.nextEst = now + 0.5;
+    const e = estimateBpm(L.onsets);
+    if (e && e.conf > 0.25){
+      if (L.bpm == null || Math.abs(e.bpm - L.bpm) < 4){ L.bpm = L.bpm == null ? e.bpm : L.bpm * 0.7 + e.bpm * 0.3; L.cand = null }
+      else if (L.cand != null && Math.abs(e.bpm - L.cand) < 3) { L.bpm = e.bpm; L.cand = null }   // a new song: two agreeing estimates
+      else L.cand = e.bpm;
+    }
+  }
+  if (!L.busy && now - L.lastSend >= 1 / 12) listenSend(L, now);
+  if (now - L.uiAt > 0.25){ L.uiAt = now;
+    listenNote(`Listening · ${L.bpm ? Math.round(L.bpm) + ' BPM' : 'finding the beat…'} <span class="lvl"><i style="width:${Math.round(L.lvl * 100)}%"></i></span>`) }
+}
+async function listenSend(L, now){
+  const body = {level: +L.lvl.toFixed(3), bass: +L.bass.toFixed(3), bpm: null, phase: null, rtt: Math.round(Math.min(5000, L.rtt))};
+  if (L.bpm){ body.bpm = +Math.max(30, Math.min(300, L.bpm)).toFixed(1); body.phase = +Math.min(0.999, beatPhase(L.onsets, L.bpm, now)).toFixed(3) }
+  if (L.pending){ body.beat = true; body.ago = Math.round(Math.min(3000, Math.max(0, now - L.lastOnset) * 1000)); L.pending = false }
+  L.busy = true; L.lastSend = now; const t0 = performance.now();
+  try {
+    const r = await fetch('/api/beat', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Requested-With': 'lights'}, body: JSON.stringify(body)});
+    if (r.status === 401){ listenStop(''); location.href = '/login'; return }
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.bpm) $('oBpm').textContent = Math.round(j.bpm);
+    L.rtt = L.rtt * 0.8 + (performance.now() - t0) * 0.2;
+  } catch (e) {} finally { L.busy = false }
+}
+/* Battery and privacy: stop listening as soon as the page is hidden (screen off, app switch). */
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && (LS.on || LS.starting)) listenStop('Listening stopped when the screen went off. Tap Listen to start again.') });
+window.addEventListener('pagehide', () => { if (LS.on) listenStop('') });
 function powerSheet(){
   openSheet('Lights', h(`<div>
     <button class="${ST.live?'':'pri'}" style="width:100%;margin-bottom:8px" onclick="post('live',{on:${!ST.live}}).then(()=>{closeSheet();refresh()})">${ST.live?'Show on phone only (house lights off)':'Go live: light up the house'}</button>
@@ -968,7 +1147,7 @@ function paramRow(obj, p, owner){
       const r = h(`<input type="range" min="${p.min}" max="${p.max}" step="${p.step || (p.kind==='int'?1:0.01)}" value="${val(obj,p)}">`);
       r.oninput = () => { const v = p.kind==='int' ? parseInt(r.value) : +r.value; out.textContent = fmtNum(v,p); set(v) };
       el.appendChild(r);
-      if (obj.mod[p.name]) { el.classList.add('modded'); const m = obj.mod[p.name]; el.appendChild(h(`<div class="modsum">∿ ${esc(m.shape)} · ${m.sync ? m.beats+' beats' : (+m.rate).toFixed(2)+' Hz'} · depth ${Math.round(m.depth*100)}%</div>`)) }
+      if (obj.mod[p.name]) { el.classList.add('modded'); const m = obj.mod[p.name]; el.appendChild(h(`<div class="modsum">∿ ${m.source && m.source !== 'lfo' ? '🎤 music '+esc(m.source) : `${esc(m.shape)} · ${m.sync ? m.beats+' beats' : (+m.rate).toFixed(2)+' Hz'}`} · depth ${Math.round(m.depth*100)}%</div>`)) }
     } else { const i = h(`<input type="number" value="${val(obj,p)}">`); i.onchange = () => set(+i.value); el.appendChild(i) }
   } else if (p.kind === 'color'){
     const i = h(`<input type="color" value="${val(obj,p)}">`); i.oninput = () => set(i.value); top.appendChild(i);
@@ -999,13 +1178,18 @@ function modSheet(obj, p){
   if (!had) { obj.mod[p.name] = m; changed() }
   const el = h(`<div>
     <p class="help">Moves <b>${esc(p.label)}</b> automatically around its slider setting.</p>
-    <div class="grp" style="margin-top:0">Shape</div><div class="tgt" id="sh"></div>
+    <div class="grp" style="margin-top:0">Follow</div>
+    <div class="seg" id="src"><button data-v="lfo">LFO</button><button data-v="level">Loudness</button><button data-v="bass">Bass</button><button data-v="beat">Beat</button></div>
+    <div id="musBox"><p class="help">Follows the music this phone hears (Play → 🎤 Listen): the value rises from the slider setting by the depth.</p>
+      <label class="row"><input type="checkbox" id="idl"> <span>Without music, keep time with the tempo</span></label></div>
+    <div id="lfoBox">
+    <div class="grp">Shape</div><div class="tgt" id="sh"></div>
     <div class="grp">Timing</div>
     <div class="seg" id="sy"><button data-v="free">Free (Hz)</button><button data-v="sync">Tempo synced</button></div>
     <div id="rateBox" class="prm"><div class="top"><span class="lbl">Rate</span><output></output></div><input type="range" min="0" max="1" step="0.001"></div>
-    <div id="beatBox" class="tgt"></div>
+    <div id="beatBox" class="tgt"></div></div>
     <div class="prm"><div class="top"><span class="lbl">Depth</span><output></output></div><input id="dp" type="range" min="-1" max="1" step="0.01"></div>
-    <div class="prm"><div class="top"><span class="lbl">Phase</span><output></output></div><input id="ph" type="range" min="0" max="1" step="0.01"></div>
+    <div class="prm" id="phBox"><div class="top"><span class="lbl">Phase</span><output></output></div><input id="ph" type="range" min="0" max="1" step="0.01"></div>
     <button class="bad" style="width:100%;margin-top:10px" id="rm">Remove modulation</button></div>`);
   const sh = el.querySelector('#sh');
   SHAPES.forEach(s => { const b = h(`<button class="chip ${m.shape===s?'on':''}">${s}</button>`); b.onclick = () => { m.shape = s; sh.querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x===b)); changed() }; sh.appendChild(b) });
@@ -1019,6 +1203,10 @@ function modSheet(obj, p){
   BEATS.forEach(bt => { const b = h(`<button class="chip ${m.beats===bt?'on':''}">${bt<1?'1/'+(1/bt):bt} beat${bt===1?'':'s'}</button>`); b.onclick = () => { m.beats = bt; bb.querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x===b)); changed() }; bb.appendChild(b) });
   const syUI = () => { el.querySelectorAll('#sy button').forEach(b => b.classList.toggle('on', (b.dataset.v==='sync') === !!m.sync)); rb.style.display = m.sync?'none':''; bb.style.display = m.sync?'':'none' };
   el.querySelectorAll('#sy button').forEach(b => b.onclick = () => { m.sync = b.dataset.v==='sync'; syUI(); changed() }); syUI();
+  const idl = el.querySelector('#idl'); idl.checked = !!m.idle; idl.onchange = () => { m.idle = idl.checked; changed() };
+  const srcUI = () => { const s = m.source || 'lfo'; el.querySelectorAll('#src button').forEach(b => b.classList.toggle('on', b.dataset.v === s));
+    el.querySelector('#lfoBox').style.display = el.querySelector('#phBox').style.display = s === 'lfo' ? '' : 'none'; el.querySelector('#musBox').style.display = s === 'lfo' ? 'none' : '' };
+  el.querySelectorAll('#src button').forEach(b => b.onclick = () => { if (b.dataset.v === 'lfo') delete m.source; else m.source = b.dataset.v; srcUI(); changed() }); srcUI();
   const dp = el.querySelector('#dp'), dpo = dp.previousElementSibling.querySelector('output'); dp.value = m.depth; dpo.textContent = Math.round(m.depth*100)+'%';
   dp.oninput = () => { m.depth = +dp.value; dpo.textContent = Math.round(m.depth*100)+'%'; changed() };
   const ph = el.querySelector('#ph'), pho = ph.previousElementSibling.querySelector('output'); ph.value = m.phase||0; pho.textContent = Math.round((m.phase||0)*360)+'°';
@@ -1708,6 +1896,7 @@ async function security(){
   LAYOUT = await get('layout'); layoutPreview(); openStream();
   await loadPalettes(); PL = await get('playlists'); SCH = await get('schedule');
   drawPad(); await loadPresets(); plSelect(); schedForm(); await loadExtras(); await refresh(); setInterval(refresh, 2000); security();
+  const noMic = listenSupport(); if (noMic){ listenExplain(noMic); $('listenBtn').setAttribute('aria-disabled', 'true'); $('listenBtn').style.opacity = .55 }
   const t = store.get('tab', 'play'); if (t !== 'play') tabTo(t);
 })();
 </script>

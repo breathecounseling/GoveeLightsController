@@ -1,0 +1,30 @@
+{
+  "name": "Party beat",
+  "tags": [
+    "Party",
+    "Music"
+  ],
+  "layers": [
+    {
+      "effect": "beat_chase",
+      "params": {
+        "colors": ["#ff0080", "#00e5ff", "#ffd000", "#7a2cff"],
+        "background": "#06000c",
+        "spacing": 9,
+        "width": 2.5,
+        "jump": 4.5,
+        "speed": 2,
+        "flip": 8,
+        "decay": 0.22
+      },
+      "fx": [
+        {
+          "type": "trails",
+          "params": {
+            "length": 0.25
+          }
+        }
+      ]
+    }
+  ]
+}

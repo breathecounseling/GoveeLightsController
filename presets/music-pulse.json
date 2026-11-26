@@ -1,0 +1,29 @@
+{
+  "name": "Music pulse",
+  "tags": [
+    "Party",
+    "Music"
+  ],
+  "layers": [
+    {
+      "effect": "music_rows",
+      "params": {
+        "colors": ["#ff0060", "#ff7a00", "#ffd400", "#00ff7a", "#00b4ff", "#8a2cff"],
+        "height": 1.05,
+        "decay": 0.3,
+        "fall": 0.35,
+        "floor": 0.08,
+        "rest": 0.75
+      },
+      "fx": [
+        {
+          "type": "glow",
+          "params": {
+            "radius": 1,
+            "amount": 0.35
+          }
+        }
+      ]
+    }
+  ]
+}

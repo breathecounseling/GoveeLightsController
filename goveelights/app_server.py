@@ -21,7 +21,7 @@ from .controller import Controller
 from .diag_server import Server, build_report, lan_ips
 from .effects import EFFECTS, GROUP_ORDER
 from .fx import FX
-from .modulation import SHAPES
+from .modulation import SHAPES, SOURCES
 from .palettes import BUILTIN, all_palettes, categories
 from .scene import BLEND_INFO, BLENDS
 from . import calendar_builtin
@@ -234,6 +234,11 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
             if path == "/api/auth":
                 return self._json(auth.status(self))
             if path in ("/", "/index.html"):
+                if self._https():
+                    try:
+                        ctl.note_remote(self.headers.get("Host", ""))   # for the Listen hint on http
+                    except Exception:                                  # noqa: BLE001 - never block the page
+                        log.exception("could not note the remote address")
                 return self._send(200, (WEB / "app.html").read_bytes(), "text/html; charset=utf-8")
             if path in ("/diag", "/diag/"):
                 return self._send(200, (WEB / "diag.html").read_bytes(), "text/html; charset=utf-8")
@@ -248,7 +253,7 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                     return self._json({"effects": [e.to_dict() for e in EFFECTS.values()],
                                        "fx": [f.to_dict() for f in FX.values()], "blends": BLENDS,
                                        "blend_info": BLEND_INFO, "group_order": GROUP_ORDER,
-                                       "shapes": SHAPES})
+                                       "shapes": SHAPES, "mod_sources": SOURCES})
                 if path == "/api/palettes":
                     return self._json({"palettes": all_palettes(ctl.user_palettes), "builtin": list(BUILTIN),
                                        "user": list(ctl.user_palettes), "categories": categories(ctl.user_palettes)})
@@ -468,6 +473,8 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
             if a == "master":
                 ctl.set_master(b)
                 return {"ok": True}
+            if a == "beat":                        # Play -> Listen: the phone hears the music
+                return {"ok": True, **ctl.beat(b)}
             if a == "palettes":
                 pals = b["palettes"]
                 if not isinstance(pals, dict) or not all(isinstance(v, list) and v for v in pals.values()):

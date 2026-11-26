@@ -7,6 +7,7 @@ import math
 import threading
 import time
 
+from .audio import AudioState
 from .color import Color
 from .layout import Layout
 from .output import Output
@@ -55,7 +56,7 @@ class _Still:
     def __init__(self, cols):
         self.cols = list(cols)
 
-    def render(self, t, layout, master=None):
+    def render(self, t, layout, master=None, audio=None):
         return self.cols
 
 
@@ -71,6 +72,7 @@ class Engine:
         self._dither_buf = [[0.0, 0.0, 0.0] for _ in layout.pixels]
         self.overlays: dict[str, tuple] = {}   # name -> (scene, blend, opacity[, until, start, decay]): weather, pad hits
         self.dim = 1.0                          # late-night dimming from the schedule
+        self.audio = AudioState()               # music from a listening phone (POST /api/beat)
         self.hue_sweep: tuple[float, float] | None = None   # (start, seconds): one trip round the colour wheel
         self.transition = "crossfade"
         self.scene: Scene | None = None
@@ -139,7 +141,8 @@ class Engine:
                 return [(0.0, 0.0, 0.0)] * self.layout.n
             cols = [(0.0, 0.0, 0.0)] * self.layout.n
         else:
-            cols = scene.render(t, self.layout, self.master)
+            audio = self.audio.snapshot(self.wall()) if self.audio is not None else None
+            cols = scene.render(t, self.layout, self.master, audio)
         self._mixed = None
         if prev is not None and scene is not None:
             f = max(0.0, (t - fade_start) / fade_s)    # t is read before a set_scene on another thread
@@ -148,7 +151,7 @@ class Engine:
                     if self._prev is prev:
                         self._prev = None
             else:
-                old = prev.render(t, self.layout, self.master)
+                old = prev.render(t, self.layout, self.master, audio)
                 cols = self._transition(old, cols, f)
                 self._mixed = cols
         now = self.wall()
