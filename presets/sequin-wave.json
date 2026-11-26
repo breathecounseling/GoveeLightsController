@@ -1,31 +1,11 @@
 {
   "name": "Sequin wave",
-  "tags": [
-    "Sparkle",
-    "Party"
-  ],
+  "tags": ["Sparkle", "Party"],
   "layers": [
     {
       "effect": "sequins",
-      "params": {
-        "colors": [
-          "#ffd000",
-          "#7a00ff"
-        ],
-        "spacing": 110,
-        "speed": 14,
-        "ragged": 8
-      },
-      "fx": [
-        {
-          "type": "glitter",
-          "params": {
-            "density": 0.25,
-            "base": 0.85,
-            "decay": 0.15
-          }
-        }
-      ]
+      "params": {"colors": ["#ffa000", "#8a10ff"], "spacing": 110, "speed": 14, "ragged": 8, "level": 0.8},
+      "fx": [{"type": "glitter", "params": {"density": 0.25, "base": 1.0, "decay": 0.15}}]
     }
   ]
 }

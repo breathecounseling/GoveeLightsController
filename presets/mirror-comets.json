@@ -1,68 +1,27 @@
 {
   "name": "Mirror comets",
-  "tags": [
-    "Party",
-    "Holiday"
-  ],
+  "tags": ["Party", "Holiday"],
   "layers": [
-    {
-      "effect": "solid",
-      "params": {
-        "color": "#001048"
-      },
-      "target": "all"
-    },
+    {"effect": "solid", "params": {"color": "#001a90"}, "target": "all"},
     {
       "effect": "comet",
-      "params": {
-        "color": "#ffffff",
-        "tail_color": "#ff2040",
-        "tail": 8,
-        "count": 7,
-        "speed": -9,
-        "axis": "x",
-        "background": "#001048"
-      },
+      "params": {"color": "#ffffff", "tail_color": "#ff2040", "tail": 8, "count": 7, "speed": -9, "axis": "x", "background": "#000000"},
       "target": "Whole front gable",
-      "blend": "normal",
-      "fx": [
-        {
-          "type": "apex_mirror",
-          "params": {
-            "source": "right half (north)",
-            "flare": 0.6
-          }
-        }
-      ]
+      "blend": "lighten",
+      "fx": [{"type": "apex_mirror", "params": {"source": "right half (north)", "flare": 0.6}}]
     },
     {
       "effect": "comet",
-      "params": {
-        "color": "#ffd060",
-        "tail_color": "#ff3000",
-        "tail": 14,
-        "count": 2,
-        "speed": -26,
-        "axis": "x",
-        "background": "#001048"
-      },
-      "target": [
-        "North wall",
-        "Front eave",
-        "Porch",
-        "Garage"
-      ],
-      "blend": "normal",
-      "fx": [
-        {
-          "type": "apex_mirror",
-          "params": {
-            "source": "right half (north)",
-            "centre": "main gable apex",
-            "flare": 0
-          }
-        }
-      ]
+      "params": {"color": "#ffd060", "tail_color": "#ff3000", "tail": 14, "count": 4, "speed": -26, "axis": "x", "background": "#000000"},
+      "target": ["North wall", "Front eave", "Porch", "Garage"],
+      "blend": "lighten",
+      "fx": [{"type": "apex_mirror", "params": {"source": "right half (north)", "centre": "main gable apex", "flare": 0}}]
+    },
+    {
+      "effect": "comet",
+      "params": {"color": "#ffffff", "tail_color": "#ff2040", "tail": 8, "count": 2, "speed": 12, "axis": "y", "background": "#000000"},
+      "target": ["South gable", "Garage peak"],
+      "blend": "lighten"
     }
   ]
 }

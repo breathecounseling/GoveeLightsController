@@ -6,16 +6,33 @@
   ],
   "layers": [
     {
+      "effect": "solid",
+      "params": {
+        "color": "#000a2a"
+      }
+    },
+    {
       "effect": "glitter",
       "palette": "Black tie",
+      "blend": "lighten",
       "params": {
-        "level": 0.06,
-        "shimmer": 0.3,
-        "density": 0.25,
+        "level": 0,
+        "shimmer": 0,
+        "density": 0.3,
         "attack": 0.005,
-        "decay": 0.06,
+        "decay": 0.12,
         "whiteness": 1,
-        "bloom": 0.55
+        "bloom": 0.3
+      }
+    },
+    {
+      "effect": "lightning",
+      "target": "Peak",
+      "blend": "lighten",
+      "params": {
+        "color": "#ffffff",
+        "interval": 3.5,
+        "seed": 21
       }
     }
   ]

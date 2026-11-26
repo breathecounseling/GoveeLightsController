@@ -2,6 +2,22 @@
   "name": "Roller coaster",
   "tags": ["Party", "Holiday"],
   "layers": [
-    {"effect": "coaster", "target": "Eaves", "params": {}}
+    {
+      "effect": "gradient",
+      "target": "Peak",
+      "params": {"colors": ["#0018a0", "#2a0090", "#0030c0", "#1000a0"], "length": 30, "speed": 2},
+      "opacity": 0.7
+    },
+    {
+      "effect": "coaster",
+      "target": "Eaves",
+      "params": {"trail": 0.9},
+      "blend": "lighten"
+    },
+    {
+      "effect": "coaster",
+      "target": "Lower roofline",
+      "params": {"cars": 2, "colors": ["#ff20c0", "#00d0ff"], "trail": 0.9, "seed": 5}
+    }
   ]
 }

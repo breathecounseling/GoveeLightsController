@@ -8,11 +8,30 @@
     {
       "effect": "fireworks",
       "params": {
-        "rate": 22,
+        "rate": 34,
         "burst_size": 38,
-        "style": "Mixed"
+        "style": "Mixed",
+        "embers": 1.0
       },
       "target": "Whole front"
+    },
+    {
+      "effect": "glitter",
+      "params": {
+        "colors": ["#ff2020", "#20ff40", "#ffc020", "#3a8cff", "#ff40d0", "#ff7000"],
+        "level": 0.05,
+        "shimmer": 0.4,
+        "density": 0.14,
+        "attack": 0.01,
+        "decay": 0.35,
+        "whiteness": 0.3,
+        "bloom": 0.6,
+        "length": 9,
+        "speed": 3,
+        "seed": 23
+      },
+      "target": ["North wall", "Front eave", "South gable", "Lower roofline"],
+      "blend": "lighten"
     }
   ]
 }

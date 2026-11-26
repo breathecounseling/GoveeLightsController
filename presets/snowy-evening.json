@@ -6,21 +6,43 @@
   ],
   "layers": [
     {
-      "effect": "solid",
+      "effect": "gradient",
       "params": {
-        "color": "#ffb468"
+        "colors": [
+          "#ff7010",
+          "#ff5a00",
+          "#ff8a20"
+        ],
+        "length": 60,
+        "speed": 0.8
       },
-      "opacity": 0.38
+      "opacity": 0.5,
+      "target": ["Eaves", "Accent"]
+    },
+    {
+      "effect": "gradient",
+      "params": {
+        "colors": [
+          "#0020a0",
+          "#00157a",
+          "#0a28b0"
+        ],
+        "length": 40,
+        "speed": 0.6
+      },
+      "target": "Peak"
     },
     {
       "effect": "snowdrift",
       "params": {
-        "rate": 7,
+        "rate": 12,
         "sway": 0.9,
         "wind": -0.2,
         "max_snow": 0.9,
         "melt": 0.12,
-        "glisten": 0.5
+        "glisten": 0.7,
+        "color": "#ffffff",
+        "tint": 0.1
       },
       "blend": "lighten"
     }
