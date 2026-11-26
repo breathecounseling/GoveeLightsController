@@ -8,7 +8,7 @@
           "#ff2000"
         ],
         "period": 6,
-        "min": 0.55
+        "min": 0.75
       },
       "target": "Eaves"
     },
@@ -20,8 +20,9 @@
           "#00c000"
         ],
         "width": 5,
-        "blend": 0.2,
-        "speed": 2
+        "blend": 0,
+        "speed": 2,
+        "crisp": true
       },
       "target": "Accent"
     },
@@ -31,7 +32,7 @@
         "colors": [
           "#ff0000",
           "#00c000",
-          "#e0ccb8"
+          "#ffd8a0"
         ],
         "speed": 3,
         "hold": 1.5,

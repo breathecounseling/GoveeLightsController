@@ -204,6 +204,8 @@ def _sl_train(P) -> tuple[list, float, float]:
           help="white sparkles are scattered half as often as the others, keeping the trail golden"),
     Param("trail", "number", 2.6, "Trail lingers (s)", 0.3, 8, 0.1,
           help="how long the glittering sparkles behind the sleigh last"),
+    Param("trail_level", "number", 0.6, "Trail brightness", 0.2, 1, 0.05,
+          help="how bright the trail sparkles can get (kept below the sleigh by default)"),
     Param("sparkle", "number", 1.0, "Trail density", 0, 3, 0.05,
           help="how many sparkles the sleigh scatters"),
     Param("dust", "number", 0.4, "Falling stardust", 0, 1, 0.05,
@@ -307,13 +309,14 @@ def sleigh(t, ctx, P, st):
 
     # ---------------------------------------------------------- render
     tw = int(clock * 14)
+    smax = P.get("trail_level", SL_SPARK_MAX)
     trail = [BLACK] * n if st["sparks"] else None
     for s in st["sparks"]:
         u = s[1] / s[2]
         # capped below the sleigh so the sleigh, not its tail, is the brightest thing up there
-        b = (_smooth(s[1] / 0.3) * (1.0 - u) ** 1.4) * (0.45 + 0.55 * hash01(s[4], tw)) * SL_SPARK_MAX
+        b = (_smooth(s[1] / 0.3) * (1.0 - u) ** 1.4) * (0.45 + 0.55 * hash01(s[4], tw)) * smax
         if hash01(s[4], tw, 3) < 0.08:              # an occasional bright glint
-            b = min(SL_SPARK_MAX, b * 1.8 + 0.12)
+            b = min(smax, b * 1.8 + 0.12)
         c = s[3]
         geo.splat_path(trail, pth, s[0], (c[0] * b, c[1] * b, c[2] * b), 0.9)
     if trail is not None:                           # overlapping sparkles: cap the sum per bulb
@@ -321,10 +324,10 @@ def sleigh(t, ctx, P, st):
             c = trail[i]
             m = max(c)
             if m > 0:
-                k = SL_SPARK_MAX / m if m > SL_SPARK_MAX else 1.0
+                k = smax / m if m > smax else 1.0
                 # the sparkle covers the sky behind it (no change on a black sky), so a gold
                 # trail over a blue sky stays gold instead of mixing to grey-beige
-                a, cov = frame[i], 1.0 - min(1.0, m * k / SL_SPARK_MAX)
+                a, cov = frame[i], 1.0 - min(1.0, m * k / smax)
                 frame[i] = (a[0] * cov + c[0] * k, a[1] * cov + c[1] * k, a[2] * cov + c[2] * k)
     for p in st["dust"]:
         u = p[4] / p[5]
@@ -838,6 +841,11 @@ def _bd_burst(st, rng, x, y, n, speed, cols, up=False):
     Param("message_colors", "colors", ["#ffc000", "#ffffff", "#40a0ff"], "Message colours"),
     Param("wait_glow", "number", 0.14, "Waiting glow", 0, 0.8, 0.01,
           help="how bright the rest of the house glows (glow colour) while the ball waits"),
+    Param("wait_size", "number", 1.0, "Waiting ball size", 1, 3, 0.05,
+          help="how big the ball glows at the apex while it waits (it shrinks to its drop size "
+               "in the first second of the countdown)"),
+    Param("wait_pulse", "number", 0.0, "Waiting ball pulse", 0, 0.4, 0.01,
+          help="a slow breathing of the waiting ball's size"),
     Param("wait_chase", "number", 0.0, "Waiting chase", 0, 1, 0.05,
           help="slow bright bands of the glow colour travelling along the house while it waits"),
     Param("sky_color", "color", "#000000", "Gable sky",
@@ -982,6 +990,11 @@ def ball_drop(t, ctx, P, st):
         if phase == "drop":
             _bd_wait_sky(frame, st, px, P, clock, seed, 0.3, stars=False)
         size = 1.0
+        ws = P.get("wait_size", 1.0)
+        if phase == "wait":
+            size = ws * (1.0 + P.get("wait_pulse", 0.0) * math.sin(clock * 1.3))
+        elif phase == "drop" and ws > 1.0:          # shrink smoothly to the drop size
+            size = 1.0 + (ws - 1.0) * (1.0 - _smooth(N - r))
         if phase == "wait" and P["mode"] == "clock" and r < N + 60:
             size += 0.15 * math.sin(clock * 6.3)   # the last minute: the waiting ball pulses
         _bd_ball(frame, st, L, P, clock, cx, by, size, _bd_show(r) if phase == "drop" and

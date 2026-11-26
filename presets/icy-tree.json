@@ -11,8 +11,8 @@
         "colors": [
           "#ffffff"
         ],
-        "background": "#4080ff",
-        "density": 0.18,
+        "background": "#002080",
+        "density": 0.2,
         "duration": 3.0,
         "seed": 11
       },
@@ -24,14 +24,14 @@
         "Garage peak"
       ],
       "blend": "normal",
-      "opacity": 0.6
+      "opacity": 1.0
     },
     {
       "effect": "tree",
       "params": {
-        "body": "#0050ff",
-        "body2": "#0090ff",
-        "level": 0.8,
+        "body": "#0070ff",
+        "body2": "#00a8ff",
+        "level": 1.0,
         "shimmer": 0.3,
         "shade": 0.3,
         "garland": "#c0e0ff",
@@ -51,7 +51,7 @@
         "star": "#f4f8ff",
         "glow": "#2060ff",
         "glow_level": 0.6,
-        "intro": 2.5
+        "intro": 1.2
       },
       "target": "Whole front gable"
     },
@@ -59,13 +59,15 @@
       "effect": "presents",
       "params": {
         "colors": [
-          "#0050ff",
-          "#a020ff",
-          "#00c0ff",
+          "#0070ff",
+          "#c040ff",
+          "#00d0ff",
           "#40ffd0"
         ],
         "ribbon": "#ffffff",
-        "background": "#6080ff"
+        "background": "#002080",
+        "level": 0.95,
+        "size": 6
       },
       "target": "Porch"
     }

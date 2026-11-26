@@ -293,6 +293,8 @@ def sparkle(t, p, P):
     Param("width", "number", 3, "Stripe width (bulbs)", 1, 100, 1),
     Param("blend", "number", 0, "Edge softness", 0, 1, 0.05),
     P_speed(2), P_axis(),
+    Param("crisp", "bool", False, "Hard edges",
+          help="no one-bulb softening at the stripe edges (no pink in-between bulbs); stripes step bulb by bulb"),
 ], "Moving stripes of repeating colours.")
 def candy_cane(t, p, P):
     s, _ = coord(p, P["axis"])
@@ -302,6 +304,10 @@ def candy_cane(t, p, P):
     f = x - k
     c = cols[k % len(cols)]
     b = min(0.5, max(P["blend"], 0.5 / P["width"]))    # at least one bulb of edge softening, never past the middle
+    if P.get("crisp"):
+        b = min(0.5, P["blend"])
+        if b <= 0:
+            return c
     if f > 1 - b:
         return lerp(c, cols[(k + 1) % len(cols)], (f - (1 - b)) / b * 0.5)
     if f < b:

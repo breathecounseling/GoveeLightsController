@@ -54,6 +54,14 @@ SPRITES: dict[str, list[str]] = {
         "1111",
         ".11.",
     ],
+    "big egg": [
+        ".111.",
+        "11111",
+        "22222",
+        "11111",
+        "22222",
+        ".111.",
+    ],
 }
 SHAPES = list(SPRITES)
 
@@ -340,7 +348,7 @@ def floaters(t, ctx, P, st):
         if flick > 0:
             a *= 1 - flick * noise2(clock * 2.3, s["seed"] * 0.37, 5)
         c1 = cols[s["col"] % len(cols)]
-        c2 = cols[(s["col"] + 1) % len(cols)] if P["shape"] == "egg" else detail
+        c2 = cols[(s["col"] + 1) % len(cols)] if P["shape"] in ("egg", "big egg") else detail
         drawn.append((x, top, a, white, c1, c2))
 
     for r_i, row in enumerate(F["rows"]):
