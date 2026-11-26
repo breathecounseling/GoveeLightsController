@@ -1,0 +1,16 @@
+{
+  "name": "Peak picture: present",
+  "tags": [
+    "Holiday",
+    "Christmas",
+    "Peak pictures"
+  ],
+  "layers": [
+    {
+      "effect": "peak_picture",
+      "params": {
+        "style": "present"
+      }
+    }
+  ]
+}

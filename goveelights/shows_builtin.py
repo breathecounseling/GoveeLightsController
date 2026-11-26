@@ -126,6 +126,23 @@ BUILTIN_SHOWS: dict[str, dict] = {
             {"preset": "christmas-tree", "seconds": 60, "transition": "rise", "fade": 3},
         ],
     },
+    "Peak pictures": {
+        "builtin": True,
+        "description": "About 4 minutes of little pictures on the zigzag, each with its own trim on "
+                       "the eaves and porch: a wreath with a bow, a snowman, a gingerbread house, a "
+                       "present that opens, a winter star, a swinging ornament, Rudolph and JOY.",
+        "end": "resume",
+        "cues": [
+            {"preset": "peak-wreath", "seconds": 30, "transition": "black", "fade": 2},
+            {"preset": "peak-snowman", "seconds": 30, "transition": "crossfade", "fade": 2},
+            {"preset": "peak-gingerbread", "seconds": 30, "transition": "crossfade", "fade": 2},
+            {"preset": "peak-present", "seconds": 36, "transition": "crossfade", "fade": 2},
+            {"preset": "peak-star", "seconds": 30, "transition": "crossfade", "fade": 2},
+            {"preset": "peak-ornament", "seconds": 30, "transition": "crossfade", "fade": 2},
+            {"preset": "peak-rudolph", "seconds": 30, "transition": "crossfade", "fade": 2},
+            {"preset": "peak-joy", "seconds": 30, "transition": "iris", "fade": 2},
+        ],
+    },
     "Broncos touchdown": {
         "builtin": True,
         "description": "For Broncos fans, three minutes of game-day hype in orange and blue: the game-day look, "

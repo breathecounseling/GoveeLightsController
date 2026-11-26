@@ -81,6 +81,9 @@ update. The setup screen shouldn't appear. If it does, close it: **don't** run s
   Settings → Time & language, then restart the app.
 * **The phone page doesn't load**: is the app running on the PC? Is the phone on the home
   Wi-Fi, not mobile data?
+* **"The holiday calendar has an update" shows up again** (yellow) after you already
+  updated: that's the December pictures for the Christmas rotation. It doesn't change
+  tonight. Tap update or leave it for tomorrow; both are fine.
 * **Anything else, and it's close to 6 pm**: roll back (below). The old version still
   plays the Thanksgiving look; it just doesn't have the hourly show.
 
