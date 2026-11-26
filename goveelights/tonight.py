@@ -20,6 +20,7 @@ OK, WARN, FAIL = "ok", "warn", "fail"
 SEEN_FRESH_S = 11 * 60          # two discovery scans (every 5 min) without a reply = not answering
 LOG_WARN_MB, LOG_FAIL_MB = 100, 1000
 DISK_WARN_MB, DISK_FAIL_MB = 1000, 200
+NEXT_GAME_DAYS = 3              # a followed team's next game is mentioned this many days ahead
 
 
 def fmt_time(dt: datetime) -> str:
@@ -336,10 +337,10 @@ def _build(ctl, now: datetime, password_set) -> dict:
         when_on = st.get("only_when_on", True)
         name = str(st.get("show", ""))
         if when_on:
-            if not (enabled and prog):
+            if not prog:                              # schedule off: what it would do once it's on
                 continue
             ts = showtime_times(st, span_start, off)
-            if not ts:                                # would it have fired tonight, outside the lit hours?
+            if not ts and enabled:                    # would it have fired tonight, outside the lit hours?
                 noon = datetime(d.year, d.month, d.day, 12, 0).astimezone()
                 day_ts = showtime_times(st, noon, noon + timedelta(days=1))
                 if day_ts and all(t < on or t >= off for t in day_ts):
@@ -416,6 +417,11 @@ def _build(ctl, now: datetime, password_set) -> dict:
                        "celebrations when they score")
             elif v.get("error") and not v.get("id"):
                 games_out.append({"team": team, "state": "error", "text": "couldn't reach the scores"})
+            elif (kick and v.get("state") == "pre" and now < kick
+                  and kick.date() <= now.date() + timedelta(days=NEXT_GAME_DAYS)):
+                games_out.append({"team": v.get("team", team), "state": "next", "text":
+                                  f"next game: {v.get('team', team)} vs {v.get('opponent', '?')}, "
+                                  f"{kick:%a} {fmt_time(kick)}", "kickoff": kick.isoformat(timespec="minutes")})
             else:
                 games_out.append({"team": team, "state": "none", "text": "no game today"})
     plan["games"] = games_out
