@@ -168,7 +168,8 @@ class ByteOrderMarkTests(unittest.TestCase):
     def test_legacy_config_with_bom_is_migrated(self):
         from goveelights.config import Config
         p = self.write("govee_config.json", {"schedule": {"enabled": True}})
-        cfg = Config(p)
+        with mock.patch("goveelights.legacy_defaults.LEGACY_DEFAULTS", {"schedule.lat": 40.0}):   # (a public copy has none)
+            cfg = Config(p)
         self.assertIn("schedule.lat", cfg.migrated)
         self.assertEqual(Config(p).data["schedule"]["enabled"], True)      # and the rewrite reads back
 
