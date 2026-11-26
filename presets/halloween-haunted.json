@@ -1,0 +1,69 @@
+{
+  "name": "Haunted house",
+  "tags": [
+    "Holiday",
+    "Halloween"
+  ],
+  "layers": [
+    {
+      "effect": "plasma",
+      "opacity": 0.75,
+      "params": {
+        "colors": [
+          "#6000ff",
+          "#9000ff",
+          "#20ff40",
+          "#7000e0",
+          "#5000c0"
+        ],
+        "scale": 10,
+        "speed": 2
+      }
+    },
+    {
+      "effect": "floaters",
+      "target": "Whole front gable",
+      "params": {
+        "shape": "ghost",
+        "motion": "drift",
+        "colors": [
+          "#c0ffd0",
+          "#e0e8ff"
+        ],
+        "speed": 1.4,
+        "every": 5,
+        "count": 2,
+        "flicker": 0.2,
+        "pop": 0,
+        "background": "#5000c0",
+        "glow": 0.5,
+        "outline": 0.7,
+        "seed": 13,
+        "level": 1.0
+      }
+    },
+    {
+      "effect": "sparkle",
+      "target": [
+        "Flat eaves",
+        "Lower roofline"
+      ],
+      "blend": "add",
+      "params": {
+        "color": "#40ff40",
+        "rate": 6,
+        "decay": 0.12,
+        "seed": 13
+      }
+    },
+    {
+      "effect": "lightning",
+      "blend": "add",
+      "params": {
+        "color": "#e0d8ff",
+        "interval": 12,
+        "seed": 31
+      }
+    }
+  ]
+}

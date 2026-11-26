@@ -1,0 +1,53 @@
+{
+  "name": "Valentine's glow",
+  "tags": [
+    "Holiday",
+    "Valentine's"
+  ],
+  "layers": [
+    {
+      "effect": "gradient",
+      "opacity": 0.6,
+      "params": {
+        "colors": [
+          "#ff0030",
+          "#ff1a70",
+          "#ff0050",
+          "#ff3a8a"
+        ],
+        "length": 60,
+        "speed": 1.2
+      }
+    },
+    {
+      "effect": "picture",
+      "target": "Peak",
+      "params": {
+        "image": "heart",
+        "colors": [
+          "#ff0018"
+        ],
+        "background": "#701048",
+        "pulse": 0.25,
+        "period": 3.5
+      }
+    },
+    {
+      "effect": "twinkle",
+      "target": [
+        "Eaves",
+        "Lower roofline"
+      ],
+      "blend": "add",
+      "params": {
+        "colors": [
+          "#ffd0e0",
+          "#ff80b0"
+        ],
+        "density": 0.08,
+        "duration": 1.4,
+        "seed": 8
+      }
+    }
+  ]
+}

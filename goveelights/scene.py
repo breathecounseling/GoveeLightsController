@@ -71,9 +71,13 @@ def blend(mode: str, b: Color, c: Color, o: float) -> Color:
     return (b[0] + (c[0] - b[0]) * o, b[1] + (c[1] - b[1]) * o, b[2] + (c[2] - b[2]) * o)
 
 
+PALETTE_KEEP = {"background", "detail"}
+
+
 def apply_palette(fx: Effect, P: dict, pal: list[Color]):
-    """Restyle an effect's colour params from a palette (backgrounds stay)."""
-    singles = [p for p in fx.params if p.kind == "color" and p.name != "background"]
+    """Restyle an effect's colour params from a palette (backgrounds and details, e.g.
+    ghost eyes, stay)."""
+    singles = [p for p in fx.params if p.kind == "color" and p.name not in PALETTE_KEEP]
     for p in fx.params:
         if p.kind == "colors":
             P[p.name] = pal
@@ -252,6 +256,8 @@ class Scene:
                 L.clock += ldt
             P = L.resolved
             pal = master_pal or self._palette(L.palette)
+            if pal and L.blend == "mask" and li:
+                pal = None                    # a mask's colours are a stencil, not a look
             if pal:
                 P = dict(P)
                 apply_palette(L.gen, P, pal)

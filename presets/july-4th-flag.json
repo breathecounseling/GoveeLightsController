@@ -1,0 +1,47 @@
+{
+  "name": "Fourth of July flag",
+  "tags": [
+    "Holiday",
+    "July 4th"
+  ],
+  "layers": [
+    {
+      "effect": "flag",
+      "target": "Peak",
+      "params": {}
+    },
+    {
+      "effect": "twinkle",
+      "target": "Front gable outline",
+      "params": {
+        "colors": [
+          "#ffffff"
+        ],
+        "background": "#0a2cff",
+        "density": 0.3,
+        "duration": 1.8,
+        "seed": 5
+      }
+    },
+    {
+      "effect": "candy_cane",
+      "target": [
+        "North wall",
+        "Front eave",
+        "South wall",
+        "Lower roofline"
+      ],
+      "opacity": 0.6,
+      "params": {
+        "colors": [
+          "#ff0010",
+          "#c8c8d2",
+          "#0a2cff"
+        ],
+        "width": 5,
+        "blend": 0.25,
+        "speed": 0.8
+      }
+    }
+  ]
+}

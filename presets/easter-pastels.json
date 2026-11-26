@@ -1,0 +1,63 @@
+{
+  "name": "Easter pastels",
+  "tags": [
+    "Holiday",
+    "Easter"
+  ],
+  "layers": [
+    {
+      "effect": "gradient",
+      "opacity": 0.7,
+      "params": {
+        "colors": [
+          "#ff6ab4",
+          "#b080ff",
+          "#50c8ff",
+          "#50ffa0",
+          "#ffe060"
+        ],
+        "length": 45,
+        "speed": 2
+      }
+    },
+    {
+      "effect": "floaters",
+      "target": "Whole front gable",
+      "params": {
+        "shape": "egg",
+        "colors": [
+          "#ff5aa0",
+          "#9a5cff",
+          "#30d0ff",
+          "#40ff90",
+          "#ffd23c"
+        ],
+        "speed": 0.8,
+        "every": 2.6,
+        "pop": 0.6,
+        "pop_color": "#fff0ff",
+        "background": "#9a5cff",
+        "glow": 0.48,
+        "outline": 0.7,
+        "sway": 0.3,
+        "flicker": 0,
+        "seed": 3
+      }
+    },
+    {
+      "effect": "sparkle",
+      "target": [
+        "Eaves",
+        "Lower roofline"
+      ],
+      "blend": "add",
+      "opacity": 0.7,
+      "params": {
+        "color": "#fff4ff",
+        "rate": 5,
+        "decay": 0.3,
+        "seed": 12
+      }
+    }
+  ]
+}

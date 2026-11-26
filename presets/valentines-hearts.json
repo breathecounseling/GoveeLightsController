@@ -1,0 +1,53 @@
+{
+  "name": "Valentine's hearts",
+  "tags": [
+    "Holiday",
+    "Valentine's"
+  ],
+  "layers": [
+    {
+      "effect": "glitter",
+      "target": [
+        "North wall",
+        "Front eave",
+        "Porch",
+        "Garage"
+      ],
+      "params": {
+        "colors": [
+          "#ff0030",
+          "#ff1a8c",
+          "#ff0050"
+        ],
+        "sparkle": "#ffd0e0",
+        "level": 0.6,
+        "density": 0.35,
+        "length": 40,
+        "speed": 1.5,
+        "seed": 21
+      }
+    },
+    {
+      "effect": "floaters",
+      "target": "Whole front gable",
+      "params": {
+        "outline": 0.7,
+        "glow": 0.45
+      }
+    },
+    {
+      "effect": "heartbeat",
+      "target": "Both peaks",
+      "params": {
+        "colors": [
+          "#ff0030",
+          "#ff1a8c"
+        ],
+        "background": "#70001a",
+        "bpm": 58,
+        "decay": 0.22
+      },
+      "opacity": 0.7
+    }
+  ]
+}

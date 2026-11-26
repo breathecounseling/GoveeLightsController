@@ -1,0 +1,55 @@
+{
+  "name": "Thanksgiving harvest",
+  "tags": [
+    "Holiday",
+    "Thanksgiving"
+  ],
+  "layers": [
+    {
+      "effect": "gradient",
+      "opacity": 0.85,
+      "params": {
+        "colors": [
+          "#ff7a00",
+          "#ffb000",
+          "#b0102a",
+          "#ff4a00"
+        ],
+        "length": 55,
+        "speed": 1
+      }
+    },
+    {
+      "effect": "embers",
+      "target": "Whole front gable",
+      "blend": "lighten",
+      "params": {
+        "colors": [
+          "#ffb000",
+          "#ff6a00",
+          "#c02000",
+          "#a01030"
+        ],
+        "rate": 2,
+        "gravity": 6,
+        "life": 4,
+        "drift": 0.8,
+        "seed": 11
+      }
+    },
+    {
+      "effect": "twinkle",
+      "blend": "add",
+      "opacity": 0.6,
+      "params": {
+        "colors": [
+          "#ffd080",
+          "#ffb040"
+        ],
+        "density": 0.1,
+        "duration": 3,
+        "seed": 24
+      }
+    }
+  ]
+}
