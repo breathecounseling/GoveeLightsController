@@ -399,7 +399,7 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                 ctl.end_interrupt()
                 return {"ok": True}
             if a == "map/start":
-                return {"ok": True, **ctl.map_start()}
+                return {"ok": True, **ctl.map_start(float(b.get("level", 0.35)))}
             if a == "map/stop":
                 ctl.map_stop()
                 return {"ok": True}

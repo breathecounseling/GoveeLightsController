@@ -721,7 +721,7 @@ def map_cycle() -> float:
     return MAP_ON + MAP_OFF + MAP_BITS * 2 * MAP_SLOT + 0.5
 
 
-@effect("mapcode", "Mapping code", [Param("level", "number", 0.7, "Brightness", 0.1, 1, 0.05)],
+@effect("mapcode", "Mapping code", [Param("level", "number", 0.35, "Brightness", 0.05, 1, 0.05)],
         "Each bulb blinks its own binary ID for camera mapping.")
 def mapcode(t, p, P):
     """Cycle: all on, all off, then for each bit b: bulbs with bit b set, then the inverse."""

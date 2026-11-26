@@ -1052,32 +1052,51 @@ async function decodeMapVideo(blob, T, progress = () => {}){
   const mid = (hiT + loT) / 2, sc = (64*36*3) ? 1 : 1;
   for (let t = edge - 0.15; t <= edge + 0.15; t += 0.02){ await seek(t); lx.drawImage(v, 0, 0, 64, 36); const d = lx.getImageData(0, 0, 64, 36).data;
     let s2 = 0; for (let i = 0; i < d.length; i += 4) s2 += d[i] + d[i+1] + d[i+2]; if (s2 < mid * sc){ edge = t - 0.01; break } }
-  // pass 2: full-detail frames at the middle of each phase
-  const W = Math.min(800, v.videoWidth), H = Math.round(W * v.videoHeight / v.videoWidth);
+  // pass 2: full-detail frames at the middle of each phase (slots kept as bytes to save memory)
+  const W = Math.min(1280, v.videoWidth), H = Math.round(W * v.videoHeight / v.videoWidth);
   const hc = document.createElement('canvas'); hc.width = W; hc.height = H; const hx = hc.getContext('2d', {willReadFrequently: true});
   let onImg = null;
-  const grab = async (center, keep) => { const acc = new Float32Array(W*H);
+  const grab = async (center, keep, asBytes) => { const acc = new Float32Array(W*H);
     for (const o of [-0.08, 0, 0.08]){ await seek(center + o); hx.drawImage(v, 0, 0, W, H); const d = hx.getImageData(0, 0, W, H);
       if (keep && o === 0) onImg = d;
       for (let i = 0, j = 0; i < acc.length; i++, j += 4) acc[i] += (d.data[j]*0.3 + d.data[j+1]*0.59 + d.data[j+2]*0.11) / 3 }
-    return acc };
+    return asBytes ? Uint8ClampedArray.from(acc) : acc };
   const ON = await grab(edge - T.on/2, true), OFF = await grab(edge + T.off/2);
   const slots = [];
-  for (let k = 0; k < T.bits*2; k++){ slots.push(await grab(edge + T.off + k*T.slot + T.slot/2)); progress(0.45 + 0.45*(k+1)/(T.bits*2)) }
-  // find bulbs: bright in ON, dark in OFF
-  const D = new Float32Array(W*H); let mx = 0;
-  for (let i = 0; i < D.length; i++){ D[i] = Math.max(0, ON[i] - OFF[i]); if (D[i] > mx) mx = D[i] }
-  const vals = Array.from(D.filter((_, i) => i % 7 === 0)).sort((a,b) => a-b), p999 = vals[Math.floor(vals.length*.999)] || mx;
-  const thr = Math.max(12, 0.3 * p999), seen = new Uint8Array(W*H), blobs = [];
-  for (let i = 0; i < D.length; i++){
-    if (D[i] < thr || seen[i]) continue;
-    const st = [i]; seen[i] = 1; let sw = 0, sx = 0, sy = 0, n = 0;
-    while (st.length){ const q = st.pop(), x = q % W, y = (q / W) | 0, w = D[q]; sw += w; sx += x*w; sy += y*w; n++;
-      for (const nb of [q-1, q+1, q-W, q+W]) if (nb >= 0 && nb < D.length && !seen[nb] && D[nb] >= thr && Math.abs((nb % W) - x) <= 1){ seen[nb] = 1; st.push(nb) } }
-    if (n >= 2 && n < W*H/200) blobs.push({x: sx/sw, y: sy/sw, n});
+  for (let k = 0; k < T.bits*2; k++){ slots.push(await grab(edge + T.off + k*T.slot + T.slot/2, false, true)); progress(0.45 + 0.45*(k+1)/(T.bits*2)) }
+  // find bulbs as individual bright PEAKS above their local surroundings. Densely packed bulbs glow into
+  // each other and onto the siding, so "connected bright areas" would merge a whole zigzag into one blob.
+  const D = new Float32Array(W*H);
+  for (let i = 0; i < D.length; i++) D[i] = Math.max(0, ON[i] - OFF[i]);
+  const box = (src, r) => {            // fast box blur via an integral image
+    const I = new Float64Array((W+1)*(H+1));
+    for (let y = 0; y < H; y++){ let row = 0; for (let x = 0; x < W; x++){ row += src[y*W+x]; I[(y+1)*(W+1)+x+1] = I[y*(W+1)+x+1] + row } }
+    const out = new Float32Array(W*H);
+    for (let y = 0; y < H; y++){ const y0 = Math.max(0, y-r), y1 = Math.min(H, y+r+1);
+      for (let x = 0; x < W; x++){ const x0 = Math.max(0, x-r), x1 = Math.min(W, x+r+1);
+        out[y*W+x] = (I[y1*(W+1)+x1] - I[y0*(W+1)+x1] - I[y1*(W+1)+x0] + I[y0*(W+1)+x0]) / ((y1-y0)*(x1-x0)) } }
+    return out };
+  const Ds = box(D, 1), BG = box(D, Math.max(6, Math.round(W/110)));
+  const vals = Array.from(Ds.filter((_, i) => i % 11 === 0)).sort((a,b) => a-b), p999 = vals[Math.floor(vals.length*.999)] || 1;
+  const minPeak = Math.max(10, 0.12 * p999), minLift = Math.max(5, 0.06 * p999), R = 2;
+  const blobs = [];
+  for (let y = R; y < H-R; y++) for (let x = R; x < W-R; x++){
+    const i = y*W+x, v0 = Ds[i];
+    if (v0 < minPeak || v0 - BG[i] < minLift) continue;
+    let peak = true;
+    for (let dy = -R; dy <= R && peak; dy++) for (let dx = -R; dx <= R; dx++){ if ((dx || dy) && Ds[i + dy*W + dx] > v0){ peak = false; break } }
+    if (!peak) continue;
+    let sw = 0, sx = 0, sy = 0;                    // refine to a sub-pixel centre
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++){ const w = Math.max(0, D[i + dy*W + dx] - BG[i]); sw += w; sx += (x+dx)*w; sy += (y+dy)*w }
+    if (sw > 0) blobs.push({x: sx/sw, y: sy/sw, n: 1, lift: v0 - BG[i]});
   }
+  // a plateau can produce twin peaks: keep the stronger of any two closer than 3 px
+  blobs.sort((a,b) => b.lift - a.lift);
+  const kept = [];
+  for (const b of blobs) if (!kept.some(k => (k.x-b.x)**2 + (k.y-b.y)**2 < 9)) kept.push(b);
+  blobs.length = 0; blobs.push(...kept);
   const at = (img, b) => { let s3 = 0, c = 0; const cx = Math.round(b.x), cy = Math.round(b.y);
-    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++){ const x = cx+dx, y = cy+dy; if (x >= 0 && y >= 0 && x < W && y < H){ s3 += img[y*W+x]; c++ } } return s3/c };
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++){ const x = cx+dx, y = cy+dy; if (x >= 0 && y >= 0 && x < W && y < H){ s3 += img[y*W+x]; c++ } } return s3/c };
   const best = {};
   for (const b of blobs){
     const amp = at(ON, b) - at(OFF, b); b.amp = amp; if (amp <= 0) { b.ok = false; continue }
@@ -1099,6 +1118,9 @@ async function mapWizard(){
   const el = h(`<div>
     <p class="help" style="margin-top:0"><b>1.</b> Stand where you can see the part of the house you want to map, e.g. across the street facing the front gable. Landscape, no zoom, at night. Lean the phone on something so it stays still.</p>
     <p class="help"><b>2.</b> Start the pattern. The lights blink a code that repeats every 11½ seconds.</p>
+    <div class="grp" style="margin-top:4px">Blink brightness</div>
+    <div class="tgt" id="mLvl"></div>
+    <p class="help">Dim keeps each bulb a sharp point on camera (less glow onto the siding), which suits close or dense areas like the zigzag. Use brighter only if you're filming from far away.</p>
     <button class="pri" style="width:100%" id="mStart">Start the blink pattern</button>
     <p class="help">Check before recording: <b>every run should flash white together</b> about every 11 seconds. If one keeps its own colours, tap Start again (it re-takes every box).</p>
     <p class="help"><b>3.</b> Record a video of about 25 seconds (two full cycles), then come back here.</p>
@@ -1106,12 +1128,16 @@ async function mapWizard(){
     <label class="row" style="margin-top:6px"><span class="grow"><button class="sm" style="width:100%;pointer-events:none">Choose an existing video</button></span><input type="file" accept="video/*" id="mPick" style="position:absolute;opacity:0;width:1px"></label>
     <div id="mOut"></div>
     <button class="sm" style="width:100%;margin-top:10px" id="mStop">Stop the pattern</button></div>`);
-  let T = null;
-  el.querySelector('#mStart').onclick = async () => { const r = await post('map/start'); if (r){ T = r; toast('Pattern running: start recording') } };
+  let T = null, level = 0.3;
+  const lv = el.querySelector('#mLvl');
+  const drawLv = () => { lv.innerHTML = ''; [[0.15,'Very dim'],[0.3,'Dim'],[0.5,'Medium'],[0.8,'Bright']].forEach(([v,l]) => {
+    const b = h(`<button class="chip ${v===level?'on':''}">${l}</button>`); b.onclick = () => { level = v; drawLv(); if (T) post('map/start', {level}) }; lv.appendChild(b) }) };
+  drawLv();
+  el.querySelector('#mStart').onclick = async () => { const r = await post('map/start', {level}); if (r){ T = r; toast('Pattern running: start recording') } };
   el.querySelector('#mStop').onclick = () => post('map/stop').then(refresh);
   ['#mRec','#mPick'].forEach(id => { const inp = el.querySelector(id); inp.closest('label').onclick = () => inp.click(); inp.onchange = () => inp.files[0] && runDecode(inp.files[0]) });
   async function runDecode(file){
-    if (!T) T = await post('map/start');
+    if (!T) T = await post('map/start', {level});
     const out = el.querySelector('#mOut');
     out.innerHTML = '<p class="help">Reading the video on this phone…</p><div class="prog"><i></i></div>';
     try {

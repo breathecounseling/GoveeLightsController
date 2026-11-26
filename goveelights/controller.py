@@ -677,7 +677,7 @@ class Controller:
         raise ValueError(f"unknown test {kind}")
 
     # --------------------------------------------------------- mapping
-    def map_start(self) -> dict:
+    def map_start(self, level: float = 0.35) -> dict:
         from .effects import MAP_BITS, MAP_OFF, MAP_ON, MAP_SLOT, map_cycle
         with self.lock:
             if self.map_state is None:
@@ -686,7 +686,8 @@ class Controller:
                                   "speed": self.engine.master.get("speed", 1.0), "blackout": self.engine.blackout}
             self.engine.master["speed"] = 1.0
             self.engine.blackout = False
-            self.engine.set_scene(Scene.from_dict({"layers": [{"effect": "mapcode"}]}))
+            self.engine.set_scene(Scene.from_dict({"layers": [{"effect": "mapcode",
+                                                               "params": {"level": max(0.05, min(1.0, float(level)))}}]}))
             self.playing = {"kind": "event", "name": "Camera mapping pattern"}
         self.engine.set_live(True, release=True, force=True)     # every box must show the pattern
         return {"on": MAP_ON, "off": MAP_OFF, "slot": MAP_SLOT, "bits": MAP_BITS, "cycle": map_cycle(),
