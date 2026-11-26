@@ -7,10 +7,10 @@
     {
       "effect": "gradient",
       "params": {
-        "length": 90,
-        "speed": 2
+        "length": 40,
+        "speed": 6
       },
-      "palette": "Ocean",
+      "palette": "Deep sea",
       "target": [
         "North wall",
         "Front eave",
@@ -21,7 +21,7 @@
     {
       "effect": "solid",
       "params": {
-        "color": "#001250"
+        "color": "#0828a0"
       },
       "target": "Whole front gable"
     },
@@ -29,12 +29,17 @@
       "effect": "ripple",
       "params": {
         "wavelength": 12,
-        "sharpness": 0.7,
+        "sharpness": 0.8,
         "speed": 3,
         "center_x": 0.47,
-        "center_y": 1
+        "center_y": 1,
+        "colors": [
+          "#e8ffff",
+          "#00c8ff",
+          "#7020ff",
+          "#00e0c0"
+        ]
       },
-      "palette": "Ocean",
       "target": "Whole front gable",
       "blend": "lighten",
       "fx": [

@@ -3,21 +3,20 @@
   "tags": ["Party", "Holiday"],
   "layers": [
     {
-      "effect": "gradient",
+      "effect": "coaster",
       "target": "Peak",
-      "params": {"colors": ["#0018a0", "#2a0090", "#0030c0", "#1000a0"], "length": 30, "speed": 2},
-      "opacity": 0.7
+      "params": {"cars": 1, "colors": ["#ff1090"], "lift": 18, "gravity": 40, "friction": 0.04,
+                 "trail": 2.2, "ends": "wrap", "sparkle": 0.8, "seed": 3, "background": "#2a0c78", "cover": true}
     },
     {
       "effect": "coaster",
       "target": "Eaves",
-      "params": {"trail": 0.9},
-      "blend": "lighten"
+      "params": {"colors": ["#ff2040", "#00ff80", "#00c0ff"], "trail": 1.6, "background": "#260a70", "cover": true}
     },
     {
       "effect": "coaster",
       "target": "Lower roofline",
-      "params": {"cars": 2, "colors": ["#ff20c0", "#00d0ff"], "trail": 0.9, "seed": 5}
+      "params": {"cars": 2, "colors": ["#ff20c0", "#00d0ff"], "trail": 1.6, "seed": 5, "background": "#260a70", "cover": true}
     }
   ]
 }

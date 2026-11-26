@@ -6,19 +6,43 @@
   ],
   "layers": [
     {
-      "effect": "sweep",
+      "effect": "chase",
+      "target": ["Eaves", "Accent"],
       "params": {
-        "colors": ["#ff00c0", "#7000ff", "#00b0ff", "#2000ff"],
-        "arms": 3,
-        "speed": 10
+        "colors": ["#ff00c0", "#00c0ff", "#ffb000", "#ffffff", "#7000ff"],
+        "background": "#22087c",
+        "spacing": 9,
+        "width": 2,
+        "speed": 7
       },
       "fx": [
         {
           "type": "glitter",
           "params": {
-            "density": 0.35,
+            "density": 0.3,
             "decay": 0.25,
-            "base": 0.6,
+            "base": 0.85,
+            "whiteness": 0.95,
+            "bloom": 0.3
+          }
+        }
+      ]
+    },
+    {
+      "effect": "sweep",
+      "target": "Peak",
+      "params": {
+        "colors": ["#ffffff", "#00c0ff", "#ff00c0", "#ffb000"],
+        "arms": 3,
+        "speed": 25
+      },
+      "fx": [
+        {
+          "type": "glitter",
+          "params": {
+            "density": 0.5,
+            "decay": 0.25,
+            "base": 0.8,
             "whiteness": 0.95,
             "bloom": 0.4
           }

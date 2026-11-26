@@ -6,13 +6,19 @@
       "effect": "icicles",
       "target": "all",
       "params": {
-        "colors": ["#2060ff", "#40a0ff", "#1040ff"],
+        "colors": ["#2a70ff", "#50b0ff", "#1a50ff"],
         "drop_color": "#ffffff",
-        "ice": 0.85,
-        "frost": 0.6,
-        "rate": 60,
+        "ice": 1.0,
+        "frost": 0.85,
+        "rate": 90,
         "sparkle": 0.7
       }
+    },
+    {
+      "effect": "snowfall",
+      "target": "Peak",
+      "blend": "lighten",
+      "params": {"color": "#70d0ff", "density": 0.9, "fall": 1.6, "seed": 23}
     }
   ]
 }

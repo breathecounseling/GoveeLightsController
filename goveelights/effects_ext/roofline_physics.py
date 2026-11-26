@@ -21,7 +21,7 @@ import math
 import random
 
 from .. import geometry as geo
-from ..color import clamp, hash01, lerp, palette
+from ..color import BLACK, clamp, hash01, lerp, palette
 from ..effects import Param, frame_effect
 
 MAX_DT = 0.25         # longest step simulated per frame (s): fits 5x master speed at 20 fps
@@ -235,6 +235,9 @@ def _coaster_step(car, pth, P, h):
     Param("sparkle", "number", 0.6, "Speed sparkle", 0, 1, 0.05, help="sparks thrown off the wheels at top speed"),
     Param("bump", "bool", False, "Cars bump", help="cars on the same track knock into each other instead of passing through"),
     Param("background", "color", "#000000"),
+    Param("cover", "bool", False, "Cars cover the track",
+          help="cars and trails paint over the background colour instead of mixing with it, so a "
+               "red car stays red on a purple track and trails fade straight into the track"),
     Param("seed", "int", 1, "Seed", 0, 9999, 1),
 ], "Balls of light ride the roofline like a roller coaster: towed slowly up each gable, "
    "pausing at the top, then plunging down with a long glowing streak and racing across the "
@@ -242,14 +245,16 @@ def _coaster_step(car, pth, P, h):
 def coaster(t, ctx, P, state):
     layout, idx = ctx.layout, ctx.idx
     n = len(layout.pixels)
-    frame = _blank(n, P["background"])
+    bg = P["background"]
+    cover = P["cover"] and max(bg) > 0
+    frame = _blank(n, BLACK if cover else bg)
     if not idx:
         return frame
     if state.get("sig") != _signature(layout, idx) or state.get("seed") != P["seed"]:
         _coaster_reset(state, layout, idx, P)
     tracks = state["tracks"]
     if not tracks:
-        return frame
+        return _blank(n, bg)
     _coaster_sync_cars(state, P)
     cars, rng = state["cars"], state["rng"]
     fasts = _fast(state, P)
@@ -314,6 +319,11 @@ def coaster(t, ctx, P, state):
         col = lerp(cols[sk[5] % len(cols)], WHITE, 0.75)
         b = f * fl
         geo.splat_path(frame, tracks[sk[0]], sk[1], (col[0] * b, col[1] * b, col[2] * b), 0.9)
+    if cover:                       # light painted over the track: bg * (1 - a) + light
+        for i in idx:
+            c = frame[i]
+            a = min(1.0, max(c))
+            frame[i] = (bg[0] * (1 - a) + c[0], bg[1] * (1 - a) + c[1], bg[2] * (1 - a) + c[2])
     return _finish(frame, idx)
 
 

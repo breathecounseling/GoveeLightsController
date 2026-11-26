@@ -7,11 +7,13 @@
     {
       "effect": "dusk",
       "params": {
-        "clouds": 0.65,
+        "clouds": 0.5,
         "speed": 1.4,
         "sun_glow": 0.7,
-        "stars": 0.16,
-        "star_height": 0
+        "night_level": 0.9,
+        "stars": 0.3,
+        "star_height": 0.4,
+        "aurora": 1.0
       }
     }
   ]

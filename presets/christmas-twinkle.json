@@ -2,22 +2,26 @@
   "name": "Christmas gradient + twinkle",
   "layers": [
     {
-      "effect": "gradient",
+      "effect": "candy_cane",
+      "target": ["Eaves", "Accent"],
       "params": {
-        "colors": [
-          "#ff0000",
-          "#ff0000",
-          "#ff0000",
-          "#ff0000",
-          "#ff0000",
-          "#00e020",
-          "#00e020",
-          "#00e020",
-          "#00e020",
-          "#00e020"
-        ],
-        "length": 30,
+        "colors": ["#ff0000", "#00b018"],
+        "width": 6,
+        "blend": 0,
         "speed": 1.5
+      }
+    },
+    {
+      "effect": "flag",
+      "target": "Peak",
+      "params": {
+        "colors": ["#ff0000", "#00b018", "#00b018", "#00b018", "#00b018", "#ffc860"],
+        "canton_rows": 0,
+        "wave": 0.25,
+        "wavelength": 14,
+        "speed": 1.5,
+        "level": 1.0,
+        "intro": 0
       }
     },
     {

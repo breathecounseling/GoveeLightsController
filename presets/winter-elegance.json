@@ -14,9 +14,9 @@
           "#0080ff",
           "#2050ff"
         ],
-        "level": 0.55,
+        "level": 0.75,
         "width": 10,
-        "spacing": 90,
+        "spacing": 60,
         "flicker": 0.3,
         "speed": 8,
         "density": 6
@@ -41,10 +41,10 @@
       "target": "Front gable outline",
       "params": {
         "colors": [
-          "#e8f2ff"
+          "#c0e0ff"
         ],
         "period": 8,
-        "min": 0.7
+        "min": 0.85
       }
     }
   ]

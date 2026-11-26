@@ -9,9 +9,9 @@
       "effect": "gradient",
       "params": {
         "colors": [
-          "#0018a0",
-          "#00137a",
-          "#0020b0"
+          "#0028d0",
+          "#0a20b0",
+          "#0034e0"
         ],
         "length": 80,
         "speed": 1
@@ -21,9 +21,9 @@
       "effect": "gradient",
       "params": {
         "colors": [
-          "#0024a8",
-          "#0a1890",
-          "#0030b8"
+          "#0030d8",
+          "#1020b8",
+          "#0040e8"
         ],
         "length": 40,
         "speed": 0.6
@@ -33,15 +33,16 @@
     {
       "effect": "snowdrift",
       "params": {
-        "rate": 18,
+        "rate": 20,
         "size": 1.25,
-        "accumulate": 3.5,
-        "melt": 0.15,
-        "max_snow": 0.9,
+        "accumulate": 8,
+        "melt": 0.08,
+        "max_snow": 1.0,
+        "front": 0.75,
         "color": "#ffffff",
-        "tint": 0.1
+        "tint": 0
       },
-      "blend": "screen"
+      "blend": "lighten"
     }
   ]
 }
