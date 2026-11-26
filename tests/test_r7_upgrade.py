@@ -23,9 +23,17 @@ from goveelights.controller import PresetStore, migrate_presets  # noqa: E402
 from goveelights.layout import Layout  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
+from goveelights.config import HOUSE_LAYOUT as C_HOUSE  # noqa: E402
 HOUSE = ROOT / "layouts" / "examples" / "gable-house.json"
 SCENE = {"name": "Mine", "layers": [{"effect": "solid", "params": {"color": "#ff0000"}}]}
 MACS = list(json.loads(HOUSE.read_text())["devices"])
+
+
+def _need_git_checkout(test):
+    """.gitignore checks need git and a checkout (a ZIP download or a fresh export has none)."""
+    if not shutil.which("git") or subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--is-inside-work-tree"],
+                                                 capture_output=True).returncode:
+        test.skipTest("needs git and a git checkout")
 
 
 def _tmp(test) -> Path:
@@ -81,6 +89,7 @@ class SplitPresetStoreTests(unittest.TestCase):
         st = PresetStore(C.PRESETS_DIR)
         self.assertNotEqual(st.user.resolve(), C.PRESETS_DIR.resolve())
         self.assertEqual(st.user.name, "user_presets")
+        _need_git_checkout(self)
         r = subprocess.run(["git", "-C", str(ROOT), "check-ignore", "-q", "user_presets/x.json"])
         self.assertEqual(r.returncode, 0)
 
@@ -244,10 +253,10 @@ class TonightUpgradeChecks(_Denver, unittest.TestCase):
         r.ctl.cfg.data["zones"] = []
         r.ctl.build_engine()
         c = self.checks(r)["targets"]
-        self.assertEqual(c["level"], tonight.FAIL)
+        self.assertEqual(c["level"], tonight.FAIL if C_HOUSE.exists() else tonight.WARN)   # WARN: no one-tap fix
         self.assertIn("Christmas tree", c["title"])
         self.assertIn("Garage", c["detail"])
-        self.assertEqual(c["jump"], "house")
+        self.assertEqual(c["jump"], "house" if C_HOUSE.exists() else "")
         self.assertTrue(r.ctl.cfg.merge_house_layout(HOUSE))  # what the one-tap fix does
         r.ctl.build_engine()
         self.assertNotIn("targets", self.checks(r))
@@ -284,8 +293,7 @@ class OldConfigLeftovers(unittest.TestCase):
         self.assertNotIn("only_when_on", Config(p).data["visitor"])
 
     def test_atomic_save_temp_files_are_gitignored(self):
-        if not shutil.which("git"):
-            self.skipTest("needs git")
+        _need_git_checkout(self)
         for name in ("govee_config.json.k3j_x9a.tmp", "govee_auth.json.ab12cd.tmp"):
             r = subprocess.run(["git", "-C", str(ROOT), "check-ignore", "-q", name])
             self.assertEqual(r.returncode, 0, name)
