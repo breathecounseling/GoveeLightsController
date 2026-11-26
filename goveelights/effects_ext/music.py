@@ -28,11 +28,25 @@ PARTY = ["#ff0060", "#ff7a00", "#ffd400", "#00ff7a", "#00b4ff", "#8a2cff"]
 MAX_DT = 0.6
 
 
-def _new_beat(st: dict, age: float) -> bool:
-    """True on the frame a new beat starts (the time since the beat went back down)."""
+def _new_beat(st: dict, m: dict) -> bool:
+    """True on the frame a new beat starts. With the layer's beat count (pulse()'s
+    ``count``) that is when the count passes the highest one seen, so a grid that glides
+    back a little never counts a beat twice. Without it: when the time since the beat
+    wraps round (falls back by more than half), not on a small backward correction."""
+    age, cnt = m["beat_age"], m.get("count")
     prev = st.get("age")
     st["age"] = age
-    return prev is not None and age < prev - 0.03
+    if cnt is not None:
+        top = st.get("cnt")
+        if top is None or cnt < top - 4:        # first frame, or a new grid (scene rebuilt)
+            st["cnt"] = cnt
+            return False
+        if cnt > top:
+            st["cnt"] = cnt
+            return True
+        return False
+    st.pop("cnt", None)
+    return prev is not None and age < prev - 0.03 and age < prev * 0.5
 
 
 def _ease(dt: float, tau: float) -> float:
@@ -61,7 +75,7 @@ def music_rows(t, ctx, P, st):
     rows, n = F["rows"], max(1, F["n"])
     m = pulse(ctx, P["decay"], P["idle"] == "tempo", ctx.beats)
     cols = P["colors"] or [(1.0, 0.2, 0.5)]
-    if _new_beat(st, m["beat_age"]):
+    if _new_beat(st, m):
         st["k"] = st.get("k", 0) + 1
         st["from"] = st.get("cur", cols[0])
         st["since"] = 0.0
@@ -118,7 +132,7 @@ def beat_chase(t, ctx, P, st):
     dt = min(MAX_DT, max(0.0, ctx.dt))
     m = pulse(ctx, P["decay"], P["idle"] == "tempo", ctx.beats)
     d = st.get("dir", 1.0)
-    if _new_beat(st, m["beat_age"]):
+    if _new_beat(st, m):
         st["n"] = st.get("n", 0) + 1
         if P["flip"] and st["n"] % P["flip"] == 0:
             d = -d

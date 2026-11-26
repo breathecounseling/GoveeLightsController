@@ -474,7 +474,7 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                 ctl.set_master(b)
                 return {"ok": True}
             if a == "beat":                        # Play -> Listen: the phone hears the music
-                return {"ok": True, **ctl.beat(b)}
+                return {"ok": True, **ctl.beat(b, auth.client_ip(self))}
             if a == "palettes":
                 pals = b["palettes"]
                 if not isinstance(pals, dict) or not all(isinstance(v, list) and v for v in pals.values()):

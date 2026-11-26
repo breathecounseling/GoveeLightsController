@@ -282,11 +282,17 @@ class Scene:
                 ldt = 0.0
             else:
                 L.clock += ldt
-                L.beats += ldt * bpm / 60.0
-                if audio and audio.get("phase") is not None and ldt > 0:
-                    # glide the beat grid onto the music's (wrapped error, ~0.25 s time constant)
-                    err = (audio["phase"] - L.beats + 0.5) % 1.0 - 0.5
-                    L.beats += err * min(1.0, 4.0 * ldt) * audio.get("presence", 1.0)
+                if audio and audio.get("phase") is not None:
+                    # The music runs in real time whatever the master speed: while it plays
+                    # the beat grid advances with the unscaled dt and glides onto the
+                    # music's beat (wrapped error, ~0.25 s time constant).
+                    pr = max(0.0, min(1.0, float(audio.get("presence", 1.0))))
+                    L.beats += (ldt + (dt - ldt) * pr) * bpm / 60.0
+                    if dt > 0:
+                        err = (audio["phase"] - L.beats + 0.5) % 1.0 - 0.5
+                        L.beats += err * min(1.0, 4.0 * dt) * pr
+                else:
+                    L.beats += ldt * bpm / 60.0
             P = L.resolved
             pal = master_pal or self._palette(L.palette)
             if pal and L.blend == "mask" and li:

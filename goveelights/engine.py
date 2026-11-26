@@ -134,6 +134,7 @@ class Engine:
         with self._lock:
             scene, prev = self.scene, self._prev
             fade_start, fade_s = self._fade_start, self._fade_s
+        audio = self.audio.snapshot(self.wall()) if self.audio is not None else None
         if scene is None:
             # Only timed overlays (pad hits, visitor moments) play and expire over black;
             # persistent ones (weather) need a scene under them.
@@ -141,7 +142,6 @@ class Engine:
                 return [(0.0, 0.0, 0.0)] * self.layout.n
             cols = [(0.0, 0.0, 0.0)] * self.layout.n
         else:
-            audio = self.audio.snapshot(self.wall()) if self.audio is not None else None
             cols = scene.render(t, self.layout, self.master, audio)
         self._mixed = None
         if prev is not None and scene is not None:
@@ -167,7 +167,8 @@ class Engine:
                     op *= math.exp(-(now - start) / decay)
             elif scene is None:
                 continue
-            oc = sc.render(t, self.layout)
+            # overlays (pad hits, weather) keep their own look but hear the music and the tempo
+            oc = sc.render(t, self.layout, {"bpm": self.master.get("bpm", 120.0)}, audio)
             cols = [blend(mode, a, b, op) for a, b in zip(cols, oc)]
         sweep = self.hue_sweep
         if sweep:

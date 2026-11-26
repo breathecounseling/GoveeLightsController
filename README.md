@@ -180,15 +180,24 @@ password under More → Security, or with `python -m goveelights set-password`.
 microphone hears the music and the house keeps time with it:
 * The phone does the listening (Web Audio, nothing is recorded or uploaded): it finds the
   kicks from the low end (40-180 Hz spectral flux against an adaptive threshold), works out
-  the tempo from them (60-180 BPM; missed and extra hits don't throw it, and a slow song
-  counts double time), and follows the loudness and bass. About 11 small updates a second
-  go to the PC (`POST /api/beat`), with the time since the last kick and the measured
-  network delay, so the beat lines up on the house.
-* The detected tempo becomes the master tempo (the one *Tap tempo* sets, not saved), and
-  every tempo-synced LFO glides onto the music's beat.
+  the tempo from them (60-180 BPM; missed and extra hits don't throw it, syncopated kicks
+  settle on the beat, a slow song counts double time and a very fast one half time), locks
+  onto the beat (an off-beat bass line doesn't pull it), and follows the loudness and bass.
+  About 11 small updates a second go to the PC (`POST /api/beat`), with the time since the
+  last kick and the measured network delay; the PC phase-locks its own beat grid to them,
+  so jitter doesn't reach the lights.
+* **Sync offset** (under Listen, saved): the lights run this far ahead of the music to make
+  up for the microphone, a frame of rendering and the Govee controllers (default +70 ms).
+  If the house flashes after the kick, move it right; before the kick, left.
+* The detected tempo becomes the master tempo (the one *Tap tempo* sets; never saved, so
+  your own tap tempo comes back after a restart), and every tempo-synced LFO glides onto
+  the music's beat, whatever the master Speed.
 * Effects see the music for about 2 seconds after the last update, then it fades out in a
-  second, so nothing sticks if the phone locks. Listening stops by itself when the screen
-  goes off or you switch apps (battery); tap Listen again to restart.
+  second, so nothing sticks if the phone locks. In a quiet room or between songs the
+  effects go back to the master tempo. The screen is kept on while listening (where the
+  browser allows it; otherwise the app asks you to keep it on); listening stops by itself
+  when the screen goes off or you switch apps (battery); tap Listen again to restart.
+  Several phones can listen at once: the first one leads until it stops.
 * **Presets:** *Music pulse* (the gable zigzag is a bass meter: rows light from the bottom
   up on every kick, flash and change colour on the beat, the apex flashes white) and
   *Party beat* (dots that jump ahead on every beat and turn round every 8 beats). Both keep
