@@ -62,6 +62,27 @@ what is below what). They are plug-ins in `goveelights/effects_ext/`:
   step, and each run has a colour-match trim (Colour match in settings, with a white test)
   so the three boxes show the same white.
 
+* **Santa's sleigh:** a sleigh led by reindeer (red nose in front) flies over both gables
+  with a glittering trail. **Dripping icicles:** drops slide down the slopes, fall off the
+  eaves and splash on the porch line. **New Year's ball drop:** the ball leaves the apex
+  star and drops down the zigzag with the last seconds as big digits, then bursts. Use
+  *Ball drop at midnight* (clock mode, lands at local midnight: the PC must be on Mountain
+  time) or *Ball drop (preview loop)* to try it.
+
+**The nightly experience:**
+* **Dusk intro** (Shows → Schedule → *Dusk intro*, minutes): when the lights come on at
+  sunset, the house plays *Sky at dusk* for that long, then crossfades into the usual
+  program. Anything you play by hand ends it.
+* **Scoreboard during games** (Live → Game day → *Scoreboard every*): while your team is
+  playing, the score scrolls on the zigzag in team colours every N minutes for a few
+  seconds. Touchdown celebrations still take priority.
+* **Built-in shows:** *Christmas Eve spectacular* (about 9 min), *New Year's Eve countdown*
+  (ends exactly at midnight when played within 20 minutes of it) and *Winter wonderland
+  loop*. Play them as they are or copy one and edit the copy. To run the New Year's show
+  automatically, add a showtime at 23:55 with date `12-31` and "only when on" unticked
+  (it switches the lights on for the show if needed). See `goveelights/shows_builtin.py`.
+* **Featured tonight** (top of Play): the big scenes in one swipeable row.
+
 Preview any effect or preset on the house without lights:
 `python tools/preview.py christmas-tree --seconds 8 --out preview` writes `preview.html`/`.png`.
 
