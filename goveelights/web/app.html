@@ -139,6 +139,17 @@ h2 .sp{flex:1}
 .evt{background:var(--p2);border:1px solid var(--line);border-radius:12px;padding:8px;margin-bottom:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .evt .full{grid-column:1/-1}
 .evt label{font-size:12px;color:var(--dim)}
+.pad{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.pad button{padding:16px 4px;font-weight:700;font-size:13px;border-radius:14px;user-select:none;-webkit-user-select:none}
+.pad button.hold{background:#2e1065;border-color:#7c3aed}
+.pad button.act{filter:brightness(1.8)}
+.cue{display:grid;grid-template-columns:1fr;gap:6px;background:var(--p2);border:1px solid var(--line);border-radius:12px;padding:8px;margin-bottom:8px}
+.cue .full{grid-column:1/-1}
+.cue .row{gap:6px}
+.days{display:flex;gap:4px;flex-wrap:wrap}
+.days button{padding:4px 7px;font-size:12px;border-radius:8px}
+.days button.on{background:#1e3a5f;border-color:var(--blue)}
+#qr canvas,#qr img{display:block;margin:8px auto;background:#fff;padding:10px;border-radius:12px;max-width:220px;width:100%;image-rendering:pixelated}
 .grp{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin:12px 0 6px}
 #toast{position:fixed;left:50%;bottom:calc(76px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#2c3542;padding:8px 14px;border-radius:10px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;z-index:60;font-size:14px}
 #toast.show{opacity:1}
@@ -179,6 +190,11 @@ h2 .sp{flex:1}
     <div class="grp" style="margin-top:8px">Restyle with a palette</div>
     <div id="palChips" class="chips"></div>
   </div>
+  <div class="card">
+    <h2><span class="sp">Performance pad</span><span class="dim" style="font-size:12px;font-weight:400">purple = hold</span></h2>
+    <div class="pad" id="pad"></div>
+    <div class="row" style="margin-top:8px"><span class="dim" style="font-size:13px">Wash colour</span><input type="color" id="washC" value="#ff2000"></div>
+  </div>
   <div class="chips" id="filters" style="margin-bottom:10px"></div>
   <div id="presetGrid" class="grid"></div>
   <h2 style="margin-top:16px">Playlists</h2>
@@ -201,11 +217,24 @@ h2 .sp{flex:1}
 
 <!-- SHOWS -->
 <section id="s-shows">
-  <div class="seg" id="showSeg"><button data-v="lists" class="on">Playlists</button><button data-v="sched">Schedule</button><button data-v="live">Live</button></div>
+  <div class="seg" id="showSeg"><button data-v="lists" class="on">Playlists</button><button data-v="shows">Shows</button><button data-v="sched">Schedule</button><button data-v="live">Live</button></div>
   <div id="v-lists">
     <div class="card">
       <div class="row"><select id="plSel" class="grow" onchange="plPick(this.value)"></select><button onclick="plNew()">New</button></div>
       <div id="plEd" style="margin-top:10px"></div>
+    </div>
+  </div>
+  <div id="v-shows" style="display:none">
+    <div class="card">
+      <p class="help" style="margin-top:0">A show is a sequence of presets with transitions between them: a wipe across the house, a rise up the gable, a flash… It takes over, then hands back to whatever was playing.</p>
+      <div class="row"><select id="shSel" class="grow" onchange="shPick(this.value)"></select><button onclick="shNew()">New</button></div>
+      <div id="shEd" style="margin-top:10px"></div>
+    </div>
+    <div class="card">
+      <h2>Showtimes</h2>
+      <p class="help">Run a show automatically, e.g. every hour on the hour from 5 to 10 pm. Showtimes only play while the lights are on (schedule or Live).</p>
+      <div id="stList"></div><button class="sm" onclick="addShowtime()">+ Showtime</button>
+      <button class="pri" style="width:100%;margin-top:8px" onclick="saveExtras('showtimes')">Save showtimes</button>
     </div>
   </div>
   <div id="v-live" style="display:none">
@@ -226,6 +255,16 @@ h2 .sp{flex:1}
       <div id="wStatus" class="help" style="margin-top:8px"></div>
       <div class="row wrap"><button class="sm" onclick="post('live/test',{kind:'snow'})">Test snow</button><button class="sm" onclick="post('live/test',{kind:'rain'})">Test rain</button><button class="sm" onclick="post('live/test',{kind:'storm'})">Test lightning</button><button class="sm" onclick="post('live/test',{kind:'wind'})">Test wind</button></div>
       <button class="pri" style="width:100%;margin-top:8px" onclick="saveExtras('weather')">Save weather</button></div>
+    <div class="card"><h2><span class="sp">Visitor page (QR sign)</span><input type="checkbox" id="vEn"></h2>
+      <p class="help">Neighbours scan a sign in your yard and pick from presets you choose here. Their pick plays for a while, then the lights go back to normal. They can't see or change anything else. The link has a secret code; "New link" makes old signs stop working.</p>
+      <input type="text" id="vTitle" placeholder="Title (e.g. Pick the lights!)" style="margin-bottom:6px"><input type="text" id="vMsg" placeholder="Message (e.g. Happy holidays from the Smiths!)">
+      <div class="grp">Presets visitors can pick</div><div class="tgt" id="vPresets"></div>
+      <div class="prm"><div class="top"><span class="lbl">Each pick plays for</span><output id="vSecV"></output></div><input type="range" id="vSec" min="20" max="300" step="10"></div>
+      <div class="prm"><div class="top"><span class="lbl">One pick per person every</span><output id="vCdV"></output></div><input type="range" id="vCd" min="30" max="600" step="30"></div>
+      <label class="row" style="margin:6px 0"><input type="checkbox" id="vSp"> <span>"Make it sparkle" button</span></label>
+      <div id="vLink" class="help"></div><div id="qr"></div>
+      <div class="row wrap"><button class="pri" onclick="saveVisitor()">Save</button><button onclick="printSign()">Print sign</button><button class="sm" onclick="saveVisitor(true)">New link</button></div>
+    </div>
   </div>
   <div id="v-sched" style="display:none">
     <div class="card" id="schedStatus"></div>
@@ -238,7 +277,14 @@ h2 .sp{flex:1}
       <div class="row" style="margin-top:8px"><span style="width:56px">Play</span><select id="scDefault" class="grow"></select></div>
       <p class="help">…unless a date rule matches (first match wins; ranges can wrap the year).</p>
       <div id="rules"></div>
-      <div class="row"><button onclick="addRule()">+ Date rule</button><button class="pri" style="margin-left:auto" onclick="saveSchedule()">Save schedule</button></div>
+      <p class="help">Dates can be MM-DD or a holiday: <code>thanksgiving</code>, <code>easter</code>, <code>mothers-day</code>, <code>fathers-day</code>, <code>memorial-day</code>, <code>labor-day</code>, <code>mlk-day</code>, <code>presidents-day</code>, with an offset like <code>thanksgiving+1</code>. Leave the dates empty and pick days for a weekly rule (e.g. stay on later Fri/Sat).</p>
+      <button onclick="addRule()">+ Rule</button>
+      <div class="grp">Late-night dimming</div>
+      <label class="row"><input type="checkbox" id="dmEn"> <span>Dim from</span> <input type="time" id="dmFrom" style="width:auto"> <span>to</span> <input type="number" id="dmLvl" min="5" max="100" step="5" style="width:70px"> <span>%</span></label>
+      <div class="grp">Morning</div>
+      <label class="row wrap"><input type="checkbox" id="mnEn"> <span>Also on from</span> <input type="time" id="mnOn" style="width:auto"> <span>until</span>
+        <select id="mnOff" style="width:auto"><option value="sunrise">sunrise</option><option value="time">a time</option></select><input type="time" id="mnOffT" style="width:auto"></label>
+      <div class="row" style="margin-top:10px"><button class="pri grow" onclick="saveSchedule()">Save schedule</button></div>
       <details style="margin-top:10px"><summary class="dim">Location (for sunset)</summary>
         <div class="row" style="margin-top:6px"><input id="scLat" type="number" step="0.0001"><input id="scLon" type="number" step="0.0001"></div></details>
     </div>
@@ -256,6 +302,9 @@ h2 .sp{flex:1}
     <div class="knob"><label>Frame rate</label><select id="fps" onchange="post('settings',{fps:+this.value})"><option>10</option><option>15</option><option>20</option><option>25</option><option>30</option></select><span></span></div>
     <div class="knob"><label>Gamma</label><input id="gamma" type="range" min="1" max="2.8" step="0.1"><output id="oGamma"></output></div>
     <p class="help">Gamma 1.0 = off; ~2.2 if mid colours look washed out on the bulbs.</p>
+    <label class="row" style="margin-top:8px"><input type="checkbox" id="shEn" onchange="post('settings',{self_heal:this.checked})"> <span>Self-healing: re-take control if a box drops out (power blip, Govee app)</span></label>
+    <div class="knob"><label>Re-enable every</label><select id="reEn" onchange="post('settings',{reenable_min:+this.value})"><option value="0">never</option><option value="5">5 min</option><option value="15">15 min</option><option value="60">hour</option></select><span></span></div>
+    <p class="help">Only turn on "re-enable every" if re-sending realtime doesn't make your boxes blink (try Enable realtime twice in diagnostics).</p>
   </div>
   <div class="card">
     <h2>Map the bulbs with your camera</h2>
@@ -290,6 +339,7 @@ h2 .sp{flex:1}
 <div class="sheet" id="sheet"><div class="grab"></div><h3><span id="sheetTitle"></span><button class="sm ghost" onclick="closeSheet()">Done</button></h3><div id="sheetBody"></div></div>
 <div id="toast"></div>
 
+<script src="/static/qrcode.js"></script>
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
@@ -322,7 +372,7 @@ function openSheet(title, body){ $('sheetTitle').textContent = title; const sb=$
 function closeSheet(){ $('sheet').classList.remove('on'); $('scrim').classList.remove('on') }
 document.querySelectorAll('#showSeg button').forEach(b => b.onclick = () => {
   document.querySelectorAll('#showSeg button').forEach(x => x.classList.toggle('on', x===b));
-  ['lists','sched','live'].forEach(v => $('v-'+v).style.display = b.dataset.v===v ? '' : 'none');
+  ['lists','shows','sched','live'].forEach(v => $('v-'+v).style.display = b.dataset.v===v ? '' : 'none');
 });
 
 // ------------------------------------------------------------- preview
@@ -416,6 +466,9 @@ async function refresh(){
   setKnob('gamma','oGamma', s.gamma, v => (+v).toFixed(1));
   const b = [];
   if (s.interrupt) b.push(`<div class="banner">Playing <b>${esc(s.interrupt.label)}</b> (${s.interrupt.left}s left), then back to what was on. <button class="sm" onclick="post('interrupt/end').then(refresh)">End now</button></div>`);
+  if (s.dim && s.dim < 0.99) b.push(`<div class="banner" style="background:#1e293b;border-color:var(--line)">Late-night dimming: ${Math.round(s.dim*100)}%</div>`);
+  const sick = Object.entries(s.health||{}).filter(([,h]) => h.paused);
+  if (sick.length) b.push(`<div class="banner">Self-healing paused for ${esc(sick.map(x=>x[0]).join(', '))}: its status keeps changing on its own. Tell Claude!</div>`);
   if (s.mapping) b.push(`<div class="banner">The camera-mapping pattern is running. <button class="sm" onclick="post('map/stop').then(refresh)">Stop it</button></div>`);
   if (s.diag_active) b.push(`<div class="banner">Diagnostics paused the effects. <button class="sm" onclick="post('diag/exit').then(refresh)">Resume effects</button></div>`);
   if (!s.runs.length) b.push(`<div class="banner">No runs have a confirmed bulb count. Open <a href="/diag">diagnostics</a>.</div>`);
@@ -890,14 +943,26 @@ function progOpts(sel){ const k = sel ? (sel.playlist ? 'playlist:'+sel.playlist
   return opt('','(lights off)',k==='') + '<optgroup label="Playlists">' + Object.keys(PL).map(n => opt('playlist:'+n,n,k==='playlist:'+n)).join('') + '</optgroup><optgroup label="Presets">' + PRESETS.map(p => opt('preset:'+p.id,p.name,k==='preset:'+p.id)).join('') + '</optgroup>' }
 const progVal = v => !v ? null : (v.startsWith('playlist:') ? {playlist:v.slice(9)} : {preset:v.slice(7)});
 function schedForm(){ const s = SCH; $('scEn').checked = !!s.enabled; $('scOn').value = s.on||'sunset'; $('scOffset').value = s.on_offset_min??0; $('scOnTime').value = s.on_time||'17:00'; $('scOff').value = s.off_time||'23:00';
-  $('scDefault').innerHTML = progOpts(s.default); $('scLat').value = s.lat??40.3764; $('scLon').value = s.lon??-104.6922; drawRules(); scUI() }
+  $('scDefault').innerHTML = progOpts(s.default); $('scLat').value = s.lat??40.3764; $('scLon').value = s.lon??-104.6922; drawRules(); scUI();
+  const dm = s.dim||{}, mn = s.morning||{}; $('dmEn').checked = !!dm.enabled; $('dmFrom').value = dm.from||'22:00'; $('dmLvl').value = Math.round((dm.level??0.5)*100);
+  $('mnEn').checked = !!mn.enabled; $('mnOn').value = mn.on_time||'06:00'; $('mnOff').value = mn.off||'sunrise'; $('mnOffT').value = mn.off_time||'07:30' }
 function scUI(){ const sun = $('scOn').value==='sunset'; $('scOffW').style.display = sun?'':'none'; $('scOnTime').style.display = sun?'none':'' }
 function drawRules(){ const rs = SCH.rules = SCH.rules || [];
-  $('rules').innerHTML = rs.map((r,k) => `<div class="rule"><input type="text" class="full" placeholder="Name" value="${esc(r.name)}" data-r="${k}" data-f="name"><input type="text" placeholder="from MM-DD" value="${esc(r.from)}" data-r="${k}" data-f="from"><input type="text" placeholder="to MM-DD" value="${esc(r.to)}" data-r="${k}" data-f="to"><select class="full" data-r="${k}" data-f="program">${progOpts(r.program)}</select><button class="sm bad" data-del="${k}">Remove</button></div>`).join('');
-  $('rules').querySelectorAll('[data-f]').forEach(el => el.onchange = () => { const r = rs[+el.dataset.r]; r[el.dataset.f] = el.dataset.f==='program' ? progVal(el.value) : el.value.trim() });
+  const D = ['Mo','Tu','We','Th','Fr','Sa','Su'];
+  $('rules').innerHTML = rs.map((r,k) => `<div class="rule"><input type="text" class="full" placeholder="Name" value="${esc(r.name)}" data-r="${k}" data-f="name"><input type="text" placeholder="from (MM-DD / holiday)" value="${esc(r.from||'')}" data-r="${k}" data-f="from"><input type="text" placeholder="to" value="${esc(r.to||'')}" data-r="${k}" data-f="to">
+     <div class="full days">${D.map((d,i) => `<button class="${(r.days||[]).includes(i)?'on':''}" data-r="${k}" data-day="${i}">${d}</button>`).join('')}<span class="dim" style="font-size:11px;align-self:center;margin-left:4px">days (none = every day)</span></div>
+     <div><label class="dim" style="font-size:11px">On time (optional)</label><input type="time" value="${esc(r.on_time||'')}" data-r="${k}" data-f="on_time"></div><div><label class="dim" style="font-size:11px">Off time (optional)</label><input type="time" value="${esc(r.off_time||'')}" data-r="${k}" data-f="off_time"></div>
+     <select class="full" data-r="${k}" data-f="program"><option value="-">(keep the usual program)</option>${progOpts(r.program)}</select><button class="sm bad" data-del="${k}">Remove</button></div>`).join('');
+  $('rules').querySelectorAll('[data-day]').forEach(b => b.onclick = () => { const r = rs[+b.dataset.r], d = +b.dataset.day; r.days = r.days||[]; r.days = r.days.includes(d) ? r.days.filter(x=>x!==d) : [...r.days, d].sort(); drawRules() });
+  $('rules').querySelectorAll('select[data-f=program]').forEach(sel => { const r = rs[+sel.dataset.r]; if (r.program === undefined || r.program === null && r._keep) sel.value = '-' });
+  $('rules').querySelectorAll('[data-f]').forEach(el => el.onchange = () => { const r = rs[+el.dataset.r], f = el.dataset.f;
+    if (f === 'program'){ if (el.value === '-') delete r.program; else r.program = progVal(el.value) } else { const v = el.value.trim(); if (v) r[f] = v; else delete r[f] } });
   $('rules').querySelectorAll('[data-del]').forEach(b => b.onclick = () => { rs.splice(+b.dataset.del,1); drawRules() }) }
-function addRule(){ SCH.rules.push({name:'', from:'12-01', to:'12-31', program:null}); drawRules() }
-async function saveSchedule(){ for (const r of SCH.rules) if (!/^\d{2}-\d{2}$/.test(r.from) || !/^\d{2}-\d{2}$/.test(r.to)) return toast('Dates must look like 12-01');
+function addRule(){ SCH.rules.push({name:'', from:'12-01', to:'12-31'}); drawRules() }
+const DATE_RE = /^(\d{1,2}-\d{1,2}|(thanksgiving|easter|mothers-day|fathers-day|memorial-day|labor-day|mlk-day|presidents-day)([+-]\d+)?)$/i;
+async function saveSchedule(){ for (const r of SCH.rules){ if ((r.from || r.to) && (!DATE_RE.test(r.from||'') || !DATE_RE.test(r.to||''))) return toast('Dates: MM-DD or a holiday like thanksgiving+1'); if (!r.from && !r.to && !(r.days||[]).length) return toast('Give each rule dates or days') }
+  SCH.dim = {enabled: $('dmEn').checked, from: $('dmFrom').value || '22:00', level: (+$('dmLvl').value || 50)/100, fade_min: (SCH.dim||{}).fade_min || 30};
+  SCH.morning = {...(SCH.morning||{}), enabled: $('mnEn').checked, on_time: $('mnOn').value || '06:00', off: $('mnOff').value, off_time: $('mnOffT').value || '07:30'};
   Object.assign(SCH, {enabled:$('scEn').checked, on:$('scOn').value, on_offset_min:+$('scOffset').value, on_time:$('scOnTime').value, off_time:$('scOff').value, default:progVal($('scDefault').value), lat:+$('scLat').value, lon:+$('scLon').value});
   if (await post('schedule',{schedule:SCH})){ toast('Schedule saved'); setTimeout(refresh,300) } }
 const tfmt = iso => iso ? new Date(iso).toLocaleString([], {weekday:'short', hour:'numeric', minute:'2-digit'}) : '';
@@ -1067,7 +1132,8 @@ async function mapWizard(){
 
 // ------------------------------------------------------------- live: events, game day, weather
 let EXTRAS = {};
-async function loadExtras(){ EXTRAS = await get('extras'); drawEvents(); drawGame(); drawWeather() }
+async function loadExtras(){ EXTRAS = await get('extras'); drawEvents(); drawGame(); drawWeather(); shSelect(); drawVisitor();
+  $('shEn').checked = EXTRAS.self_heal !== false; setSel($('reEn'), String(EXTRAS.reenable_min || 0)) }
 function drawEvents(){
   const box = $('evList'); box.innerHTML = '';
   EXTRAS.events.forEach((ev, k) => {
@@ -1116,6 +1182,96 @@ function liveStatus(){
   if ($('wStatus')) $('wStatus').innerHTML = w.error ? `Couldn't reach the forecast: ${esc(w.error)}` : w.text ? `Now: <b>${esc(w.text)}</b>, ${Math.round(w.temp_f)}°F, wind ${Math.round(w.wind_mph)} mph` + (ST.overlays?.length ? ` · showing: ${ST.overlays.join(', ')}` : '') : (ST.overlays?.length ? 'Showing: ' + ST.overlays.join(', ') : '');
 }
 
+// ------------------------------------------------------------- performance pad
+const PAD = [['flash','⚡ Flash'],['strobe','◎ Strobe','hold'],['blackout','■ Black','hold'],['sparkle','✨ Sparkle'],
+             ['fireworks','🎆 Fireworks'],['comet','☄ Comets'],['hue','🌈 Hue sweep'],['wash','🎨 Wash']];
+function drawPad(){
+  const box = $('pad'); box.innerHTML = '';
+  PAD.forEach(([a, l, hold]) => { const b = h(`<button class="${hold?'hold':''}">${l}</button>`);
+    if (hold){
+      const on = e => { e.preventDefault(); b.classList.add('act'); post('pad',{action:a, on:true}) };
+      const off = () => { if (!b.classList.contains('act')) return; b.classList.remove('act'); post('pad',{action:a, on:false}) };
+      b.addEventListener('pointerdown', on); ['pointerup','pointerleave','pointercancel'].forEach(ev => b.addEventListener(ev, off));
+      b.oncontextmenu = e => e.preventDefault();
+    } else b.onclick = () => post('pad', {action:a, color: $('washC').value});
+    box.appendChild(b) });
+}
+
+// ------------------------------------------------------------- shows
+let shCur = null;
+const TRANS_LABEL = {cut:'Cut', crossfade:'Crossfade', wipe:'Wipe →', 'wipe-back':'Wipe ←', rise:'Rise up', iris:'Iris from apex', flash:'Flash', black:'Through black'};
+function shSelect(){ const names = Object.keys(EXTRAS.shows||{}); if (!shCur || !EXTRAS.shows[shCur]) shCur = names[0] || null;
+  $('shSel').innerHTML = names.map(n => opt(n,n,n===shCur)).join('') || '<option value="">No shows yet</option>'; shEditor(); drawShowtimes() }
+function shPick(n){ shCur = n; shEditor() }
+function shNew(){ const n = prompt('Show name'); if (!n) return; EXTRAS.shows[n] = {end:'resume', cues:[]}; shCur = n; shSelect() }
+function shEditor(){
+  const box = $('shEd'); if (!shCur){ box.innerHTML = ''; return }
+  const sh = EXTRAS.shows[shCur], total = sh.cues.reduce((a,c) => a + (+c.seconds||0), 0);
+  box.innerHTML = `<div id="cues"></div><button class="sm" id="cAdd">+ Cue</button>
+    <div class="row" style="margin-top:10px"><span class="dim" style="font-size:13px">When it ends</span><select id="shEnd" style="width:auto">${opt('resume','go back to what was playing',sh.end!=='loop')}${opt('loop','loop forever',sh.end==='loop')}</select></div>
+    <p class="help">Total ${Math.floor(total/60)}m ${total%60}s</p>
+    <div class="row"><button class="pri" id="shSave">Save</button><button id="shPlay">▶ Play now</button><button class="bad sm" id="shDel" style="margin-left:auto">Delete</button></div>`;
+  const cb = box.querySelector('#cues');
+  sh.cues.forEach((c, k) => { const el = h(`<div class="cue"><select class="full" data-f="preset">${PRESETS.map(p => opt(p.id, p.name, p.id===c.preset)).join('')}</select>
+      <div class="full row"><div class="grow"><label class="dim" style="font-size:11px">${k+1}. Transition in</label><select data-f="transition">${(EXTRAS.transitions||[]).map(t => opt(t, TRANS_LABEL[t]||t, t===(c.transition||'crossfade'))).join('')}</select></div>
+        <div style="width:70px"><label class="dim" style="font-size:11px">over (s)</label><input type="number" data-f="fade" min="0" max="10" step="0.5" value="${c.fade??1.5}"></div>
+        <div style="width:70px"><label class="dim" style="font-size:11px">then hold (s)</label><input type="number" data-f="seconds" min="2" max="600" step="1" value="${c.seconds??20}"></div></div>
+      <div class="row full"><span class="grow"></span><button class="sm" data-a="up" ${k?'':'disabled'}>↑</button><button class="sm" data-a="down" ${k<sh.cues.length-1?'':'disabled'}>↓</button><button class="sm bad" data-a="del">✕</button></div></div>`);
+    el.querySelectorAll('[data-f]').forEach(i => i.onchange = () => { const f = i.dataset.f; c[f] = i.type==='number' ? +i.value : i.value; if (f==='seconds') shEditor() });
+    el.querySelectorAll('[data-a]').forEach(b => b.onclick = () => { const a = b.dataset.a, cs = sh.cues;
+      if (a==='up') [cs[k-1],cs[k]] = [cs[k],cs[k-1]]; if (a==='down') [cs[k+1],cs[k]] = [cs[k],cs[k+1]]; if (a==='del') cs.splice(k,1); shEditor() });
+    cb.appendChild(el) });
+  box.querySelector('#cAdd').onclick = () => { sh.cues.push({preset: PRESETS[0]?.id, seconds: 20, transition: 'crossfade', fade: 1.5}); shEditor() };
+  box.querySelector('#shEnd').onchange = e => sh.end = e.target.value;
+  box.querySelector('#shSave').onclick = () => saveExtras('shows').then(drawShowtimes);
+  box.querySelector('#shPlay').onclick = async () => { await saveExtras('shows'); post('show/play',{name:shCur}).then(refresh) };
+  box.querySelector('#shDel').onclick = async () => { if (!confirm('Delete show '+shCur+'?')) return; delete EXTRAS.shows[shCur]; shCur = null; await saveExtras('shows'); shSelect() };
+}
+function drawShowtimes(){
+  const box = $('stList'); box.innerHTML = ''; const D = ['Mo','Tu','We','Th','Fr','Sa','Su'];
+  (EXTRAS.showtimes ||= []).forEach((st, k) => { const el = h(`<div class="evt">
+      <div class="full"><label>Show</label><select data-f="show">${Object.keys(EXTRAS.shows||{}).map(n => opt(n,n,n===st.show)).join('')}</select></div>
+      <div><label>From</label><input type="time" data-f="from" value="${esc(st.from||'17:00')}"></div><div><label>To</label><input type="time" data-f="to" value="${esc(st.to||'22:00')}"></div>
+      <div class="full"><label>Every</label><select data-f="every">${[[15,'15 minutes'],[30,'30 minutes'],[60,'hour'],[120,'2 hours']].map(([v,l]) => opt(v,l,+st.every===v)).join('')}</select></div>
+      <div class="full days">${D.map((d,i) => `<button class="${(st.days||[]).includes(i)?'on':''}" data-day="${i}">${d}</button>`).join('')}<span class="dim" style="font-size:11px;align-self:center;margin-left:4px">(none = every day)</span></div>
+      <label class="row"><input type="checkbox" data-f="enabled" ${st.enabled!==false?'checked':''}> On</label><button class="sm bad" data-del>Remove</button></div>`);
+    el.querySelectorAll('[data-f]').forEach(i => i.onchange = () => { const f = i.dataset.f; st[f] = i.type==='checkbox' ? i.checked : f==='every' ? +i.value : i.value });
+    el.querySelectorAll('[data-day]').forEach(b => b.onclick = () => { const d = +b.dataset.day; st.days = st.days||[]; st.days = st.days.includes(d) ? st.days.filter(x=>x!==d) : [...st.days, d].sort(); drawShowtimes() });
+    el.querySelector('[data-del]').onclick = () => { EXTRAS.showtimes.splice(k,1); drawShowtimes() };
+    box.appendChild(el) });
+}
+function addShowtime(){ const first = Object.keys(EXTRAS.shows||{})[0]; if (!first) return toast('Make a show first'); EXTRAS.showtimes.push({show:first, from:'17:00', to:'22:00', every:60, enabled:true}); drawShowtimes() }
+
+// ------------------------------------------------------------- visitor page
+function visitorUrl(){ const v = EXTRAS.visitor || {}; return v.token ? `${location.origin}/visit/${v.token}` : '' }
+function drawVisitor(){
+  const v = EXTRAS.visitor ||= {}; $('vEn').checked = !!v.enabled; $('vTitle').value = v.title||''; $('vMsg').value = v.message||'';
+  $('vSec').value = v.seconds||60; $('vSecV').textContent = (v.seconds||60)+' s'; $('vCd').value = v.cooldown||90; $('vCdV').textContent = (v.cooldown||90)+' s'; $('vSp').checked = v.sparkle !== false;
+  $('vSec').oninput = e => { v.seconds = +e.target.value; $('vSecV').textContent = v.seconds+' s' }; $('vCd').oninput = e => { v.cooldown = +e.target.value; $('vCdV').textContent = v.cooldown+' s' };
+  const box = $('vPresets'); box.innerHTML = ''; v.presets ||= [];
+  PRESETS.forEach(p => { const b = h(`<button class="chip ${v.presets.includes(p.id)?'on':''}">${esc(p.name)}</button>`);
+    b.onclick = () => { v.presets = v.presets.includes(p.id) ? v.presets.filter(x=>x!==p.id) : [...v.presets, p.id]; b.classList.toggle('on') }; box.appendChild(b) });
+  const url = visitorUrl();
+  $('vLink').innerHTML = url && v.enabled ? `Link: <a href="${esc(url)}" target="_blank" style="color:var(--blue);word-break:break-all">${esc(url)}</a>` + (/^http:\/\/(192\.168|10\.|172\.|127\.|localhost)/.test(url) ? '<br><span style="color:var(--warn)">This is a home-network address. Neighbours need your public link (Cloudflare tunnel, see REMOTE.md). Open this page through that link before printing the sign.</span>' : '') : (v.enabled ? 'Save to create the link.' : '');
+  $('qr').innerHTML = ''; if (url && v.enabled && window.qrcode){ const q = qrcode(0, 'M'); q.addData(url); q.make(); $('qr').innerHTML = q.createImgTag(6, 0) }
+}
+async function saveVisitor(newLink){
+  const v = EXTRAS.visitor; Object.assign(v, {enabled: $('vEn').checked, title: $('vTitle').value.trim(), message: $('vMsg').value.trim(), sparkle: $('vSp').checked});
+  if (newLink && !confirm('Make a new link? Printed signs with the old QR code will stop working.')) return;
+  if (await post('visitor', {value: {...v, new_link: !!newLink}})) { EXTRAS = await get('extras'); drawVisitor(); toast('Saved') }
+}
+function printSign(){
+  const url = visitorUrl(); if (!url || !EXTRAS.visitor.enabled) return toast('Turn the visitor page on and save first');
+  const q = qrcode(0, 'M'); q.addData(url); q.make();
+  const w = window.open('', '_blank'); if (!w) return toast('Allow pop-ups to print');
+  w.document.write(`<!doctype html><title>Light sign</title><body style="font-family:system-ui;text-align:center;padding:40px">
+    <h1 style="font-size:54px;margin:0">${esc(EXTRAS.visitor.title || 'Pick the lights!')}</h1>
+    <p style="font-size:24px">Scan with your phone camera and choose what the house does ✨</p>
+    <div style="display:inline-block;padding:16px;border:6px solid #111;border-radius:24px">${q.createSvgTag({cellSize: 12, margin: 2})}</div>
+    <p style="font-size:20px">${esc(EXTRAS.visitor.message || '')}</p></body>`);
+  w.document.close(); setTimeout(() => w.print(), 400);
+}
+
 // ------------------------------------------------------------- security
 async function security(){
   const a = await get('auth').catch(()=>null); if (!a) return;
@@ -1142,7 +1298,7 @@ async function security(){
   const e = await get('effects'); e.effects.forEach(x => EFX[x.name] = x); e.fx.forEach(x => FXD[x.name] = x); BLENDS = e.blends; SHAPES = e.shapes; BLEND_INFO = e.blend_info || {};
   LAYOUT = await get('layout'); layoutPreview(); openStream();
   await loadPalettes(); PL = await get('playlists'); SCH = await get('schedule');
-  await loadPresets(); plSelect(); schedForm(); await loadExtras(); await refresh(); setInterval(refresh, 2000); security();
+  drawPad(); await loadPresets(); plSelect(); schedForm(); await loadExtras(); await refresh(); setInterval(refresh, 2000); security();
   const t = store.get('tab', 'play'); if (t !== 'play') tabTo(t);
 })();
 </script>

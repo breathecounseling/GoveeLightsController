@@ -57,6 +57,30 @@ on the zigzag (tree, star, snowflake, heart, pumpkin, present, smile).
 
 Every feature has test buttons so you don't have to wait for snow or a touchdown.
 
+**Shows** (Shows → Shows): cue lists of presets with transitions: cut, crossfade, wipe
+across the house (either way), rise up the gable, iris from the apex, flash, and fade through
+black. A show takes over and then hands back to whatever was playing (or loops).
+**Showtimes** run a show automatically, e.g. every hour 5–10 pm on chosen days, while the
+lights are on.
+
+**Performance pad** (Play): flash, strobe (hold), blackout (hold), sparkle, fireworks,
+comets, hue sweep and colour wash, layered over whatever is playing.
+
+**Visitor page** (Shows → Live): a public page at `/visit/<secret>` with a printable QR
+sign. Neighbours pick from presets you approve (queued, one pick per cooldown), or hit
+"Make it sparkle". See REMOTE.md for making it public.
+
+**Schedule extras:** rules by date (MM-DD or holidays such as `thanksgiving+1` and
+`easter`), by weekday, or both, with their own on/off times (e.g. stay on until 12:30 on
+Fri/Sat). Also late-night dimming and an optional morning window (on at 6:00, off at
+sunrise).
+
+**Self-healing:** while Live, each box's status is checked every 20 s. If a box drops off
+the network and comes back, or its state is changed behind the app's back (Govee app,
+colour command), realtime is re-enabled and the frame resent, at most once every 2
+minutes per box. It pauses itself if a box keeps changing on its own. Optional periodic
+re-enable is in More → Output.
+
 **Remote access and login:** see [REMOTE.md](REMOTE.md) (Cloudflare Tunnel + Access on
 your own subdomain; the app adds its own password, lockout and CSRF protection). Set the
 password under More → Security, or with `python -m goveelights set-password`.

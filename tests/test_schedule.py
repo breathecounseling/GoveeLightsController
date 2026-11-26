@@ -61,3 +61,45 @@ class ScheduleTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PolishTests(unittest.TestCase):
+    def test_holidays(self):
+        from goveelights.schedule import easter, resolve_date
+        self.assertEqual(resolve_date("thanksgiving", 2026), date(2026, 11, 26))
+        self.assertEqual(resolve_date("thanksgiving+1", 2026), date(2026, 11, 27))
+        self.assertEqual(easter(2027), date(2027, 3, 28))
+        self.assertEqual(resolve_date("mothers-day", 2027), date(2027, 5, 9))
+        self.assertEqual(resolve_date("memorial-day", 2027), date(2027, 5, 31))
+        self.assertEqual(resolve_date("12-24", 2026), date(2026, 12, 24))
+
+    def test_weekday_rule_overrides_off_time(self):
+        sch = {"on": "time", "on_time": "17:00", "off_time": "22:00", "default": {"preset": "a"},
+               "rules": [{"name": "Weekend", "days": [4, 5], "off_time": "00:30"}]}
+        on, off = window(date(2026, 11, 27), sch)          # Friday
+        self.assertEqual((off - on), timedelta(hours=7, minutes=30))
+        on, off = window(date(2026, 11, 25), sch)          # Wednesday
+        self.assertEqual((off - on), timedelta(hours=5))
+
+    def test_holiday_range_rule(self):
+        sch = {"default": None, "rules": [{"name": "Xmas", "from": "thanksgiving+1", "to": "01-06", "program": {"preset": "x"}}]}
+        self.assertEqual(program_for(date(2026, 11, 27), sch)[1], "Xmas")
+        self.assertEqual(program_for(date(2026, 11, 26), sch)[1], "default")
+        self.assertEqual(program_for(date(2027, 1, 3), sch)[1], "Xmas")
+
+    def test_dim(self):
+        from goveelights.schedule import dim_factor
+        sch = {"dim": {"enabled": True, "from": "22:00", "level": 0.4, "fade_min": 30}}
+        at = lambda h, m: datetime(2026, 11, 27, h, m).astimezone()
+        self.assertEqual(dim_factor(at(21, 0), sch), 1.0)
+        self.assertAlmostEqual(dim_factor(at(22, 15), sch), 0.7, places=2)
+        self.assertAlmostEqual(dim_factor(at(23, 0), sch), 0.4, places=2)
+        self.assertAlmostEqual(dim_factor(datetime(2026, 11, 28, 0, 30).astimezone(), sch, at(17, 0)), 0.4, places=2)
+
+    def test_morning_window(self):
+        sch = {"on": "time", "on_time": "17:00", "off_time": "22:00", "default": {"preset": "a"},
+               "morning": {"enabled": True, "on_time": "06:00", "off": "time", "off_time": "07:30"}}
+        e = evaluate(datetime(2026, 11, 27, 6, 30).astimezone(), sch)
+        self.assertTrue(e["active"]); self.assertEqual(e["rule"], "morning")
+        e = evaluate(datetime(2026, 11, 27, 3, 0).astimezone(), sch)
+        self.assertFalse(e["active"]); self.assertIn("T06:00", e["next_change"])

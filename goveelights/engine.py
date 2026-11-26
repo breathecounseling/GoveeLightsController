@@ -3,6 +3,7 @@ the whole roofline."""
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 
@@ -34,7 +35,10 @@ class Engine:
         self.live = False          # False: render for preview only, lights untouched
         self.master = {"speed": 1.0, "hue": 0.0, "palette": "", "bpm": 120.0}
         self.blackout = False
-        self.overlays: dict[str, tuple[Scene, str, float]] = {}   # name -> (scene, blend, opacity), e.g. weather
+        self.overlays: dict[str, tuple] = {}   # name -> (scene, blend, opacity[, until, start, decay]): weather, pad hits
+        self.dim = 1.0                          # late-night dimming from the schedule
+        self.hue_sweep: tuple[float, float] | None = None   # (start, seconds): one trip round the colour wheel
+        self.transition = "crossfade"
         self.scene: Scene | None = None
         self._prev: Scene | None = None
         self._fade_start, self._fade_s = 0.0, 0.0
@@ -49,8 +53,15 @@ class Engine:
     def now(self) -> float:
         return time.monotonic() - self.t0
 
-    def set_scene(self, scene: Scene | None, fade_s: float = 0.0, continuous: bool = False):
-        """continuous=True: an edited version of the playing scene (keeps motion state)."""
+    TRANSITIONS = ["cut", "crossfade", "wipe", "wipe-back", "rise", "iris", "flash", "black"]
+
+    def set_scene(self, scene: Scene | None, fade_s: float = 0.0, continuous: bool = False,
+                  transition: str = "crossfade"):
+        """continuous=True: an edited version of the playing scene (keeps motion state).
+        transition: how the old scene gives way to the new one over fade_s seconds."""
+        if transition == "cut":
+            fade_s = 0.0
+        self.transition = transition if transition in self.TRANSITIONS else "crossfade"
         with self._lock:
             if continuous and scene is not None:
                 scene.adopt_state(self.scene)
@@ -74,20 +85,58 @@ class Engine:
                     self._prev = None
             else:
                 old = prev.render(t, self.layout, self.master)
-                cols = [(a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f)
-                        for a, b in zip(old, cols)]
-        for sc, mode, op in list(self.overlays.values()):
+                cols = self._transition(old, cols, f)
+        now = time.time()
+        for name, ov in list(self.overlays.items()):
+            sc, mode, op = ov[0], ov[1], ov[2]
+            if len(ov) > 3:
+                until, start, decay = ov[3], ov[4], ov[5]
+                if now >= until:
+                    self.overlays.pop(name, None)
+                    continue
+                if decay:
+                    op *= math.exp(-(now - start) / decay)
             oc = sc.render(t, self.layout)
             cols = [blend(mode, a, b, op) for a, b in zip(cols, oc)]
+        if self.hue_sweep:
+            st, dur = self.hue_sweep
+            k = (now - st) / dur
+            if k >= 1:
+                self.hue_sweep = None
+            else:
+                import colorsys
+                sh = k
+                cols = [colorsys.hsv_to_rgb((colorsys.rgb_to_hsv(*c)[0] + sh) % 1.0, *colorsys.rgb_to_hsv(*c)[1:])
+                        if (c[0] or c[1] or c[2]) else c for c in cols]
         return cols
+
+    def _transition(self, old, new, f):
+        """Mix old → new at progress f (0..1) in the current transition style."""
+        kind, px = self.transition, self.layout.pixels
+        lerp = lambda a, b, k: (a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k)  # noqa: E731
+        if kind in ("wipe", "wipe-back", "rise", "iris"):
+            soft = 0.15
+            out = []
+            for p, a, b in zip(px, old, new):
+                pos = {"wipe": 1 - p.nx, "wipe-back": p.nx, "rise": p.ny,
+                       "iris": min(1.0, math.hypot(p.nx - 0.47, (p.ny - 1.0) * 0.5) * 1.6)}[kind]
+                k = min(1.0, max(0.0, (f * (1 + soft) - pos) / soft))
+                out.append(lerp(a, b, k))
+            return out
+        if kind == "flash":
+            w = (1.0, 1.0, 1.0)
+            return [lerp(a, w, f * 2) for a in old] if f < 0.5 else [lerp(w, b, (f - 0.5) * 2) for b in new]
+        if kind == "black":
+            return [lerp(a, (0, 0, 0), f * 2) for a in old] if f < 0.5 else [lerp((0, 0, 0), b, (f - 0.5) * 2) for b in new]
+        return [lerp(a, b, f) for a, b in zip(old, new)]
 
     def tick(self):
         t0 = time.perf_counter()
         cols = self.render(self.now())
         if self.blackout:
             cols = [(0.0, 0.0, 0.0)] * len(cols)
-        elif self.brightness != 1.0:
-            b = self.brightness
+        elif self.brightness * self.dim != 1.0:
+            b = self.brightness * self.dim
             cols = [(c[0] * b, c[1] * b, c[2] * b) for c in cols]
         self.last_colors = cols
         if self.live:

@@ -72,6 +72,21 @@ Zero Trust → **Access → Applications → Add an application → Self-hosted*
 * Login method: **One-time PIN** (default; Cloudflare emails you a code). Google login
   also works if you add it.
 
+## 4b. Let neighbours reach the visitor page (optional)
+
+The visitor page (Shows → Live → Visitor page) lives at `/visit/<secret>` and must be
+reachable **without** the Cloudflare login, while everything else stays locked:
+
+1. Zero Trust → **Access → Applications → Add an application → Self-hosted**.
+2. Application domain: `lights.yourdomain.com`, path `visit`. Add a second entry with
+   path `api/visit`.
+3. Policy: **Bypass**, *Include* → **Everyone**.
+
+Cloudflare uses the most specific path, so these two paths skip the login and the rest of
+the site keeps it. The app still guards them: a wrong secret gets "not found", only the
+presets you allow can be picked, each person gets one pick per cooldown, the queue is
+capped, and nothing else is reachable. "New link" in the app retires an old QR sign.
+
 ## 5. Test
 
 Turn off Wi-Fi on your phone (use mobile data) and open `https://lights.yourdomain.com`.

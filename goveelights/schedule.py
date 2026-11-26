@@ -1,6 +1,11 @@
 """Sunset maths and schedule evaluation (no network, no dependencies).
 
-Schedule config (govee_config.json "schedule"):
+Schedule config (govee_config.json "schedule"). Rule dates are MM-DD or holiday names
+with offsets (thanksgiving, easter, mothers-day, fathers-day, memorial-day, labor-day,
+mlk-day, presidents-day; e.g. "thanksgiving+1"). Rules may also have "days" (weekday
+numbers, Mon=0), "on_time"/"off_time" overrides, and no program (times only). Optional
+"morning": {"enabled", "on_time", "off": "sunrise"|"time", "off_time", "program"} and
+"dim": {"enabled", "from": "22:00", "level": 0.5, "fade_min": 30}.
 {
   "enabled": true,
   "lat": 40.3764, "lon": -104.6922,          # Evans, CO
@@ -49,7 +54,12 @@ def _local(dt_naive: datetime) -> datetime:
 
 
 def window(d: date, sch: dict) -> tuple[datetime, datetime]:
-    """(on, off) local aware datetimes for the evening that starts on date d."""
+    """(on, off) local aware datetimes for the evening that starts on date d.
+    A matching rule may override on_time / off_time (e.g. stay on later at weekends)."""
+    r = next((r for r in sch.get("rules", []) if rule_matches(r, d) and (r.get("on_time") or r.get("off_time"))), None)
+    if r:
+        sch = {**sch, **({"on": "time", "on_time": r["on_time"]} if r.get("on_time") else {}),
+               **({"off_time": r["off_time"]} if r.get("off_time") else {})}
     if sch.get("on", "sunset") == "sunset":
         _, sunset = sun_times(d, float(sch.get("lat", 40.3764)), float(sch.get("lon", -104.6922)))
         on = (sunset or datetime.combine(d, time(17, 0)).astimezone()).astimezone()
@@ -62,27 +72,141 @@ def window(d: date, sch: dict) -> tuple[datetime, datetime]:
     return on, off
 
 
+# ------------------------------------------------------------- holidays
+def _nth_weekday(year: int, month: int, weekday: int, n: int) -> date:
+    """n-th (1-based; -1 = last) weekday (Mon=0) of a month."""
+    if n > 0:
+        d = date(year, month, 1)
+        d += timedelta(days=(weekday - d.weekday()) % 7)
+        return d + timedelta(weeks=n - 1)
+    d = date(year + (month == 12), month % 12 + 1, 1) - timedelta(days=1)
+    return d - timedelta(days=(d.weekday() - weekday) % 7)
+
+
+def easter(year: int) -> date:
+    """Western Easter (anonymous Gregorian algorithm)."""
+    a, b, c = year % 19, year // 100, year % 100
+    d, e = b // 4, b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = c // 4, c % 4
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month = (h + l - 7 * m + 114) // 31
+    day = (h + l - 7 * m + 114) % 31 + 1
+    return date(year, month, day)
+
+
+HOLIDAYS = {
+    "mlk-day": lambda y: _nth_weekday(y, 1, 0, 3),
+    "presidents-day": lambda y: _nth_weekday(y, 2, 0, 3),
+    "easter": easter,
+    "mothers-day": lambda y: _nth_weekday(y, 5, 6, 2),
+    "memorial-day": lambda y: _nth_weekday(y, 5, 0, -1),
+    "fathers-day": lambda y: _nth_weekday(y, 6, 6, 3),
+    "labor-day": lambda y: _nth_weekday(y, 9, 0, 1),
+    "thanksgiving": lambda y: _nth_weekday(y, 11, 3, 4),
+}
+
+
+def resolve_date(token: str, year: int) -> date:
+    """'MM-DD', or a holiday name with an optional day offset: 'thanksgiving+1', 'easter-2'."""
+    t = token.strip().lower()
+    for name, fn in HOLIDAYS.items():
+        if t.startswith(name):
+            rest = t[len(name):]
+            return fn(year) + timedelta(days=int(rest) if rest else 0)
+    m, d = t.split("-")
+    return date(year, int(m), int(d))
+
+
 def _md(s: str) -> tuple[int, int]:
     m, d = s.split("-")
     return int(m), int(d)
 
 
-def program_for(d: date, sch: dict) -> tuple[dict | None, str]:
-    """(program, rule name) for an evening's date."""
-    key = (d.month, d.day)
-    for r in sch.get("rules", []):
+def rule_matches(r: dict, d: date) -> bool:
+    if r.get("enabled") is False:
+        return False
+    days = r.get("days")
+    if days and d.weekday() not in days:
+        return False
+    if not r.get("from") or not r.get("to"):
+        return bool(days)                            # weekday-only rule
+    for year in (d.year - 1, d.year):                # ranges may wrap the new year
         try:
-            a, b = _md(r["from"]), _md(r["to"])
+            a = resolve_date(r["from"], year)
+            b = resolve_date(r["to"], year)
         except (KeyError, ValueError):
-            continue
-        inside = a <= key <= b if a <= b else (key >= a or key <= b)
-        if inside and r.get("program"):
+            return False
+        if b < a:
+            b = resolve_date(r["to"], year + 1)
+        if a <= d <= b:
+            return True
+    return False
+
+
+def matching_rule(d: date, sch: dict) -> dict | None:
+    return next((r for r in sch.get("rules", []) if rule_matches(r, d)), None)
+
+
+def program_for(d: date, sch: dict) -> tuple[dict | None, str]:
+    """(program, rule name) for an evening's date. First matching rule with a
+    program wins; rules without a program only change times."""
+    for r in sch.get("rules", []):
+        if rule_matches(r, d) and r.get("program"):
             return r["program"], r.get("name", "")
     return sch.get("default"), "default"
 
 
+def morning_window(d: date, sch: dict) -> tuple[datetime, datetime] | None:
+    m = sch.get("morning") or {}
+    if not m.get("enabled"):
+        return None
+    on = _local(datetime.combine(d, _hm(m.get("on_time", "06:00"))))
+    if m.get("off", "sunrise") == "sunrise":
+        rise, _ = sun_times(d, float(sch.get("lat", 40.3764)), float(sch.get("lon", -104.6922)))
+        off = (rise or on + timedelta(hours=1)).astimezone() + timedelta(minutes=float(m.get("off_offset_min", 0)))
+    else:
+        off = _local(datetime.combine(d, _hm(m.get("off_time", "07:30"))))
+    return (on, off) if off > on else None
+
+
+def dim_factor(now: datetime, sch: dict, on: datetime | None = None) -> float:
+    """Late-night dimming: brightness multiplier ramping down from `from` over `fade_min`."""
+    dm = sch.get("dim") or {}
+    if not dm.get("enabled"):
+        return 1.0
+    start = _local(datetime.combine(now.date(), _hm(dm.get("from", "22:00"))))
+    if on is not None and start < on:                 # after midnight: the dim began yesterday
+        start += timedelta(days=1)
+    if now < start and (now + timedelta(days=1) - start) < timedelta(hours=12) and now.hour < 12:
+        start -= timedelta(days=1)
+    if now < start:
+        return 1.0
+    level = max(0.05, min(1.0, float(dm.get("level", 0.5))))
+    f = min(1.0, (now - start).total_seconds() / 60 / max(1.0, float(dm.get("fade_min", 30))))
+    return 1.0 - (1.0 - level) * f
+
+
 def evaluate(now: datetime, sch: dict) -> dict:
     """What should be happening now, and when it next changes."""
+    ev = _evaluate_evening(now, sch)
+    mw = morning_window(now.date(), sch)
+    if mw and mw[0] <= now < mw[1]:
+        prog = (sch.get("morning") or {}).get("program") or program_for(now.date(), sch)[0]
+        return {"active": prog is not None, "program": prog, "rule": "morning",
+                "on": mw[0].isoformat(timespec="minutes"), "off": mw[1].isoformat(timespec="minutes"),
+                "next_change": mw[1].isoformat(timespec="seconds"), "dim": 1.0}
+    if not ev["active"] and mw and now < mw[0] and mw[0].isoformat(timespec="seconds") < ev["next_change"]:
+        ev = {**ev, "next_change": mw[0].isoformat(timespec="seconds"), "on": mw[0].isoformat(timespec="minutes"),
+              "next_program": (sch.get("morning") or {}).get("program") or ev.get("next_program"), "rule": "morning"}
+    ev["dim"] = dim_factor(now, sch, datetime.fromisoformat(ev["on"])) if ev["active"] else 1.0
+    return ev
+
+
+def _evaluate_evening(now: datetime, sch: dict) -> dict:
     today = now.date()
     for d in (today - timedelta(days=1), today):     # yesterday's window may run past midnight
         on, off = window(d, sch)

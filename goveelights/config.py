@@ -19,6 +19,19 @@ DEFAULTS = {
     "game": {"enabled": False, "teams": [{"league": "nfl", "team": "DEN"}], "delay": 30,
              "when_lights_off": False},
     "weather": {"enabled": False, "snow": True, "rain": False, "storm": True, "wind": True},
+    "shows": {
+        "Christmas show": {"end": "resume", "cues": [
+            {"preset": "festive-glitter", "seconds": 25, "transition": "flash", "fade": 1.0},
+            {"preset": "candy-cane", "seconds": 20, "transition": "wipe", "fade": 2.0},
+            {"preset": "fill-the-peak", "seconds": 20, "transition": "rise", "fade": 2.0},
+            {"preset": "breathing-comets", "seconds": 25, "transition": "crossfade", "fade": 2.0},
+            {"preset": "fireworks", "seconds": 20, "transition": "black", "fade": 1.5}]},
+    },
+    "showtimes": [],
+    "visitor": {"enabled": False, "presets": ["festive-glitter", "candy-cane", "fireworks", "winter-sparkle",
+                                             "rainbow-roofline", "glitter-ball"],
+                "seconds": 60, "cooldown": 90, "max_queue": 5, "sparkle": True, "only_when_on": True,
+                "title": "Pick the lights!", "message": "Happy holidays!"},
     "zones": [],
     "playlists": {
         "Christmas": {"items": [{"preset": "candy-cane", "minutes": 5},
@@ -36,6 +49,8 @@ DEFAULTS = {
     },
     "devices": {},
 }
+
+REPLACE = {"playlists", "shows", "palettes", "devices"}
 
 DEVICE_DEFAULTS = {
     "name": "",
@@ -64,7 +79,9 @@ class Config:
             with open(self.path, encoding="utf-8") as f:
                 loaded = json.load(f)
             for k, v in loaded.items():
-                if isinstance(v, dict) and isinstance(self.data.get(k), dict):
+                # collections the user edits as a whole replace the defaults (so deletions stick);
+                # settings blocks are merged so new options get their defaults
+                if isinstance(v, dict) and isinstance(self.data.get(k), dict) and k not in REPLACE:
                     self.data[k].update(v)
                 else:
                     self.data[k] = v

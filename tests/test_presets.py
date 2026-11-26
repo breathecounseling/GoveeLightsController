@@ -28,3 +28,19 @@ class PresetStoreTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ConfigTests(unittest.TestCase):
+    def test_deleted_defaults_stay_deleted(self):
+        import json, os
+        from goveelights.config import Config
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "c.json")
+            c = Config(p)
+            self.assertIn("Christmas", c.data["playlists"])
+            c.data["playlists"] = {}
+            c.data["engine"].pop("fps")
+            c.save()
+            c2 = Config(p)
+            self.assertEqual(c2.data["playlists"], {})
+            self.assertEqual(c2.data["engine"]["fps"], 20)        # settings blocks still get new defaults

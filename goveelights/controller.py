@@ -94,6 +94,10 @@ class Controller:
         self._events_done: set = set()
         self._last_reminder = 0.0
         self._forced_weather: dict = {}             # test overlays {kind: until}
+        self.health: dict[str, dict] = {}           # per-device self-healing state
+        self.vqueue: list[dict] = []                # visitor requests waiting
+        self._vlast: dict[str, float] = {}          # visitor cooldowns by client
+        self._showtimes_done: set = set()
         self._sched_key = "unset"
         self.sched_status: dict = {}
         self._stop = threading.Event()
@@ -101,6 +105,7 @@ class Controller:
         self.diag.scan()
         threading.Thread(target=self._tick_loop, name="controller", daemon=True).start()
         threading.Thread(target=self._live_loop, name="live-data", daemon=True).start()
+        threading.Thread(target=self._health_loop, name="self-heal", daemon=True).start()
 
     # --------------------------------------------------------- engine
     @property
@@ -149,6 +154,10 @@ class Controller:
                 e.gamma = self.ecfg["gamma"] = max(0.5, min(3.0, float(b["gamma"])))
             if "brightness" in b:
                 e.brightness = self.ecfg["brightness"] = max(0.0, min(1.0, float(b["brightness"])))
+            if "self_heal" in b:
+                self.ecfg["self_heal"] = bool(b["self_heal"])
+            if "reenable_min" in b:
+                self.ecfg["reenable_min"] = max(0.0, min(120.0, float(b["reenable_min"])))
             self.cfg.save()
 
     def set_master(self, b: dict):
@@ -268,7 +277,8 @@ class Controller:
             self.engine.set_live(False, release=release)
 
     # ---------------------------------------------------- interruptions
-    def start_interrupt(self, d: dict, seconds: float, label: str, force_live: bool = False) -> bool:
+    def start_interrupt(self, d: dict, seconds: float, label: str, force_live: bool = False,
+                        fade: float = 0.3, transition: str = "crossfade") -> bool:
         """Play a scene for a while (celebration, countdown), then put back what was playing."""
         with self.lock:
             if self.diag_active or self.map_state:
@@ -279,7 +289,9 @@ class Controller:
                 self.interrupt = {"scene": self.scene_dict, "playing": self.playing, "live": self.engine.live}
             self.interrupt["until"] = time.time() + seconds
             self.interrupt["label"] = label
-            self.engine.set_scene(Scene.from_dict(d, self.user_palettes), 0.3)
+            self.interrupt.pop("show", None)
+            self.interrupt.pop("visitor", None)
+            self.engine.set_scene(Scene.from_dict(d, self.user_palettes), fade, transition=transition)
             self.playing = {"kind": "event", "name": label}
             if force_live:
                 self.set_live(True, manual=False)
@@ -295,6 +307,233 @@ class Controller:
             self.playing = st["playing"]
             if not st["live"]:
                 self.engine.set_live(False, release=True)
+
+    # ----------------------------------------------------------- shows
+    def _cue_scene(self, cue: dict) -> dict:
+        return self.presets.get(cue["preset"])
+
+    def play_show(self, name: str, manual: bool = True) -> bool:
+        show = self.cfg.data.get("shows", {}).get(name)
+        cues = [c for c in (show or {}).get("cues", []) if c.get("preset")]
+        if not cues:
+            raise ValueError(f"show {name!r} has no cues")
+        if manual:
+            self._manual()
+        first = cues[0]
+        total = sum(max(1.0, float(c.get("seconds", 20))) for c in cues)
+        loop = (show or {}).get("end") == "loop"
+        ok = self.start_interrupt(self._cue_scene(first), 10 ** 9 if loop else total + 1, f"Show: {name}",
+                                  force_live=manual, fade=float(first.get("fade", 1.5)),
+                                  transition=first.get("transition", "crossfade"))
+        if ok:
+            self.interrupt["show"] = {"name": name, "idx": 0, "loop": loop,
+                                      "next_at": time.time() + max(1.0, float(first.get("seconds", 20)))}
+        return ok
+
+    def _show_tick(self, now: float):
+        it = self.interrupt
+        st = it and it.get("show")
+        if not st or now < st["next_at"]:
+            return
+        cues = [c for c in self.cfg.data.get("shows", {}).get(st["name"], {}).get("cues", []) if c.get("preset")]
+        st["idx"] += 1
+        if st["idx"] >= len(cues):
+            if not st["loop"] or not cues:
+                self.end_interrupt()
+                return
+            st["idx"] = 0
+        cue = cues[st["idx"]]
+        try:
+            self.engine.set_scene(Scene.from_dict(self._cue_scene(cue), self.user_palettes),
+                                  float(cue.get("fade", 1.5)), transition=cue.get("transition", "crossfade"))
+        except (OSError, ValueError) as e:
+            log.warning("show cue %s failed: %s", cue, e)
+        st["next_at"] = now + max(1.0, float(cue.get("seconds", 20)))
+
+    def _showtimes_tick(self):
+        now = datetime.now().astimezone()
+        mins = now.hour * 60 + now.minute
+        for k, stt in enumerate(self.cfg.data.get("showtimes", [])):
+            if not stt.get("enabled", True) or stt.get("days") and now.weekday() not in stt["days"]:
+                continue
+            try:
+                a = sched._hm(stt.get("from", "17:00"))
+                b = sched._hm(stt.get("to", "22:00"))
+            except ValueError:
+                continue
+            lo, hi = a.hour * 60 + a.minute, b.hour * 60 + b.minute
+            every = max(5, int(stt.get("every", 60)))
+            if not (lo <= mins <= hi) or (mins - lo) % every:
+                continue
+            key = (k, now.date().isoformat(), mins)
+            if key in self._showtimes_done:
+                continue
+            self._showtimes_done.add(key)
+            if stt.get("only_when_on", True) and not self.engine.live:
+                continue
+            if self.interrupt:                      # don't cut off a countdown or a celebration
+                continue
+            try:
+                self.play_show(stt["show"], manual=False)
+            except (KeyError, ValueError) as e:
+                log.warning("showtime failed: %s", e)
+
+    # ------------------------------------------------------------- pad
+    def pad(self, action: str, on: bool | None = None, color: str = "#ff2000") -> str:
+        """Momentary performance effects layered over whatever is playing."""
+        e, now = self.engine, time.time()
+        S = lambda d: Scene.from_dict(d)  # noqa: E731
+        if action == "blackout":
+            e.blackout = bool(on) if on is not None else not e.blackout
+            return "blackout" if e.blackout else "lights back"
+        if action == "hue":
+            e.hue_sweep = (now, 4.0)
+            return "hue sweep"
+        hold = on is not None
+        if hold and on is False:
+            e.overlays.pop("pad:" + action, None)
+            return "off"
+        until = now + (3600 if hold else {"flash": 1.5, "strobe": 3, "sparkle": 5, "fireworks": 8,
+                                           "wash": 3, "comet": 4}.get(action, 3))
+        spec = {
+            "flash": ({"layers": [{"effect": "solid", "params": {"color": "#ffffff"}}]}, "add", 1.0, 0.35),
+            "strobe": ({"layers": [{"effect": "solid", "params": {"color": "#ffffff"},
+                                    "fx": [{"type": "strobe", "params": {"rate": 12, "duty": 0.35}}]}]}, "add", 1.0, 0),
+            "sparkle": ({"layers": [{"effect": "sparkle", "params": {"rate": 40, "decay": 0.2}}]}, "add", 1.0, 0),
+            "fireworks": ({"layers": [{"effect": "bursts", "params": {"interval": 0.4, "life": 1.5}}]}, "lighten", 1.0, 0),
+            "wash": ({"layers": [{"effect": "solid", "params": {"color": color}}]}, "normal", 0.9, 1.2),
+            "comet": ({"layers": [{"effect": "comet", "params": {"speed": 80, "count": 3, "tail": 25}}]}, "add", 1.0, 0),
+        }.get(action)
+        if not spec:
+            raise ValueError(f"unknown pad action {action}")
+        d, mode, op, decay = spec
+        e.overlays["pad:" + action] = (S(d), mode, op, until, now, decay)
+        return action
+
+    # --------------------------------------------------------- visitors
+    @property
+    def vcfg(self) -> dict:
+        return self.cfg.data.setdefault("visitor", {})
+
+    def visitor_state(self) -> dict:
+        v = self.vcfg
+        names = {p["id"]: p["name"] for p in self.presets.list()}
+        it = self.interrupt or {}
+        return {"title": v.get("title") or "Pick the lights!", "message": v.get("message", ""),
+                "on": self.engine.live and not self.engine.blackout or not v.get("only_when_on", True),
+                "presets": [{"id": i, "name": names[i]} for i in v.get("presets", []) if i in names],
+                "queue": len(self.vqueue), "sparkle": bool(v.get("sparkle", True)),
+                "now": (it.get("visitor") or {}).get("name") if it.get("visitor") else None}
+
+    def visitor_pick(self, pid: str, client: str) -> dict:
+        v, now = self.vcfg, time.time()
+        if pid not in v.get("presets", []):
+            raise ValueError("that one isn't available")
+        if v.get("only_when_on", True) and not self.engine.live:
+            raise ValueError("The lights are off right now. Come back this evening!")
+        cd = float(v.get("cooldown", 60))
+        if now - self._vlast.get(client, 0) < cd:
+            raise ValueError(f"You can pick again in {int(cd - (now - self._vlast[client]))} s")
+        if len(self.vqueue) >= int(v.get("max_queue", 5)):
+            raise ValueError("Lots of requests right now. Try again in a minute!")
+        self._vlast[client] = now
+        if len(self._vlast) > 2000:
+            self._vlast = {k: t for k, t in self._vlast.items() if now - t < cd}
+        self.vqueue.append({"id": pid, "client": client})
+        pos = len(self.vqueue)
+        wait = (pos - 1) * float(v.get("seconds", 60))
+        if self.interrupt and self.interrupt.get("visitor"):
+            wait += max(0.0, self.interrupt["until"] - now)
+        return {"position": pos, "wait": round(wait)}
+
+    def visitor_sparkle(self, client: str) -> str:
+        now = time.time()
+        if not self.vcfg.get("sparkle", True):
+            raise ValueError("not available")
+        if now - self._vlast.get("sparkle:" + client, 0) < 15 or now - self._vlast.get("sparkle:*", 0) < 3:
+            raise ValueError("Give it a few seconds!")
+        if not self.engine.live:
+            raise ValueError("The lights are off right now.")
+        self._vlast["sparkle:" + client] = self._vlast["sparkle:*"] = now
+        return self.pad("sparkle")
+
+    def _visitor_tick(self):
+        if not self.vqueue or not self.engine.live:
+            return
+        it = self.interrupt
+        if it and not it.get("visitor"):            # a show, countdown or celebration is on: wait
+            return
+        if it and time.time() < it["until"]:
+            return
+        req = self.vqueue.pop(0)
+        try:
+            d = self.presets.get(req["id"])
+        except (OSError, ValueError):
+            return
+        if self.start_interrupt(d, float(self.vcfg.get("seconds", 60)), f"Visitor pick: {d.get('name')}", fade=1.5):
+            self.interrupt["visitor"] = {"name": d.get("name"), "id": req["id"]}
+
+    # ------------------------------------------------------ self-healing
+    def _health_loop(self):
+        """Every 20 s while live, ask each box for its status. A box that vanished and
+        came back (power blip), or whose state changed behind our back (Govee app,
+        colour command), gets realtime re-enabled and its frame resent."""
+        while not self._stop.wait(float(self.ecfg.get("heal_interval", 20.0))):
+            try:
+                e = self.engine
+                if (not self.ecfg.get("self_heal", True) or not e.live or self.diag_active or self.map_state):
+                    for h in self.health.values():
+                        h["base"] = None
+                    continue
+                now = time.time()
+                for mac, dev in list(e.output.devices.items()):
+                    if not dev.get("ip"):
+                        continue
+                    h = self.health.setdefault(mac, {"miss": 0, "base": None, "pending": 0, "reasserts": [],
+                                                     "last_enable": now, "seen": None, "paused": False})
+                    st = self.lan.status(dev["ip"], timeout=1.5)
+                    if st is None:
+                        h["miss"] += 1
+                        continue
+                    h["seen"] = now
+                    sig = (st.get("onOff"), st.get("brightness"), json.dumps(st.get("color"), sort_keys=True),
+                           st.get("colorTemInKelvin"))
+                    back = h["miss"] >= 2
+                    h["miss"] = 0
+                    if h["base"] is None and not back:
+                        h["base"] = sig
+                        continue
+                    changed = sig != h["base"] or st.get("onOff") == 0
+                    h["pending"] = h["pending"] + 1 if changed else 0
+                    periodic = float(self.ecfg.get("reenable_min", 0))
+                    due = periodic > 0 and now - h["last_enable"] > periodic * 60
+                    if back or h["pending"] >= 2 or due:
+                        self._reassert(mac, "came back online" if back else "periodic" if due else "state changed")
+            except Exception:  # noqa: BLE001
+                log.exception("self-heal loop failed")
+
+    def _reassert(self, mac: str, why: str):
+        h, now = self.health[mac], time.time()
+        h["reasserts"] = [t for t in h["reasserts"] if now - t < 900]
+        if h["reasserts"] and now - h["reasserts"][-1] < 120:
+            return
+        if len(h["reasserts"]) >= 5:                # status keeps changing on its own: stop poking it
+            if not h["paused"]:
+                log.warning("self-heal paused for %s: its status keeps changing", mac)
+            h["paused"] = True
+            return
+        h["paused"] = False
+        log.info("self-heal: re-enabling realtime on %s (%s)", self.cfg.devices.get(mac, {}).get("name", mac), why)
+        out = self.engine.output
+        try:
+            out._streamer(mac).enable()
+            out._last.pop(mac, None)                # force the current frame to be resent
+        except OSError as e:
+            log.warning("self-heal failed for %s: %s", mac, e)
+            return
+        h["reasserts"].append(now)
+        h["last_enable"] = now
+        h["base"], h["pending"] = None, 0
 
     # ---------------------------------------------------------- events
     @property
@@ -492,6 +731,7 @@ class Controller:
     def enter_diag(self):
         if not self.diag_active:
             self.diag_active = True
+            self._diag_was_live = self.engine.live
             self.engine.set_live(False, release=False)
 
     def exit_diag(self):
@@ -499,6 +739,8 @@ class Controller:
             self.diag_active = False
             self.diag.release_all()
             self.build_engine()          # counts / landmarks may have changed
+            if getattr(self, "_diag_was_live", False):
+                self.set_live(True, manual=False)          # back to how it was before diagnostics
             self._sched_key = "unset"    # let the schedule re-apply
 
     def resume_schedule(self):
@@ -512,13 +754,16 @@ class Controller:
             try:
                 now = time.time()
                 with self.lock:
+                    self._show_tick(now)
                     if self.interrupt and now >= self.interrupt["until"]:
                         self.end_interrupt()
+                    self._visitor_tick()
                     if self.playlist and (self.interrupt or self.map_state):
                         self.playlist["next_at"] += 1.0          # hold the playlist while interrupted
                     elif self.playlist and now >= self.playlist["next_at"]:
                         self._advance()
                 self._events_tick()
+                self._showtimes_tick()
                 if now - last_sched >= 10:
                     last_sched = now
                     self._schedule_tick()
@@ -533,6 +778,7 @@ class Controller:
         now = datetime.now().astimezone()
         ev = sched.evaluate(now, sch)
         self.sched_status = ev
+        self.engine.dim = float(ev.get("dim", 1.0)) if sch.get("enabled") else 1.0
         if not sch.get("enabled") or self.diag_active or self.map_state or self.interrupt:
             return
         if self.override_until:
@@ -564,7 +810,12 @@ class Controller:
             "interrupt": ({"label": self.interrupt.get("label"), "left": max(0, round(self.interrupt["until"] - time.time()))}
                           if self.interrupt else None),
             "mapping": bool(self.map_state), "weather": self.weather, "overlays": list(e.overlays),
-            "games": self.games,
+            "games": self.games, "dim": round(e.dim, 2),
+            "show": (self.interrupt or {}).get("show", {}).get("name") if self.interrupt else None,
+            "visitor_queue": len(self.vqueue),
+            "health": {self.cfg.devices.get(m, {}).get("name", m): {
+                "ok": h["miss"] == 0, "reasserts_15min": len([t for t in h["reasserts"] if time.time() - t < 900]),
+                "paused": h["paused"]} for m, h in self.health.items()},
             "schedule": {"enabled": bool(sch.get("enabled")), **self.sched_status,
                          "override_until": self.override_until.isoformat(timespec="minutes") if self.override_until else None},
             "runs": [{"name": r.name, "mac": r.mac, "count": r.count, "visible": len(r.pixels),

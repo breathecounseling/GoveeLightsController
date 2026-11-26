@@ -1,9 +1,11 @@
 """Creator app server: python -m goveelights (or start.bat)."""
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import os
+import secrets
 import signal
 import sys
 import threading
@@ -65,6 +67,36 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
             return (self.headers.get("X-Forwarded-Proto", "").lower() == "https"
                     or "https" in self.headers.get("Cf-Visitor", ""))
 
+        def _visitor(self, path: str):
+            """Public visitor routes: /visit/<token>, /api/visit/<token>/<action>. Returns
+            (token_ok, action) or None if the path isn't a visitor route."""
+            parts = path.strip("/").split("/")
+            if parts[0] == "visit" and len(parts) == 2:
+                tok, action = parts[1], "page"
+            elif parts[:2] == ["api", "visit"] and len(parts) == 4:
+                tok, action = parts[2], parts[3]
+            else:
+                return None
+            v = ctl.vcfg
+            good = bool(v.get("enabled") and v.get("token") and hmac.compare_digest(tok.encode(), v["token"].encode()))
+            return good, action
+
+        def _visitor_get(self, action: str, q: dict):
+            if action == "page":
+                return self._send(200, (WEB / "visit.html").read_bytes(), "text/html; charset=utf-8")
+            if action == "state":
+                return self._json(ctl.visitor_state())
+            if action == "layout":
+                info = ctl.layout_info()
+                return self._json({"pixels": info["pixels"], "bounds": info["bounds"]})
+            if action == "thumb":
+                pid = q.get("id", [""])[0]
+                if pid not in ctl.vcfg.get("presets", []):
+                    return self._json({"error": "not found"}, 404)
+                meta = next((p for p in ctl.presets.list() if p["id"] == pid), None)
+                return self._json(ctl.thumbnail(ctl.presets.get(pid), (pid, meta["mtime"] if meta else 0)))
+            return self._json({"error": "not found"}, 404)
+
         def _guard(self, path: str) -> bool:
             """True if the request may proceed; otherwise a response has been sent."""
             auth.refresh()
@@ -94,8 +126,18 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
         def do_GET(self):
             u = urlparse(self.path)
             path, q = u.path, parse_qs(u.query)
+            vis = self._visitor(path)
+            if vis is not None:
+                if not vis[0]:
+                    return self._json({"error": "not found"}, 404)
+                try:
+                    return self._visitor_get(vis[1], q)
+                except (KeyError, ValueError, OSError) as e:
+                    return self._json({"ok": False, "error": str(e)}, 400)
             if not self._guard(path):
                 return
+            if path == "/static/qrcode.js":
+                return self._send(200, (WEB / "vendor" / "qrcode.js").read_bytes(), "text/javascript")
             if path == "/login":
                 return self._send(200, (WEB / "login.html").read_bytes(), "text/html; charset=utf-8")
             if path == "/api/auth":
@@ -138,8 +180,12 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                 if path == "/api/extras":
                     from .live import LEAGUES
                     from .pictures import PICTURES
+                    from .engine import Engine
                     return self._json({"events": ctl.events, "game": ctl.cfg.data.get("game", {}),
                                        "weather": ctl.cfg.data.get("weather", {}),
+                                       "shows": ctl.cfg.data.get("shows", {}), "showtimes": ctl.cfg.data.get("showtimes", []),
+                                       "visitor": ctl.vcfg, "transitions": Engine.TRANSITIONS,
+                                       "self_heal": ctl.ecfg.get("self_heal", True), "reenable_min": ctl.ecfg.get("reenable_min", 0),
                                        "leagues": {k: v[2] for k, v in LEAGUES.items()}, "pictures": list(PICTURES)})
                 if path == "/api/diag/state":
                     return self._json(ctl.diag.state())
@@ -176,6 +222,22 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
             path = urlparse(self.path).path
             if self.headers.get("X-Requested-With") != "lights":     # CSRF guard
                 return self._json({"ok": False, "error": "missing request header"}, 403)
+            vis = self._visitor(path)
+            if vis is not None:
+                if not vis[0]:
+                    return self._json({"error": "not found"}, 404)
+                client = auth.client_ip(self)
+                try:
+                    ln = min(int(self.headers.get("Content-Length") or 0), 10_000)
+                    b = json.loads(self.rfile.read(ln) or b"{}")
+                    if vis[1] == "pick":
+                        return self._json({"ok": True, **ctl.visitor_pick(str(b.get("id", "")), client)})
+                    if vis[1] == "sparkle":
+                        ctl.visitor_sparkle(client)
+                        return self._json({"ok": True})
+                except (ValueError, TypeError) as e:
+                    return self._json({"ok": False, "error": str(e)}, 429 if "again" in str(e) or "seconds" in str(e) else 400)
+                return self._json({"error": "not found"}, 404)
             if not self._guard(path):
                 return
             try:
@@ -300,19 +362,37 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
             if a == "schedule/resume":
                 ctl.resume_schedule()
                 return {"ok": True}
-            if a in ("events", "game", "weather"):
+            if a in ("events", "game", "weather", "shows", "showtimes", "visitor"):
                 val = b["value"]
+                if a == "visitor":
+                    if not isinstance(val, dict):
+                        raise ValueError("visitor must be an object")
+                    if val.get("new_link") or not ctl.vcfg.get("token"):
+                        val["token"] = secrets.token_urlsafe(12)
+                    else:
+                        val["token"] = ctl.vcfg["token"]           # the link only changes when asked
+                    val.pop("new_link", None)
+                elif a == "shows" and not isinstance(val, dict):
+                    raise ValueError("shows must be an object")
+                elif a == "showtimes" and not isinstance(val, list):
+                    raise ValueError("showtimes must be a list")
                 if a == "events":
                     if not isinstance(val, list):
                         raise ValueError("events must be a list")
                     for ev in val:
                         int(ev["month"]), int(ev["day"]), str(ev.get("time", "00:00")).split(":")
-                elif not isinstance(val, dict):
+                elif a in ("game", "weather") and not isinstance(val, dict):
                     raise ValueError(f"{a} must be an object")
                 with cfg.lock:
                     cfg.data[a] = val
                     cfg.save()
                 return {"ok": True}
+            if a == "show/play":
+                if not ctl.play_show(str(b["name"])):
+                    raise ValueError("can't start a show while diagnostics or mapping is running")
+                return {"ok": True}
+            if a == "pad":
+                return {"ok": True, "message": ctl.pad(str(b["action"]), b.get("on"), str(b.get("color", "#ff2000")))}
             if a == "live/test":
                 return {"ok": True, "message": ctl.test_live(str(b.get("kind")))}
             if a == "interrupt/end":
