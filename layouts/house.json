@@ -1,5 +1,5 @@
 {
- "_comment": "Geometry + zones for this house. Import (again after updates): python -m goveelights layout import layouts/house.json",
+ "_comment": "Geometry + zones for this house (approximate until camera-mapped). Import after updates: python -m goveelights layout import layouts/house.json",
  "devices": {
   "0B:CD:C9:01:76:1D:2E:80": {
    "name": "Eaves",
@@ -132,6 +132,114 @@
      3.75
     ]
    ]
+  },
+  "16:64:C9:01:6E:1D:44:04": {
+   "name": "Accent",
+   "order": 2,
+   "reversed": false,
+   "hidden": [
+    60,
+    61,
+    62,
+    63,
+    64,
+    65,
+    66,
+    67,
+    68,
+    69,
+    70,
+    71,
+    72,
+    73,
+    74,
+    75,
+    76,
+    77,
+    78,
+    79,
+    80,
+    81,
+    82,
+    83,
+    84,
+    85,
+    86,
+    87,
+    88,
+    89,
+    90,
+    91,
+    92,
+    93,
+    94,
+    95,
+    96,
+    97,
+    98,
+    99,
+    100,
+    101,
+    102,
+    103,
+    104,
+    105,
+    106,
+    107
+   ],
+   "pixel_count": 108,
+   "geometry": [
+    [
+     0,
+     -27,
+     -5.0
+    ],
+    [
+     4,
+     -30,
+     -5.0
+    ],
+    [
+     23,
+     -40.476,
+     -5.0
+    ],
+    [
+     24,
+     -41.476,
+     -5.0
+    ],
+    [
+     40,
+     -57.476,
+     -5.0
+    ],
+    [
+     41,
+     -57.976,
+     -5.0
+    ],
+    [
+     49,
+     -61.976,
+     -1.5
+    ],
+    [
+     58,
+     -66.476,
+     -5.0
+    ],
+    [
+     59,
+     -67.476,
+     -5.0
+    ],
+    [
+     107,
+     -115.476,
+     -5.0
+    ]
+   ]
   }
  },
  "zones": [
@@ -237,6 +345,81 @@
      "run": "Peak",
      "from": 0,
      "to": 107
+    }
+   ]
+  },
+  {
+   "name": "Porch",
+   "parts": [
+    {
+     "run": "Accent",
+     "from": 0,
+     "to": 23
+    }
+   ]
+  },
+  {
+   "name": "Garage",
+   "parts": [
+    {
+     "run": "Accent",
+     "from": 24,
+     "to": 40
+    }
+   ]
+  },
+  {
+   "name": "Garage peak",
+   "parts": [
+    {
+     "run": "Accent",
+     "from": 41,
+     "to": 58
+    }
+   ]
+  },
+  {
+   "name": "Lower roofline",
+   "parts": [
+    {
+     "run": "Accent",
+     "from": 0,
+     "to": 59
+    }
+   ]
+  },
+  {
+   "name": "Whole front",
+   "parts": [
+    {
+     "run": "Eaves",
+     "from": 30,
+     "to": 71
+    },
+    {
+     "run": "Peak",
+     "from": 0,
+     "to": 107
+    },
+    {
+     "run": "Accent",
+     "from": 4,
+     "to": 40
+    }
+   ]
+  },
+  {
+   "name": "Both peaks",
+   "parts": [
+    {
+     "run": "Eaves",
+     "from": 71,
+     "to": 91
+    },
+    {
+     "run": "Accent",
+     "from": 41,
+     "to": 58
     }
    ]
   }
