@@ -644,7 +644,8 @@ class Controller:
                 "on": self.engine.live and not self.engine.blackout or not v.get("only_when_on", True),
                 "presets": [{"id": i, "name": names[i]} for i in v.get("presets", []) if i in names],
                 "queue": len(self.vqueue), "sparkle": bool(v.get("sparkle", True)),
-                "now": (it.get("visitor") or {}).get("name") if it.get("visitor") else None}
+                "now": (it.get("visitor") or {}).get("name") if it.get("visitor") else None,
+                "busy": bool(it) and not it.get("visitor")}
 
     def _vprune(self, now: float):
         if len(self._vlast) > 2000:
@@ -667,13 +668,17 @@ class Controller:
             raise ValueError(f"You can pick again in {int(cd - (now - self._vlast[client]))} s")
         if len(self.vqueue) >= int(v.get("max_queue", 5)):
             raise ValueError("Lots of requests right now. Try again in a minute!")
+        it = self.interrupt
+        busy = bool(it) and not it.get("visitor")        # a show/celebration: picks wait for it to end
+        if busy and it["until"] - now > 6 * 3600:        # a looping show never ends on its own
+            raise ValueError("A light show is on right now. Try again after it!")
         self._vlast[client] = now
         self.vqueue.append({"id": pid, "client": client})
         pos = len(self.vqueue)
         wait = (pos - 1) * float(v.get("seconds", 60))
-        if self.interrupt and self.interrupt.get("visitor"):
-            wait += max(0.0, self.interrupt["until"] - now)
-        return {"position": pos, "wait": round(wait)}
+        if it:
+            wait += max(0.0, it["until"] - now)
+        return {"position": pos, "wait": round(wait), "busy": busy}
 
     def visitor_sparkle(self, client: str) -> str:
         with self.lock:
