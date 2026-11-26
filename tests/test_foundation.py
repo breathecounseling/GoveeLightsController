@@ -81,3 +81,17 @@ class EvolveTests(unittest.TestCase):
         v = evolve.variation(base, 1, 0.2, "x")
         self.assertLess(abs(v["layers"][0]["params"]["length"] - base["layers"][0]["params"]["length"]), 20)
         self.assertEqual(evolve.variation(base, 5, 0.2, "x"), evolve.variation(base, 5, 0.2, "x"))   # deterministic
+
+
+class EngineFixTests(unittest.TestCase):
+    def test_dark_stays_dark_with_dither(self):
+        L = house()
+        buf = [[0.0] * 3 for _ in L.pixels]
+        v = 0.3 / 255
+        outs = [to_device_frames(L, [(v, v, v)] * L.n, 1.0, buf)[L.runs[0].mac][0][0] for _ in range(20)]
+        self.assertEqual(set(outs), {0})
+
+    def test_mapcode_ids_cover_every_bulb(self):
+        from goveelights.effects import MAP_BITS
+        L = house()
+        self.assertGreater(1 << (MAP_BITS - 1), L.n + 100)

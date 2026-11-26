@@ -103,3 +103,28 @@ class PolishTests(unittest.TestCase):
         self.assertTrue(e["active"]); self.assertEqual(e["rule"], "morning")
         e = evaluate(datetime(2026, 11, 27, 3, 0).astimezone(), sch)
         self.assertFalse(e["active"]); self.assertIn("T06:00", e["next_change"])
+
+
+class ReviewFixTests(unittest.TestCase):
+    def test_lights_off_rule(self):
+        sch = {"default": {"preset": "a"}, "rules": [{"name": "Off Mondays", "days": [0], "program": None},
+                                                    {"name": "Times only", "days": [1], "off_time": "01:00"}]}
+        self.assertEqual(program_for(date(2026, 11, 30), sch), (None, "Off Mondays"))     # Monday: explicitly off
+        self.assertEqual(program_for(date(2026, 12, 1), sch), ({"preset": "a"}, "default"))  # times-only rule keeps default
+
+    def test_leap_day_rule(self):
+        sch = {"rules": [{"name": "Leap", "from": "02-28", "to": "02-29", "program": {"preset": "x"}}]}
+        self.assertEqual(program_for(date(2028, 2, 29), sch)[1], "Leap")
+        self.assertEqual(program_for(date(2027, 2, 28), sch)[1], "default")
+
+    def test_dim_before_on_time(self):
+        from goveelights.schedule import dim_factor
+        sch = {"dim": {"enabled": True, "from": "16:00", "level": 0.5, "fade_min": 1}}
+        on = datetime(2026, 12, 1, 16, 45).astimezone()
+        self.assertAlmostEqual(dim_factor(datetime(2026, 12, 1, 17, 0).astimezone(), sch, on), 0.5)
+
+    def test_morning_after_manual_override(self):
+        sch = {"on": "time", "on_time": "17:00", "off_time": "22:00", "default": {"preset": "a"},
+               "morning": {"enabled": True, "on_time": "06:00", "off": "time", "off_time": "07:30"}}
+        e = evaluate(datetime(2026, 11, 27, 23, 0).astimezone(), sch)     # after the evening ends
+        self.assertIn("T06:00", e["next_change"])

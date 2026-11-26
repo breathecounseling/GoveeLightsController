@@ -66,9 +66,10 @@ def window(d: date, sch: dict) -> tuple[datetime, datetime]:
         on += timedelta(minutes=float(sch.get("on_offset_min", 0)))
     else:
         on = _local(datetime.combine(d, _hm(sch.get("on_time", "17:00"))))
-    off = _local(datetime.combine(d, _hm(sch.get("off_time", "23:00"))))
-    if off <= on:
-        off += timedelta(days=1)
+    off_t = _hm(sch.get("off_time", "23:00"))
+    off = _local(datetime.combine(d, off_t))
+    if off <= on:                     # after midnight: build it on the next date (correct across DST)
+        off = _local(datetime.combine(d + timedelta(days=1), off_t))
     return on, off
 
 
@@ -138,10 +139,12 @@ def rule_matches(r: dict, d: date) -> bool:
         try:
             a = resolve_date(r["from"], year)
             b = resolve_date(r["to"], year)
-        except (KeyError, ValueError):
+            if b < a:
+                b = resolve_date(r["to"], year + 1)
+        except KeyError:
             return False
-        if b < a:
-            b = resolve_date(r["to"], year + 1)
+        except ValueError:            # e.g. 02-29 in a non-leap year: try the other year
+            continue
         if a <= d <= b:
             return True
     return False
@@ -155,7 +158,7 @@ def program_for(d: date, sch: dict) -> tuple[dict | None, str]:
     """(program, rule name) for an evening's date. First matching rule with a
     program wins; rules without a program only change times."""
     for r in sch.get("rules", []):
-        if rule_matches(r, d) and r.get("program"):
+        if rule_matches(r, d) and "program" in r:     # program None = lights off that night
             return r["program"], r.get("name", "")
     return sch.get("default"), "default"
 
@@ -178,11 +181,17 @@ def dim_factor(now: datetime, sch: dict, on: datetime | None = None) -> float:
     dm = sch.get("dim") or {}
     if not dm.get("enabled"):
         return 1.0
-    start = _local(datetime.combine(now.date(), _hm(dm.get("from", "22:00"))))
-    if on is not None and start < on:                 # after midnight: the dim began yesterday
-        start += timedelta(days=1)
-    if now < start and (now + timedelta(days=1) - start) < timedelta(hours=12) and now.hour < 12:
-        start -= timedelta(days=1)
+    t = _hm(dm.get("from", "22:00"))
+    if on is not None:
+        # the dim time belongs to the evening that started at `on`: the first occurrence of it
+        # no earlier than 12 h before `on` (a dim time before the on time dims from the start)
+        start = _local(datetime.combine(on.date(), t))
+        if start < on - timedelta(hours=12):
+            start = _local(datetime.combine(on.date() + timedelta(days=1), t))
+    else:
+        start = _local(datetime.combine(now.date(), t))
+        if now < start and now.hour < 12 and (start - now) > timedelta(hours=12):
+            start = _local(datetime.combine(now.date() - timedelta(days=1), t))
     if now < start:
         return 1.0
     level = max(0.05, min(1.0, float(dm.get("level", 0.5))))
@@ -199,9 +208,14 @@ def evaluate(now: datetime, sch: dict) -> dict:
         return {"active": prog is not None, "program": prog, "rule": "morning",
                 "on": mw[0].isoformat(timespec="minutes"), "off": mw[1].isoformat(timespec="minutes"),
                 "next_change": mw[1].isoformat(timespec="seconds"), "dim": 1.0}
-    if not ev["active"] and mw and now < mw[0] and mw[0].isoformat(timespec="seconds") < ev["next_change"]:
-        ev = {**ev, "next_change": mw[0].isoformat(timespec="seconds"), "on": mw[0].isoformat(timespec="minutes"),
-              "next_program": (sch.get("morning") or {}).get("program") or ev.get("next_program"), "rule": "morning"}
+    if not ev["active"]:
+        nxt = datetime.fromisoformat(ev["next_change"])
+        for d in (now.date(), now.date() + timedelta(days=1)):      # today's or tomorrow's morning
+            m = morning_window(d, sch)
+            if m and now < m[0] < nxt:
+                ev = {**ev, "next_change": m[0].isoformat(timespec="seconds"), "on": m[0].isoformat(timespec="minutes"),
+                      "next_program": (sch.get("morning") or {}).get("program") or ev.get("next_program"), "rule": "morning"}
+                break
     ev["dim"] = dim_factor(now, sch, datetime.fromisoformat(ev["on"])) if ev["active"] else 1.0
     return ev
 

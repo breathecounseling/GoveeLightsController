@@ -132,8 +132,9 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                     return self._json({"error": "not found"}, 404)
                 try:
                     return self._visitor_get(vis[1], q)
-                except (KeyError, ValueError, OSError) as e:
-                    return self._json({"ok": False, "error": str(e)}, 400)
+                except (KeyError, ValueError, OSError):
+                    log.exception("visitor page request failed")      # details stay in the log
+                    return self._json({"ok": False, "error": "unavailable"}, 400)
             if not self._guard(path):
                 return
             if path == "/static/qrcode.js":
@@ -220,16 +221,27 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
         # --------------------------------------------------------- POST
         def do_POST(self):
             path = urlparse(self.path).path
+            # Read (or refuse) the body first, so every response leaves the connection clean.
+            try:
+                ln = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                ln = -1
+            vis = self._visitor(path)
+            limit = 10_000 if vis is not None else 1_000_000
+            if ln < 0 or ln > limit:
+                self.close_connection = True
+                return self._json({"ok": False, "error": "bad request size"}, 413)
+            raw = self.rfile.read(ln) if ln else b""
             if self.headers.get("X-Requested-With") != "lights":     # CSRF guard
                 return self._json({"ok": False, "error": "missing request header"}, 403)
-            vis = self._visitor(path)
             if vis is not None:
                 if not vis[0]:
                     return self._json({"error": "not found"}, 404)
                 client = auth.client_ip(self)
                 try:
-                    ln = min(int(self.headers.get("Content-Length") or 0), 10_000)
-                    b = json.loads(self.rfile.read(ln) or b"{}")
+                    b = json.loads(raw or b"{}")
+                    if not isinstance(b, dict):
+                        raise ValueError("bad request")
                     if vis[1] == "pick":
                         return self._json({"ok": True, **ctl.visitor_pick(str(b.get("id", "")), client)})
                     if vis[1] == "sparkle":
@@ -237,14 +249,16 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                         return self._json({"ok": True})
                 except (ValueError, TypeError) as e:
                     return self._json({"ok": False, "error": str(e)}, 429 if "again" in str(e) or "seconds" in str(e) else 400)
+                except OSError:
+                    log.exception("visitor request failed")
+                    return self._json({"ok": False, "error": "unavailable"}, 503)
                 return self._json({"error": "not found"}, 404)
             if not self._guard(path):
                 return
             try:
-                ln = int(self.headers.get("Content-Length") or 0)
-                if ln > 1_000_000:
-                    raise ValueError("request too large")
-                b = json.loads(self.rfile.read(ln) or b"{}")
+                b = json.loads(raw or b"{}")
+                if not isinstance(b, dict):
+                    raise ValueError("request body must be a JSON object")
                 if path == "/api/login":
                     return self._login(b)
                 if path == "/api/logout":

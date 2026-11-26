@@ -32,6 +32,11 @@ def to_device_frames(layout: Layout, colors: list[Color], gamma: float = 1.0,
             if gamma != 1.0:
                 v = v ** gamma
             v *= 255.0
+            if dither is not None and v < 0.5:             # truly dark stays dark (no stray blips)
+                q = 0
+                dither[k][ch] = 0.0
+                out.append(q)
+                continue
             if dither is not None and v < 48.0:            # only where steps are visible
                 v += dither[k][ch]
                 q = int(min(255, max(0, round(v))))
@@ -112,7 +117,8 @@ class Engine:
             if len(ov) > 3:
                 until, start, decay = ov[3], ov[4], ov[5]
                 if now >= until:
-                    self.overlays.pop(name, None)
+                    if self.overlays.get(name) is ov:      # not re-triggered meanwhile
+                        self.overlays.pop(name, None)
                     continue
                 if decay:
                     op *= math.exp(-(now - start) / decay)
@@ -128,6 +134,8 @@ class Engine:
                 sh = k
                 cols = [colorsys.hsv_to_rgb((colorsys.rgb_to_hsv(*c)[0] + sh) % 1.0, *colorsys.rgb_to_hsv(*c)[1:])
                         if (c[0] or c[1] or c[2]) else c for c in cols]
+        if self.overlays or self.hue_sweep:            # overlays can add light above 1.0
+            cols = [(min(1.0, max(0.0, c[0])), min(1.0, max(0.0, c[1])), min(1.0, max(0.0, c[2]))) for c in cols]
         return cols
 
     def _transition(self, old, new, f):

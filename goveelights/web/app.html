@@ -926,6 +926,8 @@ function saveSheet(){
 // ------------------------------------------------------------- playlists
 let plCur = null;
 const opt = (v, l, s) => `<option value="${esc(v)}" ${s?'selected':''}>${esc(l)}</option>`;
+/* options for a list, plus a visible "(missing)" entry if the saved value no longer exists */
+const optsWithMissing = (items, cur) => (cur && !items.some(([v]) => v === cur) ? `<option value="${esc(cur)}" selected disabled>(missing: ${esc(cur)})</option>` : '') + items.map(([v, l]) => opt(v, l, v === cur)).join('');
 function plSelect(){ const names = Object.keys(PL); if (!plCur || !PL[plCur]) plCur = names[0] || null;
   $('plSel').innerHTML = names.map(n => opt(n,n,n===plCur)).join('') || '<option value="">No playlists</option>'; plEditor(); playlistChips() }
 function plPick(n){ plCur = n; plEditor() }
@@ -938,7 +940,7 @@ function plEditor(){
       <label class="row"><input type="checkbox" id="plShuf" ${pl.shuffle?'checked':''}> Shuffle</label></div>
     <div class="row" style="margin-top:10px"><button class="pri" id="plSave">Save</button><button id="plPlay">▶ Play</button><button class="bad sm" id="plDel" style="margin-left:auto">Delete</button></div>`;
   const items = $('plItems');
-  const drawItems = () => { items.innerHTML = pl.items.map((it,k) => `<div class="item"><select data-k="${k}">${PRESETS.map(p => opt(p.id,p.name,p.id===it.preset)).join('')}</select>
+  const drawItems = () => { items.innerHTML = pl.items.map((it,k) => `<div class="item"><select data-k="${k}">${optsWithMissing(PRESETS.map(p => [p.id, p.name]), it.preset)}</select>
       <input type="number" min="0.1" step="0.5" value="${it.minutes}" data-m="${k}" title="minutes"><button class="sm bad" data-x="${k}">✕</button></div>`).join('') || '<p class="help">No presets yet.</p>';
     items.querySelectorAll('[data-k]').forEach(s => s.onchange = () => pl.items[+s.dataset.k].preset = s.value);
     items.querySelectorAll('[data-m]').forEach(s => s.onchange = () => pl.items[+s.dataset.m].minutes = +s.value);
@@ -1061,7 +1063,7 @@ async function decodeMapVideo(blob, T, progress = () => {}){
     if (ok) for (let k = 0; k < need2; k++) if (means[i+k] > loT) { ok = false; break }
     if (ok && i*step - step/2 + T.off + T.bits*2*T.slot <= dur){ edge = i*step - step/2; break }
   }
-  if (edge < 0) throw new Error("Couldn't find the blink pattern in this video. Record at least 25 seconds while the pattern runs, holding still.");
+  if (edge < 0) throw new Error("Couldn't find the blink pattern in this video. Record at least 30 seconds while the pattern runs, holding still.");
   // refine the all-on → all-off moment to about one video frame
   const mid = (hiT + loT) / 2, sc = (64*36*3) ? 1 : 1;
   for (let t = edge - 0.15; t <= edge + 0.15; t += 0.02){ await seek(t); lx.drawImage(v, 0, 0, 64, 36); const d = lx.getImageData(0, 0, 64, 36).data;
@@ -1116,7 +1118,7 @@ async function decodeMapVideo(blob, T, progress = () => {}){
     const amp = at(ON, b) - at(OFF, b); b.amp = amp; if (amp <= 0) { b.ok = false; continue }
     let code = 0, conf = 1;
     for (let bit = 0; bit < T.bits; bit++){ const a = at(slots[bit*2], b), inv = at(slots[bit*2+1], b); if (a > inv) code |= 1 << bit; conf = Math.min(conf, Math.abs(a - inv) / amp) }
-    const id = code & 255, parity = (code >> 8) & 1, popc = id.toString(2).split('1').length - 1;
+    const idBits = T.bits - 1, id = code & ((1 << idBits) - 1), parity = (code >> idBits) & 1, popc = id.toString(2).split('1').length - 1;
     b.ok = parity === (popc & 1) && conf >= 0.2 && id < T.n; b.id = id; b.conf = conf;
     if (b.ok && (!best[id] || best[id].conf < conf)) best[id] = b;
   }
@@ -1131,13 +1133,13 @@ async function reloadLayout(){ LAYOUT = await get('layout'); layoutPreview(); th
 async function mapWizard(){
   const el = h(`<div>
     <p class="help" style="margin-top:0"><b>1.</b> Stand where you can see the part of the house you want to map, e.g. across the street facing the front gable. Landscape, no zoom, at night. Lean the phone on something so it stays still.</p>
-    <p class="help"><b>2.</b> Start the pattern. The lights blink a code that repeats every 11½ seconds.</p>
+    <p class="help"><b>2.</b> Start the pattern. The lights blink a code that repeats every ${''}13½ seconds.</p>
     <div class="grp" style="margin-top:4px">Blink brightness</div>
     <div class="tgt" id="mLvl"></div>
     <p class="help">Dim keeps each bulb a sharp point on camera (less glow onto the siding), which suits close or dense areas like the zigzag. Use brighter only if you're filming from far away.</p>
     <button class="pri" style="width:100%" id="mStart">Start the blink pattern</button>
-    <p class="help">Check before recording: <b>every run should flash white together</b> about every 11 seconds. If one keeps its own colours, tap Start again (it re-takes every box).</p>
-    <p class="help"><b>3.</b> Record a video of about 25 seconds (two full cycles), then come back here.</p>
+    <p class="help">Check before recording: <b>every run should flash white together</b> about every 13 seconds. If one keeps its own colours, tap Start again (it re-takes every box).</p>
+    <p class="help"><b>3.</b> Record a video of about 30 seconds (two full cycles), then come back here.</p>
     <label class="row" style="gap:8px"><span class="grow"><button style="width:100%;pointer-events:none">🎥 Record video</button></span><input type="file" accept="video/*" capture="environment" id="mRec" style="position:absolute;opacity:0;width:1px"></label>
     <label class="row" style="margin-top:6px"><span class="grow"><button class="sm" style="width:100%;pointer-events:none">Choose an existing video</button></span><input type="file" accept="video/*" id="mPick" style="position:absolute;opacity:0;width:1px"></label>
     <div id="mOut"></div>
@@ -1260,7 +1262,7 @@ function shEditor(){
     <p class="help">Total ${Math.floor(total/60)}m ${total%60}s</p>
     <div class="row"><button class="pri" id="shSave">Save</button><button id="shPlay">▶ Play now</button><button class="bad sm" id="shDel" style="margin-left:auto">Delete</button></div>`;
   const cb = box.querySelector('#cues');
-  sh.cues.forEach((c, k) => { const el = h(`<div class="cue"><select class="full" data-f="preset">${PRESETS.map(p => opt(p.id, p.name, p.id===c.preset)).join('')}</select>
+  sh.cues.forEach((c, k) => { const el = h(`<div class="cue"><select class="full" data-f="preset">${optsWithMissing(PRESETS.map(p => [p.id, p.name]), c.preset)}</select>
       <div class="full row"><div class="grow"><label class="dim" style="font-size:11px">${k+1}. Transition in</label><select data-f="transition">${(EXTRAS.transitions||[]).map(t => opt(t, TRANS_LABEL[t]||t, t===(c.transition||'crossfade'))).join('')}</select></div>
         <div style="width:70px"><label class="dim" style="font-size:11px">over (s)</label><input type="number" data-f="fade" min="0" max="10" step="0.5" value="${c.fade??1.5}"></div>
         <div style="width:70px"><label class="dim" style="font-size:11px">then hold (s)</label><input type="number" data-f="seconds" min="2" max="600" step="1" value="${c.seconds??20}"></div></div>
@@ -1278,7 +1280,7 @@ function shEditor(){
 function drawShowtimes(){
   const box = $('stList'); box.innerHTML = ''; const D = ['Mo','Tu','We','Th','Fr','Sa','Su'];
   (EXTRAS.showtimes ||= []).forEach((st, k) => { const el = h(`<div class="evt">
-      <div class="full"><label>Show</label><select data-f="show">${Object.keys(EXTRAS.shows||{}).map(n => opt(n,n,n===st.show)).join('')}</select></div>
+      <div class="full"><label>Show</label><select data-f="show">${optsWithMissing(Object.keys(EXTRAS.shows||{}).map(n => [n, n]), st.show)}</select></div>
       <div><label>From</label><input type="time" data-f="from" value="${esc(st.from||'17:00')}"></div><div><label>To</label><input type="time" data-f="to" value="${esc(st.to||'22:00')}"></div>
       <div class="full"><label>Every</label><select data-f="every">${[[15,'15 minutes'],[30,'30 minutes'],[60,'hour'],[120,'2 hours']].map(([v,l]) => opt(v,l,+st.every===v)).join('')}</select></div>
       <div class="full days">${D.map((d,i) => `<button class="${(st.days||[]).includes(i)?'on':''}" data-day="${i}">${d}</button>`).join('')}<span class="dim" style="font-size:11px;align-self:center;margin-left:4px">(none = every day)</span></div>
@@ -1306,7 +1308,7 @@ function drawVisitor(){
 async function saveVisitor(newLink){
   const v = EXTRAS.visitor; Object.assign(v, {enabled: $('vEn').checked, title: $('vTitle').value.trim(), message: $('vMsg').value.trim(), sparkle: $('vSp').checked});
   if (newLink && !confirm('Make a new link? Printed signs with the old QR code will stop working.')) return;
-  if (await post('visitor', {value: {...v, new_link: !!newLink}})) { EXTRAS = await get('extras'); drawVisitor(); toast('Saved') }
+  if (await post('visitor', {value: {...v, new_link: !!newLink}})) { EXTRAS.visitor = (await get('extras')).visitor; drawVisitor(); toast('Saved') }
 }
 function printSign(){
   const url = visitorUrl(); if (!url || !EXTRAS.visitor.enabled) return toast('Turn the visitor page on and save first');
@@ -1322,7 +1324,10 @@ function printSign(){
 
 // ------------------------------------------------------------- colour match
 let whiteOn = false;
-function whiteTest(){ whiteOn = !whiteOn; post('pad', {action:'white', on: whiteOn}); $('wtBtn').textContent = whiteOn ? 'Stop white test' : 'Show white on all runs'; $('wtBtn').classList.toggle('pri', whiteOn) }
+let whiteT = null;
+function whiteTest(){ whiteOn = !whiteOn; post('pad', {action:'white', on: whiteOn}); clearInterval(whiteT);
+  if (whiteOn) whiteT = setInterval(() => post('pad', {action:'white', on: true}), 60000);     // server holds it 120 s
+  $('wtBtn').textContent = whiteOn ? 'Stop white test' : 'Show white on all runs'; $('wtBtn').classList.toggle('pri', whiteOn) }
 function drawTrims(){
   const box = $('trims'); if (!box || box._drawn === JSON.stringify(ST.runs.map(r => r.mac))) return;
   box._drawn = JSON.stringify(ST.runs.map(r => r.mac)); box.innerHTML = '';

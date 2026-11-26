@@ -61,3 +61,10 @@ class AuthTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ClientIpTests(unittest.TestCase):
+    def test_cf_header_only_trusted_from_tunnel(self):
+        self.assertEqual(Auth.client_ip(FakeReq("127.0.0.1", {"Cf-Connecting-IP": "203.0.113.9"})), "203.0.113.9")
+        self.assertEqual(Auth.client_ip(FakeReq("198.51.100.4", {"Cf-Connecting-IP": "1.2.3.4"})), "198.51.100.4")
+        self.assertEqual(Auth.client_ip(FakeReq("127.0.0.1", {"Cf-Connecting-IP": "not-an-ip"})), "127.0.0.1")

@@ -55,9 +55,11 @@ async function refresh(){
   S = await get('state').catch(() => null); if (!S) return;
   $('title').textContent = S.title; $('msg').textContent = S.message || '';
   if (S.now) say(`Now playing: ${S.now}` + (S.queue ? ` · ${S.queue} waiting` : ''), true);
+  const key = JSON.stringify([S.on, S.sparkle, S.presets]);
+  if ($('body')._k === key) return;
+  $('body')._k = key;
   if (!S.on){ $('body').innerHTML = '<div class="off">The lights are off right now.<br>Come back this evening! ✨</div>'; cards.clear(); return }
-  if ($('body')._k === JSON.stringify(S.presets)) return;
-  $('body')._k = JSON.stringify(S.presets); $('body').innerHTML = ''; cards.clear();
+  $('body').innerHTML = ''; cards.clear();
   if (S.sparkle){ const sp = document.createElement('button'); sp.className = 'sparkle'; sp.textContent = '✨ Make it sparkle! ✨';
     sp.onclick = async () => { const r = await post('sparkle'); say(r.ok ? 'Sparkle! ✨' : r.error) }; $('body').appendChild(sp) }
   const grid = document.createElement('div'); grid.className = 'grid'; $('body').appendChild(grid);

@@ -287,7 +287,7 @@ def candy_cane(t, p, P):
     k = math.floor(x)
     f = x - k
     c = cols[k % len(cols)]
-    b = max(P["blend"], min(0.5, 0.5 / P["width"]))    # at least one bulb of edge softening
+    b = min(0.5, max(P["blend"], 0.5 / P["width"]))    # at least one bulb of edge softening, never past the middle
     if f > 1 - b:
         return lerp(c, cols[(k + 1) % len(cols)], (f - (1 - b)) / b * 0.5)
     if f < b:
@@ -739,7 +739,7 @@ def lightning(t, p, P):
 
 
 # ------------------------------------------------------------ camera mapping code
-MAP_ON, MAP_OFF, MAP_SLOT, MAP_BITS = 1.0, 1.0, 0.5, 9
+MAP_ON, MAP_OFF, MAP_SLOT, MAP_BITS = 1.0, 1.0, 0.5, 11     # 10-bit id (up to 1024 bulbs) + parity
 
 
 def map_cycle() -> float:
@@ -762,7 +762,7 @@ def mapcode(t, p, P):
     if slot >= MAP_BITS * 2:
         return BLACK
     b, inverse = divmod(slot, 2)
-    code = p.i | ((bin(p.i).count("1") & 1) << 8)       # 8-bit id + parity bit
+    code = p.i | ((bin(p.i).count("1") & 1) << (MAP_BITS - 1))     # id bits + parity bit
     bit = (code >> b) & 1
     return on if bit ^ inverse else BLACK
 

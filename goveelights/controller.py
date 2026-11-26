@@ -146,6 +146,13 @@ class Controller:
             self.exit_diag()
         if on and not any(d.get("ip") for d in self.engine.output.devices.values()):
             raise ValueError("no devices with a known IP; scan first")
+        if manual and self.interrupt is not None:
+            with self.lock:
+                if self.interrupt is not None:
+                    if on:
+                        self.interrupt["live"] = True     # don't switch off again when it ends
+                    else:
+                        self.interrupt = None             # Live off ends a show/celebration
         # a tap on Live always re-takes every box, in case the Govee app grabbed one
         self.engine.set_live(on, release=True, force=on and manual)
 
@@ -223,7 +230,7 @@ class Controller:
             if manual:
                 self._manual()
                 self.interrupt = None
-                self.evolve = None
+            self.evolve = None                        # play_evolve sets it again right after
             if not keep_playlist:
                 self.playlist = None
             self.scene_dict = scene.to_dict()
@@ -309,6 +316,7 @@ class Controller:
             if manual:
                 self._manual()
             self.playlist, self.playing, self.evolve = None, None, None
+            self.interrupt = None                     # Stop really stops shows and celebrations too
             self.engine.set_scene(None)
             self.engine.set_live(False, release=release)
 
@@ -358,12 +366,13 @@ class Controller:
         first = cues[0]
         total = sum(max(1.0, float(c.get("seconds", 20))) for c in cues)
         loop = (show or {}).get("end") == "loop"
-        ok = self.start_interrupt(self._cue_scene(first), 10 ** 9 if loop else total + 1, f"Show: {name}",
-                                  force_live=manual, fade=float(first.get("fade", 1.5)),
-                                  transition=first.get("transition", "crossfade"))
-        if ok:
-            self.interrupt["show"] = {"name": name, "idx": 0, "loop": loop,
-                                      "next_at": time.time() + max(1.0, float(first.get("seconds", 20)))}
+        with self.lock:
+            ok = self.start_interrupt(self._cue_scene(first), 10 ** 9 if loop else total + 1, f"Show: {name}",
+                                      force_live=manual, fade=float(first.get("fade", 1.5)),
+                                      transition=first.get("transition", "crossfade"))
+            if ok:
+                self.interrupt["show"] = {"name": name, "idx": 0, "loop": loop,
+                                          "next_at": time.time() + max(1.0, float(first.get("seconds", 20)))}
         return ok
 
     def _show_tick(self, now: float):
@@ -399,7 +408,8 @@ class Controller:
                 continue
             lo, hi = a.hour * 60 + a.minute, b.hour * 60 + b.minute
             every = max(5, int(stt.get("every", 60)))
-            if not (lo <= mins <= hi) or (mins - lo) % every:
+            inside = lo <= mins <= hi if lo <= hi else (mins >= lo or mins <= hi)     # may cross midnight
+            if not inside or ((mins - lo) % 1440) % every:
                 continue
             key = (k, now.date().isoformat(), mins)
             if key in self._showtimes_done:
@@ -468,8 +478,18 @@ class Controller:
                 "queue": len(self.vqueue), "sparkle": bool(v.get("sparkle", True)),
                 "now": (it.get("visitor") or {}).get("name") if it.get("visitor") else None}
 
+    def _vprune(self, now: float):
+        if len(self._vlast) > 2000:
+            keep = max(float(self.vcfg.get("cooldown", 60)), 15.0)
+            self._vlast = {k: t for k, t in self._vlast.items() if now - t < keep}
+
     def visitor_pick(self, pid: str, client: str) -> dict:
+        with self.lock:
+            return self._visitor_pick(pid, client[:64])
+
+    def _visitor_pick(self, pid: str, client: str) -> dict:
         v, now = self.vcfg, time.time()
+        self._vprune(now)
         if pid not in v.get("presets", []):
             raise ValueError("that one isn't available")
         if v.get("only_when_on", True) and not self.engine.live:
@@ -480,8 +500,6 @@ class Controller:
         if len(self.vqueue) >= int(v.get("max_queue", 5)):
             raise ValueError("Lots of requests right now. Try again in a minute!")
         self._vlast[client] = now
-        if len(self._vlast) > 2000:
-            self._vlast = {k: t for k, t in self._vlast.items() if now - t < cd}
         self.vqueue.append({"id": pid, "client": client})
         pos = len(self.vqueue)
         wait = (pos - 1) * float(v.get("seconds", 60))
@@ -490,7 +508,12 @@ class Controller:
         return {"position": pos, "wait": round(wait)}
 
     def visitor_sparkle(self, client: str) -> str:
+        with self.lock:
+            return self._visitor_sparkle(client[:64])
+
+    def _visitor_sparkle(self, client: str) -> str:
         now = time.time()
+        self._vprune(now)
         if not self.vcfg.get("sparkle", True):
             raise ValueError("not available")
         if now - self._vlast.get("sparkle:" + client, 0) < 15 or now - self._vlast.get("sparkle:*", 0) < 3:
@@ -501,19 +524,21 @@ class Controller:
         return self.pad("sparkle")
 
     def _visitor_tick(self):
-        if not self.vqueue or not self.engine.live:
+        if not self.vqueue or not self.engine.live or self.map_state or self.diag_active:
             return
         it = self.interrupt
         if it and not it.get("visitor"):            # a show, countdown or celebration is on: wait
             return
         if it and time.time() < it["until"]:
             return
-        req = self.vqueue.pop(0)
+        req = self.vqueue[0]
         try:
             d = self.presets.get(req["id"])
         except (OSError, ValueError):
+            self.vqueue.pop(0)                         # preset deleted: drop the request
             return
         if self.start_interrupt(d, float(self.vcfg.get("seconds", 60)), f"Visitor pick: {d.get('name')}", fade=1.5):
+            self.vqueue.pop(0)
             self.interrupt["visitor"] = {"name": d.get("name"), "id": req["id"]}
 
     # ------------------------------------------------------ self-healing
@@ -691,8 +716,8 @@ class Controller:
                                          "fx": [{"type": "shimmer", "params": {"depth": depth, "rate": 1 + wind / 8}}]}]},
                             "multiply", 1.0)
         ov = self.engine.overlays
-        for k in list(ov):
-            if k not in want:
+        for k in ("snow", "rain", "storm", "wind"):      # only our own keys: pad hits live here too
+            if k in ov and k not in want:
                 ov.pop(k, None)
         for k, (d, mode, op) in want.items():
             if k not in ov or getattr(ov[k][0], "_spec", None) != d:
@@ -723,8 +748,9 @@ class Controller:
         from .effects import MAP_BITS, MAP_OFF, MAP_ON, MAP_SLOT, map_cycle
         with self.lock:
             if self.map_state is None:
-                self.interrupt = None
-                self.map_state = {"scene": self.scene_dict, "playing": self.playing, "live": self.engine.live,
+                it, self.interrupt = self.interrupt, None
+                base = it or {"scene": self.scene_dict, "playing": self.playing, "live": self.engine.live}
+                self.map_state = {"scene": base["scene"], "playing": base["playing"], "live": base["live"],
                                   "speed": self.engine.master.get("speed", 1.0), "blackout": self.engine.blackout}
             self.engine.master["speed"] = 1.0
             self.engine.blackout = False
@@ -824,7 +850,7 @@ class Controller:
         ev = sched.evaluate(now, sch)
         self.sched_status = ev
         self.engine.dim = float(ev.get("dim", 1.0)) if sch.get("enabled") else 1.0
-        if not sch.get("enabled") or self.diag_active or self.map_state or self.interrupt:
+        if not sch.get("enabled") or self.diag_active or self.map_state:
             return
         if self.override_until:
             if now < self.override_until:
@@ -834,6 +860,11 @@ class Controller:
         key = json.dumps(ev["program"], sort_keys=True) if ev["active"] else None
         if key == self._sched_key:
             return
+        if self.interrupt is not None:
+            if key is not None:
+                return            # let the show/celebration finish; switch programs afterwards
+            with self.lock:
+                self.interrupt = None             # lights-off time beats any show still running
         self._sched_key = key
         log.info("schedule: %s", f"on ({ev['rule']}: {ev['program']})" if key else "off")
         try:
@@ -845,6 +876,7 @@ class Controller:
     def status(self) -> dict:
         e = self.engine
         sch = self.cfg.data.get("schedule", {})
+        it, evs, health = self.interrupt, self.evolve, dict(self.health)
         pl = None
         if self.playlist:
             pl = {"name": self.playlist["name"], "next_in": max(0, round(self.playlist["next_at"] - time.time()))}
@@ -852,17 +884,15 @@ class Controller:
             "live": e.live, "playing": self.playing, "playlist": pl, "diag_active": self.diag_active,
             "fps": e.fps, "gamma": e.gamma, "brightness": e.brightness, "stats": e.stats,
             "master": e.master, "blackout": e.blackout, "dither": e.dither,
-            "evolve": ({"next_in": max(0, round(self.evolve["next_at"] - time.time())), "step": self.evolve["step"]}
-                       if self.evolve else None),
-            "interrupt": ({"label": self.interrupt.get("label"), "left": max(0, round(self.interrupt["until"] - time.time()))}
-                          if self.interrupt else None),
+            "evolve": ({"next_in": max(0, round(evs["next_at"] - time.time())), "step": evs["step"]} if evs else None),
+            "interrupt": ({"label": it.get("label"), "left": max(0, round(it["until"] - time.time()))} if it else None),
             "mapping": bool(self.map_state), "weather": self.weather, "overlays": list(e.overlays),
             "games": self.games, "dim": round(e.dim, 2),
-            "show": (self.interrupt or {}).get("show", {}).get("name") if self.interrupt else None,
+            "show": ((it or {}).get("show") or {}).get("name"),
             "visitor_queue": len(self.vqueue),
             "health": {self.cfg.devices.get(m, {}).get("name", m): {
                 "ok": h["miss"] == 0, "reasserts_15min": len([t for t in h["reasserts"] if time.time() - t < 900]),
-                "paused": h["paused"]} for m, h in self.health.items()},
+                "paused": h["paused"]} for m, h in health.items()},
             "schedule": {"enabled": bool(sch.get("enabled")), **self.sched_status,
                          "override_until": self.override_until.isoformat(timespec="minutes") if self.override_until else None},
             "runs": [{"name": r.name, "mac": r.mac, "count": r.count, "visible": len(r.pixels), "trim": r.trim,

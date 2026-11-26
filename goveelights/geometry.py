@@ -97,8 +97,11 @@ def peaks(layout, min_rise: float = 1.5) -> list[dict]:
             lo, hi = max(0, k - 3), min(len(ps), k + 4)
             if any(ps[j].y > p.y + 1e-6 for j in range(lo, hi)):
                 continue
-            # skip the second bulb of a flat-topped peak
-            if k > 0 and abs(ps[k - 1].y - p.y) < 1e-6 and any(o["i"] == ps[k - 1].i for o in out):
+            # a flat top counts once: skip if any bulb earlier on the same level stretch was taken
+            j = k - 1
+            while j >= 0 and abs(ps[j].y - p.y) < 1e-6:
+                j -= 1
+            if any(o["i"] in {ps[m].i for m in range(j + 1, k)} for o in out):
                 continue
             wlo, whi = max(0, k - 15), min(len(ps), k + 16)
             rise = p.y - min(ps[j].y for j in range(wlo, whi))

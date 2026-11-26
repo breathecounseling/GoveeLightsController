@@ -139,7 +139,17 @@ class Auth:
     # ------------------------------------------------------------ requests
     @staticmethod
     def client_ip(handler) -> str:
-        return handler.headers.get("Cf-Connecting-IP") or handler.client_address[0]
+        """The real visitor address. Cf-Connecting-IP is only believed when the request came
+        from this PC itself (the Cloudflare tunnel); anyone else could just make it up."""
+        peer = handler.client_address[0]
+        cf = (handler.headers.get("Cf-Connecting-IP") or "").strip()
+        if cf:
+            try:
+                if ipaddress.ip_address(peer).is_loopback:
+                    return str(ipaddress.ip_address(cf))
+            except ValueError:
+                pass
+        return peer
 
     @staticmethod
     def proxied(handler) -> bool:
