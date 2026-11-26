@@ -50,6 +50,15 @@ def to_device_frames(layout: Layout, colors: list[Color], gamma: float = 1.0,
     return frames
 
 
+class _Still:
+    """A frozen frame standing in for the outgoing scene when a fade starts mid-fade."""
+    def __init__(self, cols):
+        self.cols = list(cols)
+
+    def render(self, t, layout, master=None):
+        return self.cols
+
+
 class Engine:
     def __init__(self, layout: Layout, output: Output, fps: float = 20.0, gamma: float = 1.0,
                  brightness: float = 1.0):
@@ -66,6 +75,7 @@ class Engine:
         self.transition = "crossfade"
         self.scene: Scene | None = None
         self._prev: Scene | None = None
+        self._mixed: list[Color] | None = None     # last crossfade frame (before overlays)
         self._fade_start, self._fade_s = 0.0, 0.0
         # perf_counter: before 3.13, Windows' monotonic()/time() tick only every 15.6 ms,
         # which would make the t handed to effects step unevenly at 20-60 fps.
@@ -105,8 +115,15 @@ class Engine:
             if continuous and scene is not None:
                 # copy the effect memory if the old scene keeps rendering in a fade
                 scene.adopt_state(self.scene, copy=fade_s > 0 and self.scene is not None)
-            if self.scene is not None and scene is not None and fade_s > 0:
-                self._prev, self._fade_start, self._fade_s = self.scene, self.now(), fade_s
+            now = self.now()
+            mid = self._prev is not None and now < self._fade_start + self._fade_s
+            if continuous and fade_s <= 0 and mid and scene is not None:
+                pass                       # a live edit keeps the running crossfade going
+            elif self.scene is not None and scene is not None and fade_s > 0:
+                out = self.scene
+                if mid and self._mixed is not None and len(self._mixed) == self.layout.n:
+                    out = _Still(self._mixed)  # fade from what is on screen, not the incoming scene
+                self._prev, self._fade_start, self._fade_s = out, now, fade_s
             else:
                 self._prev = None
             self.scene = scene
@@ -123,14 +140,17 @@ class Engine:
             cols = [(0.0, 0.0, 0.0)] * self.layout.n
         else:
             cols = scene.render(t, self.layout, self.master)
+        self._mixed = None
         if prev is not None and scene is not None:
-            f = (t - fade_start) / fade_s
+            f = max(0.0, (t - fade_start) / fade_s)    # t is read before a set_scene on another thread
             if f >= 1:
                 with self._lock:
-                    self._prev = None
+                    if self._prev is prev:
+                        self._prev = None
             else:
                 old = prev.render(t, self.layout, self.master)
                 cols = self._transition(old, cols, f)
+                self._mixed = cols
         now = self.wall()
         for name, ov in list(self.overlays.items()):
             sc, mode, op = ov[0], ov[1], ov[2]
@@ -146,11 +166,13 @@ class Engine:
                 continue
             oc = sc.render(t, self.layout)
             cols = [blend(mode, a, b, op) for a, b in zip(cols, oc)]
-        if self.hue_sweep:
-            st, dur = self.hue_sweep
+        sweep = self.hue_sweep
+        if sweep:
+            st, dur = sweep
             k = (now - st) / dur
             if k >= 1:
-                self.hue_sweep = None
+                if self.hue_sweep is sweep:            # not restarted meanwhile by a pad hit
+                    self.hue_sweep = None
             else:
                 import colorsys
                 sh = k

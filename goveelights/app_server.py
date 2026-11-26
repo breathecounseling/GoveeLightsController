@@ -15,6 +15,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .auth import COOKIE, Auth
+from .color import hex_to_rgb
 from .config import Config
 from .controller import Controller
 from .diag_server import Server, build_report, lan_ips
@@ -460,6 +461,15 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                 pals = b["palettes"]
                 if not isinstance(pals, dict) or not all(isinstance(v, list) and v for v in pals.values()):
                     raise ValueError("palettes must be {name: [colours]}")
+                for name, v in pals.items():
+                    for h in v:
+                        ok = isinstance(h, str) and len(h.strip().lstrip("#")) in (3, 6)
+                        try:
+                            ok and hex_to_rgb(h)
+                        except ValueError:
+                            ok = False
+                        if not ok:
+                            raise ValueError(f"palette {name}: {h!r} is not a #rrggbb colour")
                 with cfg.lock:
                     cfg.data["palettes"] = pals
                     cfg.save()
