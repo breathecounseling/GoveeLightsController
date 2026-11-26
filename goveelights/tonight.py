@@ -388,8 +388,23 @@ def _build(ctl, now: datetime, password_set) -> dict:
                 and on < off):
             every = max(1.0, float(ev.get("remind_every_min", 15)))
             label = f"{days} {'day' if days == 1 else 'days'} to {ev.get('name', 'Event')}"
-            at(max(on, now) + timedelta(minutes=every), f"Reminders: {label}", "event",
-               f"8 s on the Peak every {every:g} min while the lights are on")
+            first = max(on, now) + timedelta(minutes=every)
+            lr = getattr(ctl, "_last_reminder", None)
+            if current and isinstance(lr, (int, float)) and on.timestamp() <= lr <= now.timestamp():
+                first = max(now, datetime.fromtimestamp(lr, now.tzinfo) + timedelta(minutes=every))
+            # a loop show (Santa's coming) has the house until lights-off: no reminder plays over it
+            loop = min(((ts[0], name) for name, sh, ts in owners
+                        if isinstance(sh, dict) and sh.get("end") == "loop" and ts), default=None)
+            it = getattr(ctl, "interrupt", None) or {}
+            if ((it.get("show") or {}).get("loop")
+                    or ((it.get("resume") or {}).get("show") or {}).get("loop")):
+                loop = (now, (it.get("show") or it["resume"]["show"]).get("name", "the show"))
+            if loop is None:
+                at(first, f"Reminders: {label}", "event",
+                   f"8 s on the Peak every {every:g} min while the lights are on")
+            elif first < loop[0]:
+                at(first, f"Reminders: {label}", "event",
+                   f"8 s on the Peak every {every:g} min until {fmt_time(loop[0])} ({loop[1]} takes over)")
         if not (now - timedelta(minutes=1) <= when <= now + timedelta(hours=24)):
             continue
         cd, mins = float(ev.get("countdown") or 0), float(ev.get("minutes") or 0)
