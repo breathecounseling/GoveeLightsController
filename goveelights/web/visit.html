@@ -59,7 +59,7 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:22px}
   <div id="status" role="status" aria-live="polite"></div>
   <div class="net" id="net"></div>
   <div id="body"></div>
-  <footer>Your pick plays on the house for about a minute. Be kind: one pick at a time 🙂</footer>
+  <footer id="foot">Be kind: one pick at a time 🙂</footer>
 </main>
 <script>
 const tok = location.pathname.split('/').filter(Boolean)[1], API = `/api/visit/${encodeURIComponent(tok || '')}/`;
@@ -176,10 +176,18 @@ function drawYou(){
 function statusLine(S){
   const q = S.queue ? `${S.queue} waiting` : '';
   if (!S.on) return '';
+  if (S.now && S.you && S.you.playing) return q;          // the "your pick is on" box says it already
   if (S.now) return `Now playing: ${S.now}` + (q ? ` · ${q}` : '');
   if (S.busy) return 'A light show is on right now. Picks play after it' + (q ? ` · ${q}` : '');
   return q;
 }
+/* How long a pick plays, from the owner's setting. */
+function footLine(S){
+  const s = Math.max(1, Math.round(+S.seconds || 60));
+  const t = s < 90 ? `${s} seconds` : `about ${Math.round(s / 60)} minutes`;
+  return `Your pick plays on the house for ${t}. Be kind: one pick at a time 🙂`;
+}
+function offLine(S){ return S.next_on ? `They come on ${esc(S.next_on)}. See you then! ✨` : 'Check back later! ✨' }
 function pickLine(r, name){
   const mins = `about ${Math.max(1, Math.round((r.wait || 0)/60))} min`;
   if (r.busy) return `A light show is on right now. “${name}” plays after it (${mins})`;
@@ -189,14 +197,14 @@ async function refresh(){
   const s = await get('state'); if (!s || s.ok === false || typeof s.on !== 'boolean') return;
   S = s;
   $('title').textContent = S.title; $('msg').textContent = S.message || ''; document.title = S.title || 'Pick the lights';
-  $('live').hidden = !S.on;
+  $('live').hidden = !S.on; $('foot').textContent = footLine(S);
   $('nowName').innerHTML = S.now || S.playing ? `Now playing: ${esc(S.now || S.playing)}` : 'Live from the house';
   drawYou();
   say(statusLine(S), true);
-  const key = JSON.stringify([S.on, S.sparkle, S.snow, S.colours, S.presets]);
+  const key = JSON.stringify([S.on, S.next_on, S.sparkle, S.snow, S.colours, S.presets]);
   if ($('body')._k === key) return;
   $('body')._k = key;
-  if (!S.on){ $('body').innerHTML = '<div class="off">The lights are off right now.<br>Come back this evening! ✨</div>'; cards.clear(); return }
+  if (!S.on){ $('body').innerHTML = `<div class="off">The lights are off right now.<br>${offLine(S)}</div>`; cards.clear(); return }
   $('body').innerHTML = ''; cards.clear();
   const fx = document.createElement('div'); fx.className = 'fx';
   if (S.snow){ const b = document.createElement('button'); b.className = 'big snow' + (S.sparkle ? '' : ' wide'); b.onclick = snowTap; fx.appendChild(b) }
@@ -216,8 +224,9 @@ async function refresh(){
   for (const p of S.presets){
     const b = document.createElement('button'); b.className = 'card'; b.innerHTML = `<canvas></canvas><b>${esc(p.name)}</b>`;
     b.onclick = async () => { const r = await post('pick', {id: p.id});
-      if (r.ok) say(pickLine(r, p.name));
-      else say(nice(r)); refresh() };
+      if (!r.ok){ say(nice(r)); return refresh() }
+      await refresh();
+      say(S && S.on && S.you ? '' : pickLine(r, p.name)) };        // one confirmation: the "your pick" box, if it shows
     grid.appendChild(b); cards.set(b.querySelector('canvas'), p.id);
     if (!thumbs[p.id]) get('thumb?id=' + encodeURIComponent(p.id)).then(d => { if (d && d.frames) thumbs[p.id] = d });
   }

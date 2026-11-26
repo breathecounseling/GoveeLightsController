@@ -4,19 +4,25 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#0b0e13">
+<meta name="color-scheme" content="dark">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>House Lights</title>
 <style>
-:root{--bg:#0b0e13;--p1:#141920;--p2:#1b212b;--p3:#232b37;--line:#2c3542;--text:#e8edf3;--dim:#8d98a7;--acc:#4ade80;--accbg:#1f7a43;--blue:#60a5fa;--mod:#c084fc;--warn:#fbbf24;--bad:#f87171;--r:14px}
+:root{color-scheme:dark;--bg:#0b0e13;--p1:#141920;--p2:#1b212b;--p3:#232b37;--line:#2c3542;--text:#e8edf3;--dim:#8d98a7;--acc:#4ade80;--accbg:#1f7a43;--blue:#60a5fa;--mod:#c084fc;--warn:#fbbf24;--bad:#f87171;--r:14px}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overscroll-behavior-y:contain}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overscroll-behavior-y:contain;overflow-anchor:none}
+a{color:var(--blue)}
+a button{color:var(--text)}
 button,input,select,textarea{font:inherit;color:inherit}
 button{background:var(--p2);border:1px solid var(--line);border-radius:12px;padding:9px 12px;cursor:pointer;touch-action:manipulation}
 button:active{filter:brightness(1.3);transform:scale(.98)}
 button.pri{background:var(--accbg);border-color:#2f9e5a}
 button.bad{background:#3b1517;border-color:#7f2a2a}
 button.ghost{background:transparent;border-color:transparent}
-button.sm{padding:5px 10px;font-size:13px;border-radius:9px;min-height:38px;min-width:38px}
+button.sm{padding:5px 10px;font-size:13px;border-radius:9px;min-height:40px;min-width:40px}
+summary{cursor:pointer;min-height:40px;padding:10px 0}
+.hck{flex:1;display:flex;align-items:center;gap:8px;min-height:44px;cursor:pointer}
+.hck span{flex:1}
 input[type=text],input[type=number],input[type=time],input[type=password],select,textarea{background:var(--p2);border:1px solid var(--line);border-radius:10px;padding:9px 10px;min-width:0;width:100%}
 input[type=color]{width:40px;height:40px;border:1px solid var(--line);border-radius:10px;padding:2px;background:var(--p2)}
 input[type=range]{width:100%;accent-color:var(--blue);margin:0;height:28px}
@@ -27,14 +33,18 @@ header{position:sticky;top:0;z-index:20;background:var(--bg)}
 .hd{display:flex;align-items:center;gap:8px;padding:calc(6px + env(safe-area-inset-top)) 12px 6px}
 .hd h1{flex:1;font-size:16px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hd h1 small{display:block;color:var(--dim);font-weight:500;font-size:11.5px;letter-spacing:.02em}
-.hd h1 span{display:block;overflow:hidden;text-overflow:ellipsis}
+.hd h1 span{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;white-space:normal;overflow:hidden;font-size:15px;line-height:1.2;overflow-wrap:anywhere}
 .hd h1 span.on::before{content:'';display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--acc);margin-right:6px;vertical-align:1px;box-shadow:0 0 6px var(--acc)}
 .hd h1 span.show::before{background:var(--warn);box-shadow:0 0 6px var(--warn)}
 .npstop{flex:none;font-weight:700}
 .npstop.arm{background:#3b1517;border-color:var(--bad);color:#fecaca}
 .live{border-radius:99px;padding:6px 13px;font-weight:700;font-size:13px;min-height:38px;flex:none}
 .live.on{background:var(--accbg);border-color:#2f9e5a}
+.live .ld{display:none;width:9px;height:9px;border-radius:50%;background:#bbf7d0;box-shadow:0 0 6px #bbf7d0;margin-right:6px;vertical-align:1px}
+.live.on .ld{display:inline-block}
+.hd.stopping .live.on{padding:6px 0;min-width:38px}.hd.stopping .live.on .lt{display:none}.hd.stopping .live.on .ld{margin:0}
 #pv{display:block;width:100%;background:#040608;border-top:1px solid #11161d;border-bottom:1px solid var(--line)}
+header.mini #pv{height:44px!important;object-fit:contain}
 main{padding:12px 12px calc(84px + env(safe-area-inset-bottom));max-width:720px;margin:0 auto}
 section{display:none}section.on{display:block}
 /* bottom nav */
@@ -82,7 +92,8 @@ h2 .sp{flex:1}
 /* editor */
 .tb{display:flex;gap:6px;align-items:center;margin-bottom:10px}
 .tb button{padding:8px 10px}
-.tb .grow{font-weight:700;font-size:16px;background:none;border:none;padding:4px 2px;min-height:40px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb .sp{flex:1}
+.scnm{display:block;width:100%;text-align:left;font-weight:700;font-size:16px;background:none;border:none;padding:4px 2px;min-height:40px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px}
 .lrow{display:flex;align-items:center;gap:8px;background:var(--p1);border:1px solid var(--line);border-radius:12px;padding:8px 10px;margin-bottom:6px}
 .lrow.sel{border-color:var(--blue);background:#132033}
 .lrow.off .lname{opacity:.45}
@@ -91,7 +102,7 @@ h2 .sp{flex:1}
 .lname span{display:block;font-size:11.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sw{width:26px;height:26px;border-radius:8px;flex:none;border:1px solid var(--line)}
 .seg{display:flex;background:var(--p2);border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px;margin:10px 0}
-.seg button{flex:1;border:none;background:none;border-radius:9px;padding:8px 4px;color:var(--dim);font-weight:600}
+.seg button{flex:1;border:none;background:none;border-radius:9px;padding:8px 4px;color:var(--dim);font-weight:600;min-height:40px}
 .seg button.on{background:var(--p3);color:var(--text)}
 .prm{padding:8px 0;border-bottom:1px solid #222a35}
 .prm:last-child{border-bottom:none}
@@ -102,9 +113,9 @@ h2 .sp{flex:1}
 .modb.on{color:#fff;background:#4c1d95;border-color:var(--mod)}
 .prm.modded input[type=range]{accent-color:var(--mod)}
 .modsum{font-size:11.5px;color:var(--mod);margin-top:2px}
-.cols{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.cols{display:flex;gap:14px 26px;flex-wrap:wrap;align-items:center;margin-top:14px}
 .cols .c{position:relative}
-.cols .c .x{position:absolute;right:-9px;top:-9px;padding:0;width:24px;height:24px;min-width:0;min-height:0;font-size:12px;line-height:20px;border-radius:99px}
+.cols .c .x{position:absolute;right:-22px;top:-15px;padding:0;width:32px;height:32px;min-width:0;min-height:0;font-size:14px;line-height:28px;border-radius:99px}
 .fxu{background:var(--p2);border:1px solid var(--line);border-radius:12px;padding:8px 10px;margin-bottom:8px}
 .fxu.off{opacity:.55}
 .fxu .h{display:flex;align-items:center;gap:6px}
@@ -157,7 +168,7 @@ h2 .sp{flex:1}
 .cue .full{grid-column:1/-1}
 .cue .row{gap:6px}
 .days{display:flex;gap:4px;flex-wrap:wrap}
-.days button{padding:4px 0;font-size:12px;border-radius:8px;min-width:38px;min-height:36px}
+.days button{padding:4px 0;font-size:12px;border-radius:8px;min-width:40px;min-height:40px}
 .days button.on{background:#1e3a5f;border-color:var(--blue)}
 #qr canvas,#qr img{display:block;margin:8px auto;background:#fff;padding:10px;border-radius:12px;max-width:220px;width:100%;image-rendering:pixelated}
 .badge{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:3px 8px;border-radius:99px;background:#3a2d0b;color:var(--warn);border:1px solid #6b5313}
@@ -170,7 +181,7 @@ h2 .sp{flex:1}
 #toast{position:fixed;left:50%;bottom:calc(76px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#2c3542;padding:8px 14px;border-radius:10px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;z-index:60;font-size:14px}
 #toast.show{opacity:1}
 .banner{background:#3a2d0b;border:1px solid var(--warn);border-radius:12px;padding:10px;margin-bottom:12px;font-size:13.5px}
-.item{display:grid;grid-template-columns:1fr 74px auto;gap:6px;margin-bottom:6px;align-items:center}
+.item{display:grid;grid-template-columns:1fr 64px auto auto;gap:6px;margin-bottom:6px;align-items:center}
 .rule{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--p2);border:1px solid var(--line);border-radius:10px;padding:8px;margin-bottom:8px}
 .rule .full{grid-column:1/-1}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:13.5px}.kv b{color:var(--dim);font-weight:500}
@@ -200,8 +211,8 @@ button.ck:active{background:var(--p2)}
 .ck em{display:block;font-style:normal;font-size:12px;color:var(--blue);margin-top:1px}
 .ck .go{margin-left:auto;color:var(--dim);flex:none;padding-top:2px}
 .cksum{font-size:13px;margin:4px 0}
-details.okl summary{font-size:12.5px;color:var(--dim);padding:6px 4px;cursor:pointer}
-.calr{display:grid;grid-template-columns:96px 1fr;gap:8px;padding:7px 0;border-bottom:1px solid #222a35;font-size:13.5px}
+details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:pointer}
+.calr{display:grid;grid-template-columns:112px 1fr;gap:8px;padding:7px 0;border-bottom:1px solid #222a35;font-size:13.5px}
 .calr:last-child{border-bottom:none}
 .calr .d{color:var(--dim);font-size:12.5px;font-variant-numeric:tabular-nums}
 .calr b{display:block}.calr span{display:block;font-size:12px;color:var(--dim)}
@@ -216,7 +227,7 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:6px 4px;cursor:poi
   <div class="hd">
     <h1 id="title" aria-live="polite"><small id="sub">House Lights</small><span id="hdNow">Loading…</span></h1>
     <button id="stopBtn" class="sm npstop" style="display:none" onclick="stopTap()">■ Stop</button>
-    <button id="liveBtn" class="live" onclick="toggleLive()">Preview</button>
+    <button id="liveBtn" class="live" onclick="toggleLive()"><i class="ld"></i><span class="lt">Go live</span></button>
     <button class="ghost sm" onclick="powerSheet()" aria-label="Power menu"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v9"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg></button>
   </div>
   <canvas id="pv" height="80"></canvas>
@@ -228,7 +239,7 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:6px 4px;cursor:poi
 <!-- PLAY -->
 <section id="s-play" class="on">
   <div class="card" id="featured" style="display:none">
-    <h2><span class="sp">Featured tonight</span><span class="dim" style="font-size:12px;font-weight:400">the big scenes · swipe</span></h2>
+    <h2><span class="sp" id="featT">Featured</span><span class="dim" style="font-size:12px;font-weight:400">the big scenes · swipe</span></h2>
     <div class="fstrip" id="featStrip"></div>
   </div>
   <div class="card">
@@ -257,9 +268,10 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:6px 4px;cursor:poi
 
 <!-- CREATE -->
 <section id="s-create">
+  <button class="scnm" id="nameBtn" onclick="saveSheet()"></button>
   <div class="tb">
     <button onclick="undo()" id="undoB" aria-label="Undo">↶</button><button onclick="redo()" id="redoB" aria-label="Redo">↷</button>
-    <button class="grow" id="nameBtn" onclick="saveSheet()"></button>
+    <span class="sp"></span>
     <button onclick="togglePaint()" title="Paint" id="paintB">🖌</button><button onclick="randomize()" title="Randomize">🎲</button><button onclick="mutate()" title="Mutate">✨</button>
     <button class="pri" onclick="saveSheet()">Save</button>
   </div>
@@ -299,7 +311,7 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:6px 4px;cursor:poi
     <div class="card"><h2>Countdowns &amp; events</h2><p class="help">At the moment itself the house counts down (digits on the zigzag, eaves filling up), then plays a celebration. "Days to go" shows the number on the zigzag for a few seconds every 15 minutes while the lights are on.</p>
       <div id="evList"></div><div class="row"><button onclick="addEvent()">+ Event</button><button onclick="post('live/test',{kind:'countdown'})">Test countdown</button><button onclick="post('live/test',{kind:'days'})">Test days</button></div>
       <button class="pri" style="width:100%;margin-top:8px" onclick="saveExtras('events')">Save events</button></div>
-    <div class="card"><h2><span class="sp">Game day</span><input type="checkbox" id="gEn"></h2>
+    <div class="card"><h2><label class="hck"><span>Game day</span><input type="checkbox" id="gEn" aria-label="Game day on"></label></h2>
       <p class="help">Celebrates when your team scores (touchdowns, field goals, goals, runs) and wins, in the team's colours. Scores come from ESPN's public scoreboard. TV is usually 20–60 s behind, so add a delay to avoid spoilers.</p>
       <div id="gTeams"></div><button class="sm" onclick="addTeam()">+ Team</button>
       <div class="prm"><div class="top"><span class="lbl">Delay to match TV</span><output id="gDelayV"></output></div><input type="range" id="gDelay" min="0" max="120" step="5"></div>
@@ -310,13 +322,13 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:6px 4px;cursor:poi
       <div id="gStatus" class="help"></div>
       <div class="row wrap"><button class="sm" onclick="post('live/test',{kind:'touchdown'})">Test touchdown</button><button class="sm" onclick="post('live/test',{kind:'field goal'})">Test field goal</button><button class="sm" onclick="post('live/test',{kind:'win'})">Test win</button></div>
       <button class="pri" style="width:100%;margin-top:8px" onclick="saveExtras('game')">Save game day</button></div>
-    <div class="card"><h2><span class="sp">Weather</span><input type="checkbox" id="wEn"></h2>
+    <div class="card"><h2><label class="hck"><span>Weather</span><input type="checkbox" id="wEn" aria-label="Weather on"></label></h2>
       <p class="help">Adds weather on top of whatever is playing, using the forecast for your location (Open-Meteo, checked every 10 minutes).</p>
       <div class="tgt" id="wKinds"></div>
       <div id="wStatus" class="help" style="margin-top:8px"></div>
       <div class="row wrap"><button class="sm" onclick="post('live/test',{kind:'snow'})">Test snow</button><button class="sm" onclick="post('live/test',{kind:'rain'})">Test rain</button><button class="sm" onclick="post('live/test',{kind:'storm'})">Test lightning</button><button class="sm" onclick="post('live/test',{kind:'wind'})">Test wind</button></div>
       <button class="pri" style="width:100%;margin-top:8px" onclick="saveExtras('weather')">Save weather</button></div>
-    <div class="card"><h2><span class="sp">Visitor page (QR sign)</span><input type="checkbox" id="vEn"></h2>
+    <div class="card"><h2><label class="hck"><span>Visitor page (QR sign)</span><input type="checkbox" id="vEn" aria-label="Visitor page (QR sign) on"></label></h2>
       <p class="help">Neighbours scan a sign in your yard and pick from presets you choose here. Their pick plays for a while, then the lights go back to normal. They can't see or change anything else. The link has a secret code; "New link" makes old signs stop working.</p>
       <input type="text" id="vTitle" placeholder="Title (e.g. Pick the lights!)" style="margin-bottom:6px"><input type="text" id="vMsg" placeholder="Message (e.g. Happy holidays from the Smiths!)">
       <div class="grp">Presets visitors can pick</div><div class="tgt" id="vPresets"></div>
@@ -364,8 +376,17 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:6px 4px;cursor:poi
 <!-- MORE -->
 <section id="s-more">
   <div class="card">
-    <h2><span class="sp">Palettes</span><button class="sm" onclick="editPalette(null)">+ New</button></h2>
-    <div id="palList"></div>
+    <h2>Devices</h2><div id="devInfo" class="kv"></div>
+    <div class="grp">Add a WLED controller</div>
+    <p class="help">For DIY pixels (WS2815 strip, WS2811 bullet nodes, WS2812B fairy strings) on an ESP32 running WLED. Type its IP address (shown in the WLED app). Its bulb count is read automatically; then use camera mapping to place it on the house.</p>
+    <div class="row"><input type="text" id="wledIp" placeholder="192.168.14.50" inputmode="decimal" style="flex:1"><input type="text" id="wledName" placeholder="Name (e.g. Tree)" style="flex:1"><button onclick="addWled()">Add</button></div>
+    <p class="help">Bulb counts, landmarks, identify: diagnostics (pauses effects while open).</p>
+    <a href="/diag"><button>Open diagnostics</button></a>
+  </div>
+  <div class="card" id="secCard">
+    <h2>Security</h2>
+    <div id="secStatus" class="help"></div>
+    <div id="secForm"></div>
   </div>
   <div class="card">
     <h2>Output</h2>
@@ -389,17 +410,8 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:6px 4px;cursor:poi
     <div id="trims"></div>
   </div>
   <div class="card">
-    <h2>Devices</h2><div id="devInfo" class="kv"></div>
-    <div class="grp">Add a WLED controller</div>
-    <p class="help">For DIY pixels (WS2815 strip, WS2811 bullet nodes, WS2812B fairy strings) on an ESP32 running WLED. Type its IP address (shown in the WLED app). Its bulb count is read automatically; then use camera mapping to place it on the house.</p>
-    <div class="row"><input type="text" id="wledIp" placeholder="192.168.14.50" inputmode="decimal" style="flex:1"><input type="text" id="wledName" placeholder="Name (e.g. Tree)" style="flex:1"><button onclick="addWled()">Add</button></div>
-    <p class="help">Bulb counts, landmarks, identify: diagnostics (pauses effects while open).</p>
-    <a href="/diag"><button>Open diagnostics</button></a>
-  </div>
-  <div class="card" id="secCard">
-    <h2>Security</h2>
-    <div id="secStatus" class="help"></div>
-    <div id="secForm"></div>
+    <h2><span class="sp">Palettes</span><button class="sm" onclick="editPalette(null)">+ New</button></h2>
+    <div id="palList"></div>
   </div>
   <div class="card">
     <h2>App</h2>
@@ -490,6 +502,10 @@ function highlight(target){
   hlUntil = performance.now() + 1800; draw(lastHex); setTimeout(()=>draw(lastHex), 1850);
 }
 addEventListener('resize', () => { layoutPreview(); thumbs.resize() });
+/* Scrolled down a long form: the preview becomes a strip (with some slack, so it doesn't flicker). Never while painting on it. */
+function headerMini(){ const hd = document.querySelector('header'), on = hd.classList.contains('mini'), y = window.scrollY;
+  const want = !painting && (on ? y > 30 : y > 140); if (want !== on) hd.classList.toggle('mini', want) }
+addEventListener('scroll', headerMini, {passive: true});
 function openStream(){ const es = new EventSource('/api/stream'); es.onmessage = e => draw(e.data); es.onerror = () => { es.close(); setTimeout(openStream, 2000) } }
 
 // ------------------------------------------------------------- thumbnails
@@ -536,12 +552,12 @@ setInterval(() => { if (document.visibilityState === 'visible' && $('s-play').cl
 // ------------------------------------------------------------- status
 async function refresh(){
   const s = await get('status').catch(()=>null); if (!s) return; ST = s;
-  $('liveBtn').textContent = s.live ? '● Live' : 'Preview'; $('liveBtn').classList.toggle('on', s.live);
+  liveBtnUI(s);
   const p = s.playing, dusk = s.dusk_intro;
   $('nowName').textContent = p ? p.name : 'Nothing';
   headerNow(s);
   $('nowSub').textContent = p ? (dusk ? `dusk intro · ${fmtS(dusk.left)} left, then ${progName(dusk.then)}` : p.kind==='playlist' ? `playlist · ${p.item_name||p.item} · next in ${fmtS(s.playlist?.next_in)}` :
-    p.kind==='evolve' ? `evolving · next variation in ${fmtS(s.evolve?.next_in)}` : (s.live ? 'on the lights' : 'preview only (tap Preview to go Live)')) : '';
+    p.kind==='evolve' ? `evolving · next variation in ${fmtS(s.evolve?.next_in)}` : (s.live ? 'on the lights' : 'on this phone only (tap Go live to light the house)')) : '';
   $('evoBtn').classList.toggle('pri', !!p && p.kind === 'evolve'); $('evoBtn').style.display = p && (p.kind === 'preset' || p.kind === 'evolve') ? '' : 'none';
   setKnob('kBri','oBri', s.brightness, v => Math.round(v*100)+'%');
   setKnob('kSpd','oSpd', s.master.speed, v => (+v).toFixed(2)+'×');
@@ -564,20 +580,30 @@ async function refresh(){
   const di = s.runs.map(r => `<b>${esc(r.name)}</b><span>${r.visible}/${r.count} ${r.kind === 'wled' ? 'pixels · WLED' : 'bulbs'} · ${esc(r.ip||'no IP')}${r.kind === 'wled' ? ` <button class="sm bad" onclick="removeWled('${esc(r.mac)}','${esc(r.name)}')">Remove</button>` : ''}</span>`).join('');
   if ($('devInfo')._h !== di) $('devInfo').innerHTML = $('devInfo')._h = di;
   schedStatus(); liveStatus(); drawTrims();
+  if ($('featStrip')._k !== JSON.stringify(tonightIds(s))) drawFeatured();      // tonight's program changed
   if (document.activeElement !== $('dthEn')) $('dthEn').checked = s.dither !== false;
 }
+/* The Live pill: an action ("Go live") while the house is dark, the state ("Live") while it's lit. */
+function liveBtnUI(s){
+  const b = $('liveBtn'), t = s.live ? 'Live' : 'Go live';
+  if (b.querySelector('.lt').textContent !== t) b.querySelector('.lt').textContent = t;
+  b.classList.toggle('on', !!s.live);
+  b.setAttribute('aria-label', s.live ? 'Live: the house is lit. Tap to show on this phone only' : 'Go live: light up the house');
+}
+/* A tap on a preset or playlist lights the house too, unless the owner chose "show on phone only". */
+const tapGoesLive = s => !!s && !s.live && !s.phone_only && !s.diag_active && !s.mapping && (s.runs || []).length > 0;
 /* The header always says what the house is doing, with Stop (or End, for a show or celebration) in reach. */
 function headerNow(s){
   const p = s.playing, it = s.interrupt, el = $('hdNow'), b = $('stopBtn');
   /* The time left goes in the small line (which has room) so the ellipsis on a long name never hides it. */
   const name = it ? String(it.label || '').replace(/^Show:\s*/, '') : p ? p.name : (s.live ? 'Nothing playing' : 'Lights off');
   if (el.textContent !== name) el.textContent = name;
-  const mode0 = s.blackout ? 'blackout' : s.live ? 'live' : 'preview';
+  const mode0 = s.blackout ? 'blackout' : s.live ? 'live' : 'phone only';
   const sub = it && it.left < 86400 ? fmtS(it.left) + ' left · ' + mode0 : 'House Lights · ' + mode0;
   if ($('sub').textContent !== sub) $('sub').textContent = sub;
   el.className = it ? 'on show' : (p && s.live && !s.blackout ? 'on' : '');
   const mode = it ? 'end' : p ? 'stop' : '';
-  b.style.display = mode ? '' : 'none';
+  b.style.display = mode ? '' : 'none'; b.parentNode.classList.toggle('stopping', !!mode);
   if (b.dataset.mode !== mode){ b.dataset.mode = mode; disarmStop() }
 }
 let stopArm = null;
@@ -609,9 +635,9 @@ function tap(){ const n = performance.now(); taps = taps.filter(t => n - t < 300
 function nudgeBpm(d){ const b = Math.round((ST.master?.bpm||120)+d); post('master',{bpm:b}).then(refresh) }
 function powerSheet(){
   openSheet('Lights', h(`<div>
-    <button class="pri" style="width:100%;margin-bottom:8px" onclick="post('live',{on:${!ST.live}}).then(()=>{closeSheet();refresh()})">${ST.live?'Switch to preview (stop sending)':'Go live'}</button>
+    <button class="${ST.live?'':'pri'}" style="width:100%;margin-bottom:8px" onclick="post('live',{on:${!ST.live}}).then(()=>{closeSheet();refresh()})">${ST.live?'Show on phone only (house lights off)':'Go live: light up the house'}</button>
     <button style="width:100%;margin-bottom:8px" onclick="post('master',{blackout:${!ST.blackout}}).then(()=>{closeSheet();refresh()})">${ST.blackout?'End blackout':'Blackout (keep playing, lights dark)'}</button>
-    <button style="width:100%;margin-bottom:8px" onclick="post('stop').then(()=>{closeSheet();refresh()})">Stop playback</button>
+    <button style="width:100%;margin-bottom:8px" onclick="post('stop').then(()=>{closeSheet();refresh()})">Turn lights off</button>
     <button class="bad" style="width:100%" onclick="confirm('Hand the lights back to the Govee app? Effects stop until you play something here again.') && post('release').then(()=>{closeSheet();toast('Released to the Govee app');refresh()})">Release to Govee app</button></div>`));
 }
 
@@ -638,8 +664,13 @@ function drawPalChips(){
   box.appendChild(palettePicker(ST.master?.palette || '', p => post('master',{palette:p}).then(() => { thumbs.data = {}; loadPresets() }),
     {label:'Original', bg:'repeating-linear-gradient(45deg,#333 0 6px,#222 6px 12px)'}));
 }
+/* Your own palettes first; the many built-in ones fold away (they're a long scroll on a phone). */
 function drawPalList(){
-  $('palList').innerHTML = Object.entries(PAL_CATS).map(([cat, names]) => `<div class="grp">${esc(cat)}</div>` + names.filter(n => PALS[n]).map(n => [n, PALS[n]]).map(([n,c]) => `<div class="row" style="margin-bottom:8px"><div class="grow"><div style="font-size:13px">${esc(n)}${PAL_BUILTIN.includes(n)?' <span class="dim">· built-in</span>':''}</div><div class="palbar" style="background:${palCss(c)}"></div></div><button class="sm" data-e="${esc(n)}">Edit</button></div>`).join('')).join('');
+  const row = n => `<div class="row" style="margin-bottom:8px"><div class="grow"><div style="font-size:13px">${esc(n)}${PAL_BUILTIN.includes(n)?' <span class="dim">· built-in</span>':''}</div><div class="palbar" style="background:${palCss(PALS[n])}"></div></div><button class="sm" data-e="${esc(n)}">Edit</button></div>`;
+  const mine = Object.keys(PALS).filter(n => !PAL_BUILTIN.includes(n)), open = $('palList').querySelector('details')?.open;
+  const built = Object.entries(PAL_CATS).map(([cat, names]) => { const ns = names.filter(n => PALS[n] && PAL_BUILTIN.includes(n)); return ns.length ? `<div class="grp">${esc(cat)}</div>` + ns.map(row).join('') : '' }).join('');
+  $('palList').innerHTML = (mine.length ? mine.map(row).join('') : '<p class="help" style="margin-top:0">None of your own yet. Tap + New, or Edit a built-in one to make it yours.</p>') +
+    `<details${open ? ' open' : ''}><summary class="dim">Built-in palettes (${PAL_BUILTIN.filter(n => PALS[n]).length})</summary>${built}</details>`;
   $('palList').querySelectorAll('[data-e]').forEach(b => b.onclick = () => editPalette(b.dataset.e));
 }
 /* ---- colour harmony (LED-tuned: keep colours vivid and bright, keep whites white) ---- */
@@ -743,14 +774,22 @@ function presetCard(p, tagline){
 /* The big house scenes, up front: these ids (when installed) plus anything tagged "Featured". */
 const FEATURED = ['christmas-tree', 'tree-lighting-ceremony', 'porch-fireworks', 'grand-finale', 'snow-piling-up',
                   'ember-falls', 'roller-coaster', 'text-merry-christmas', 'dusk-to-night'];
+/* The preset ids in tonight's scheduled program (a preset, an evolving preset or a playlist's items). */
+function tonightIds(s){
+  const sc = (s && s.schedule) || {}, prog = sc.active ? sc.program : sc.next_program;
+  if (!prog) return [];
+  if (prog.playlist) return [...new Set(((PL[prog.playlist] || {}).items || []).map(i => i && i.preset).filter(Boolean))];
+  return [prog.preset || prog.evolve].filter(Boolean);
+}
 function featuredPresets(){
   const byId = new Map(PRESETS.map(p => [p.id, p]));
-  const out = FEATURED.map(id => byId.get(id)).filter(Boolean);
+  const out = [...new Set([...tonightIds(ST), ...FEATURED])].map(id => byId.get(id)).filter(Boolean);
   PRESETS.forEach(p => { if ((p.tags||[]).some(t => String(t).toLowerCase() === 'featured') && !out.includes(p)) out.push(p) });
   return out;
 }
 function drawFeatured(){
-  const box = $('featStrip'), list = featuredPresets();
+  const box = $('featStrip'), list = featuredPresets(), tn = tonightIds(ST).some(id => PRESETS.some(p => p.id === id));
+  box._k = JSON.stringify(tonightIds(ST)); $('featT').textContent = tn ? 'Featured tonight' : 'Featured';
   $('featured').style.display = list.length ? '' : 'none';
   const keep = box.scrollLeft; box.innerHTML = '';
   list.forEach(p => { const el = presetCard(p, (p.tags||[]).filter(t => String(t).toLowerCase() !== 'featured').slice(0, 2).join(' · ')); box.appendChild(el); thumbs.observe(el, p.id) });
@@ -760,9 +799,9 @@ async function toggleEvolve(){ const p = ST.playing; if (!p) return;
   if (p.kind === 'evolve') { await post('play', {preset: p.id}); toast('Evolve off') }
   else if (p.kind === 'preset') { await post('play', {evolve: p.id, minutes: 3}); toast('Evolving: a fresh variation every 3 minutes') }
   refresh() }
-async function playPreset(id){ await post('play',{preset:id}); draft = null; refresh() }
+async function playPreset(id){ const live = tapGoesLive(ST); await post('play', live ? {preset:id, live} : {preset:id}); draft = null; refresh() }
 function playlistChips(){ $('playlistChips').innerHTML = Object.keys(PL).map(n => `<button class="chip" data-pl="${esc(n)}">▶ ${esc(n)}</button>`).join('') || '<p class="help">None yet. Make one in Shows.</p>';
-  $('playlistChips').querySelectorAll('[data-pl]').forEach(b => b.onclick = () => post('play',{playlist:b.dataset.pl}).then(refresh)) }
+  $('playlistChips').querySelectorAll('[data-pl]').forEach(b => b.onclick = () => { const live = tapGoesLive(ST); post('play', live ? {playlist:b.dataset.pl, live} : {playlist:b.dataset.pl}).then(refresh) }) }
 
 // ------------------------------------------------------------- editor: history
 const snap = () => JSON.stringify(draft);
@@ -1062,7 +1101,7 @@ function plEditor(){
     <div class="row" style="margin-top:10px"><button class="pri" id="plSave">Save</button><button id="plPlay">▶ Play</button><button class="bad sm" id="plDel" style="margin-left:auto">Delete</button></div>`;
   const items = $('plItems');
   const drawItems = () => { items.innerHTML = pl.items.map((it,k) => `<div class="item"><select data-k="${k}">${optsWithMissing(PRESETS.map(p => [p.id, p.name]), it.preset)}</select>
-      <input type="number" min="0.1" step="0.5" value="${it.minutes}" data-m="${k}" title="minutes"><button class="sm bad" data-x="${k}">✕</button></div>`).join('') || '<p class="help">No presets yet.</p>';
+      <input type="number" min="0.1" step="0.5" value="${it.minutes}" data-m="${k}" title="minutes" aria-label="minutes"><span class="dim" style="font-size:13px">min</span><button class="sm bad" data-x="${k}">✕</button></div>`).join('') || '<p class="help">No presets yet.</p>';
     items.querySelectorAll('[data-k]').forEach(s => s.onchange = () => pl.items[+s.dataset.k].preset = s.value);
     items.querySelectorAll('[data-m]').forEach(s => s.onchange = () => pl.items[+s.dataset.m].minutes = +s.value);
     items.querySelectorAll('[data-x]').forEach(b => b.onclick = () => { pl.items.splice(+b.dataset.x,1); drawItems() }) };
@@ -1127,9 +1166,16 @@ async function loadTonight(){
   try { TN = await get('tonight') } catch(e){ if ($('tnBody').dataset.ok !== '1') $('tnBody').textContent = "Couldn't work out tonight's plan."; return } finally { tnBusy = false }
   drawTonight();
 }
+/* "Tonight · on now" only while the schedule has the house lit; otherwise tonight's hours. */
+function tnTitle(p, s){
+  const date = new Date(p.date + 'T12:00').toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'});
+  const lit = p.current && p.enabled && s && s.live && !s.blackout;
+  const head = lit ? 'Tonight · on now' : p.current ? `Tonight · ${p.on_text}–${p.off_text}` : p.day;
+  return head + ' · ' + date;
+}
 function drawTonight(){
   const p = TN; if (!p) return; const box = $('tnBody'); box.dataset.ok = '1'; box.className = '';
-  $('tnDay').textContent = (p.current ? 'Tonight · on now' : p.day) + ' · ' + new Date(p.date + 'T12:00').toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'});
+  $('tnDay').textContent = tnTitle(p, ST);
   const chips = [];
   (p.games||[]).forEach(g => chips.push(`<span class="${g.state==='pre'||g.state==='in'?'on':''}">🏈 ${esc(g.text)}</span>`));
   if (p.weather?.enabled) chips.push(`<span class="on">☁ weather: ${esc(p.weather.kinds.join(', ') || 'none')} · ${esc(p.weather.text)}</span>`);
@@ -1204,7 +1250,7 @@ function paintLayer(){
 }
 async function togglePaint(){
   if (!draft) await (draftLoading || editCurrent(true));
-  painting = !painting; $('paintB').classList.toggle('on', painting); $('pv').classList.toggle('painting', painting);
+  painting = !painting; $('paintB').classList.toggle('on', painting); $('pv').classList.toggle('painting', painting); headerMini();
   $('layerPanel').style.display = painting ? 'none' : ''; $('paintPanel').style.display = painting ? '' : 'none';
   if (painting){ paintLayer(); changed(); renderPaint(); toast('Paint on the house preview at the top') } else renderEditor();
 }
@@ -1440,6 +1486,7 @@ async function saveExtras(which, msg = 'Saved'){
 function liveStatus(){
   const g = Object.entries(ST.games || {}).map(([k, v]) => v.error ? `${esc(k)}: couldn't reach scores (${esc(v.error)})` :
     v.state === 'none' || !v.id ? `${esc(v.team||k)}: no game on the current scoreboard` :
+    v.state === 'pre' ? `Next: <b>${esc(v.team)} vs ${esc(v.opponent)}</b>` + (v.date && !isNaN(new Date(v.date)) ? `, ${esc(tfmt(v.date))}` : '') :
     `<b>${esc(v.team)} ${v.score} – ${esc(v.opponent)} ${v.opp_score}</b> · ${esc(v.detail)}`).join('<br>');
   if ($('gStatus')) $('gStatus').innerHTML = g || (EXTRAS.game?.enabled ? 'Checking…' : '');
   const w = ST.weather || {};

@@ -118,6 +118,7 @@ class Controller:
         self._scoreboard_at: float | None = None    # when the next in-game scoreboard is due
         self._sched_key = "unset"
         self.sched_status: dict = {}
+        self.phone_only = False                     # the owner chose "show on phone only": taps don't light the house
         self._stop = threading.Event()
         self.started = time.time()
         self.build_engine()
@@ -161,6 +162,8 @@ class Controller:
                 self.set_live(True, manual=False)
 
     def set_live(self, on: bool, manual: bool = True):
+        if manual or on:
+            self.phone_only = manual and not on       # Stop (lights off) is not "phone only"
         if manual:
             with self.lock:
                 self._dusk_to_program(fade=8.0 if on else 0.0)   # a Live tap ends the dusk intro
@@ -357,6 +360,7 @@ class Controller:
         with self.lock:
             if manual:
                 self._manual()
+                self.phone_only = False               # lights off: the next tap lights the house again
             self.playlist, self.playing, self.evolve = None, None, None
             self.interrupt = None                     # Stop really stops shows and celebrations too
             self.vqueue.clear()                       # the visitors who asked are long gone by next time
@@ -704,14 +708,32 @@ class Controller:
                         you.update(wait=None, after_show=True)
                     else:
                         you.update(wait=round(wait + left), after_show=bool(it) and not cur)
+        on = self._visitor_on()
         return {"title": v.get("title") or "Pick the lights!", "message": v.get("message", ""),
-                "on": self._visitor_on(),
+                "on": on, "seconds": round(float(v.get("seconds", 60))),
+                "next_on": None if on else self._visitor_next_on(),
                 "presets": [{"id": i, "name": names[i]} for i in v.get("presets", []) if i in names],
                 "queue": len(self.vqueue), "sparkle": bool(v.get("sparkle", True)),
                 "snow": bool(v.get("snow", True)),
                 "colours": [{"name": n, "hex": h} for n, h in VISITOR_COLOURS] if v.get("colours", True) else [],
                 "now": cur.get("name") if cur else None, "you": you,
                 "busy": bool(it) and not it.get("visitor"), "playing": self._visitor_playing(names)}
+
+    def _visitor_next_on(self) -> str | None:
+        """When the schedule turns the lights on next ("at 4:36 pm", "tomorrow at 4:36 pm"), if it will."""
+        ss = self.sched_status or {}
+        if not self.cfg.data.get("schedule", {}).get("enabled") or ss.get("active") or not ss.get("on"):
+            return None
+        try:
+            t = datetime.fromisoformat(ss["on"]).astimezone()
+        except (TypeError, ValueError):
+            return None
+        today = datetime.now().astimezone().date()
+        if t.date() == today:
+            return "at " + tonight.fmt_time(t)
+        if t.date() == today + timedelta(days=1):
+            return "tomorrow at " + tonight.fmt_time(t)
+        return None
 
     def _visitor_playing(self, names: dict) -> str | None:
         """What's on, for the visitor page, but only names the visitor may see anyway: a
@@ -1433,11 +1455,13 @@ class Controller:
         names = tonight.Names({p["id"]: p["name"] for p in self.presets.list()},
                               {**(cfg.get("playlists") or {}), **cal["playlists"]})
         rules = []
+        # only the rule that wins today is "now" (first match wins; a later overlapping one doesn't apply)
+        win = next((k for k, r in enumerate(cal["rules"]) if "program" in r and sched.rule_matches(r, today)), None)
         for k, r in enumerate(cal["rules"]):
             rng = calendar_builtin.next_range(r, today)
             rules.append({"name": r["name"], "from": r["from"], "to": r["to"], "days": r.get("days"),
                           "dates": calendar_builtin.fmt_range(rng, r.get("days")),
-                          "start": rng[0].isoformat() if rng else "", "now": bool(rng and rng[0] <= today),
+                          "start": rng[0].isoformat() if rng else "", "now": k == win,
                           "program": r["program"], "program_name": names.program(r["program"]),
                           "program_detail": names.program_detail(r["program"]),
                           "about": cal["notes"].get(r["name"], ""), "off_time": r.get("off_time"), "priority": k})
@@ -1498,7 +1522,8 @@ class Controller:
         if self.playlist:
             pl = {"name": self.playlist["name"], "next_in": max(0, round(self.playlist["next_at"] - time.time()))}
         return {
-            "live": e.live, "playing": self.playing, "playlist": pl, "diag_active": self.diag_active,
+            "live": e.live, "phone_only": self.phone_only and not e.live,
+            "playing": self.playing, "playlist": pl, "diag_active": self.diag_active,
             "fps": e.fps, "gamma": e.gamma, "brightness": e.brightness, "stats": e.stats,
             "master": e.master, "blackout": e.blackout, "dither": e.dither,
             "evolve": ({"next_in": max(0, round(evs["next_at"] - time.time())), "step": evs["step"]} if evs else None),
