@@ -91,15 +91,11 @@ class App:
         s = self.streamers.get(mac)
 
         def run():
-            if s and s.realtime:
-                prev = s.frame
-                n = self.n_for(mac)
-                for _ in range(4):
-                    s.send_frame([(255, 255, 255)] * n, False); time.sleep(0.35)
-                    s.send_frame([BLACK] * n, False); time.sleep(0.35)
-                if prev:
-                    s.send_frame(prev)
-                return
+            # Always use the official on/off command, which every LAN-capable box
+            # supports. If realtime was on, drop it first and restore it after.
+            was_rt = bool(s and s.realtime)
+            if was_rt:
+                s.disable(repeats=2)
             st = self.lan.status(ip)
             was_on = (st or {}).get("onOff", 1)
             for _ in range(3):
@@ -107,6 +103,10 @@ class App:
                 self.lan.send(ip, p.turn_msg(True)); time.sleep(0.6)
             if not was_on:
                 self.lan.send(ip, p.turn_msg(False))
+            if was_rt:
+                s.enable()
+                if s.frame:
+                    s.send_frame(s.frame)
         threading.Thread(target=run, daemon=True).start()
 
     def state(self) -> dict:
