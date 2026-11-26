@@ -1,0 +1,23 @@
+{
+  "name": "Merry Christmas",
+  "tags": ["Holiday", "Text"],
+  "layers": [
+    {
+      "effect": "glitter",
+      "target": ["Eaves", "Lower roofline"],
+      "params": {"colors": ["#ff1a1a", "#00b030", "#ffb000"], "level": 0.25, "length": 30, "speed": 1.5}
+    },
+    {
+      "effect": "text",
+      "target": "Peak",
+      "params": {"text": "MERRY CHRISTMAS <3", "colors": ["#ff1a1a", "#00d040", "#ffc000"],
+                 "color_mode": "letters", "speed": 4, "sparkle": 0.3, "border": "twinkle",
+                 "border_color": "#ffb000"}
+    },
+    {
+      "effect": "glitter",
+      "target": "Front gable outline",
+      "params": {"colors": ["#ffd890", "#ffb030"], "level": 0.35, "shimmer": 0.6, "length": 12, "speed": 0}
+    }
+  ]
+}
