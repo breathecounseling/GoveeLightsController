@@ -16,7 +16,8 @@ from .palettes import CATEGORIES
 # never vary these: identity, location and clock settings, and timers/modes where the
 # value is a schedule rather than a look (a dusk demo loop, a tree relight, a finale...)
 SKIP = {"seed", "target", "value", "lat", "lon", "shift", "demo", "at", "seconds",
-        "celebrate", "intro", "relight", "finale", "clear", "burst_every"}
+        "celebrate", "intro", "relight", "finale", "clear", "burst_every",
+        "day", "tie", "unwrap_every"}
 
 
 def _family(pal: str) -> list[str]:

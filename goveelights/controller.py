@@ -463,9 +463,12 @@ class Controller:
     @staticmethod
     def _cue_secs(cue: dict) -> float:
         try:
-            return max(1.0, float(cue.get("seconds", 20)))
+            secs = max(1.0, float(cue.get("seconds", 20)))
         except (TypeError, ValueError):
-            return 20.0
+            secs = 20.0
+        if cue.get("countdown_to"):
+            secs = float(int(max(3, min(99, secs))))     # what the countdown scene can show (and plays)
+        return secs
 
     def _show_anchor(self, cues: list[dict], now: float) -> tuple[float | None, int | None]:
         """(unix time, cue index) of a countdown cue pinned to the clock, if that time is near."""
@@ -486,7 +489,7 @@ class Controller:
 
     def _cue_scene(self, cue: dict, st: dict | None = None, now: float | None = None) -> dict:
         if cue.get("countdown_to"):
-            secs = int(max(3, min(99, self._cue_secs(cue))))
+            secs = int(self._cue_secs(cue))
             target = (st or {}).get("anchor") or (now or time.time()) + secs
             return shows.countdown_scene(target, secs, min(10, secs))
         return self.presets.get(cue["preset"])
@@ -578,10 +581,7 @@ class Controller:
         now = datetime.now().astimezone()
         mins = now.hour * 60 + now.minute
         for k, stt in enumerate(self.cfg.data.get("showtimes", [])):
-            if not stt.get("enabled", True) or stt.get("days") and now.weekday() not in stt["days"]:
-                continue
-            dates = stt.get("date") or stt.get("dates")      # optional "MM-DD" (or a list): e.g. only on 12-31
-            if dates and now.strftime("%m-%d") not in ([dates] if isinstance(dates, str) else dates):
+            if not stt.get("enabled", True):
                 continue
             try:
                 a = sched._hm(stt.get("from", "17:00"))
@@ -589,6 +589,14 @@ class Controller:
             except ValueError:
                 continue
             lo, hi = a.hour * 60 + a.minute, b.hour * 60 + b.minute
+            # the after-midnight part of a window that crosses midnight belongs to the evening it began
+            night = now - timedelta(days=1) if lo > hi and mins <= hi else now
+            dates = stt.get("date") or stt.get("dates")      # optional "MM-DD" (or a list): e.g. only on 12-31
+            if dates:                                       # a date wins over weekdays (the UI hides them)
+                if night.strftime("%m-%d") not in ([dates] if isinstance(dates, str) else dates):
+                    continue
+            elif stt.get("days") and night.weekday() not in stt["days"]:
+                continue
             every = max(5, int(stt.get("every", 60)))
             inside = lo <= mins <= hi if lo <= hi else (mins >= lo or mins <= hi)     # may cross midnight
             if not inside or ((mins - lo) % 1440) % every:
