@@ -9,9 +9,9 @@
       "effect": "twinkle",
       "params": {
         "colors": [
-          "#ffe0b0"
+          "#fff0d0"
         ],
-        "background": "#ffc070",
+        "background": "#ff7a00",
         "density": 0.18,
         "duration": 3.0,
         "seed": 11
@@ -24,14 +24,14 @@
         "Garage peak"
       ],
       "blend": "normal",
-      "opacity": 0.2
+      "opacity": 0.6
     },
     {
       "effect": "tree",
       "params": {
-        "body": "#ffa800",
-        "body2": "#ffc400",
-        "level": 0.75,
+        "body": "#ff9000",
+        "body2": "#ffb000",
+        "level": 0.9,
         "shimmer": 0.35,
         "shade": 0.15,
         "garland": "#fff4e0",
@@ -49,9 +49,9 @@
         "density": 0.15,
         "glints": 0.2,
         "star": "#fff4e0",
-        "glow": "#ffd8a0",
-        "glow_level": 0.15,
-        "intro": 6
+        "glow": "#ff8000",
+        "glow_level": 0.6,
+        "intro": 2.5
       },
       "target": "Whole front gable"
     },

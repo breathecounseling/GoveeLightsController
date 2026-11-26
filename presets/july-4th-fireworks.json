@@ -28,7 +28,7 @@
           "#ffffff",
           "#b0c4ff"
         ],
-        "background": "#081470",
+        "background": "#0c20a0",
         "density": 0.06,
         "duration": 2.5,
         "seed": 7
@@ -37,11 +37,11 @@
     {
       "effect": "candy_cane",
       "target": "Lower roofline",
-      "opacity": 0.4,
+      "opacity": 0.7,
       "params": {
         "colors": [
           "#ff0010",
-          "#c8c8d2",
+          "#ffffff",
           "#0a2cff"
         ],
         "width": 4,
@@ -59,7 +59,7 @@
       "params": {
         "colors": [
           "#ff0010",
-          "#c8c8d2",
+          "#ffffff",
           "#0a2cff"
         ],
         "width": 4,
@@ -76,11 +76,11 @@
           "#ff0010",
           "#ffffff",
           "#1838ff",
-          "#ff2030",
+          "#ff0010",
           "#4060ff"
         ],
         "rate": 40,
-        "burst_size": 42,
+        "burst_size": 54, "burst_speed": 27,
         "crackle": 0.5,
         "embers": 0.3,
         "finale": 75,

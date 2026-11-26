@@ -8,7 +8,7 @@
     {
       "effect": "flag",
       "target": "Peak",
-      "params": {}
+      "params": {"colors": ["#ff0010", "#ffffff"], "level": 1.0, "wave": 0.25}
     },
     {
       "effect": "twinkle",
@@ -31,11 +31,11 @@
         "South wall",
         "Lower roofline"
       ],
-      "opacity": 0.6,
+      "opacity": 0.85,
       "params": {
         "colors": [
           "#ff0010",
-          "#c8c8d2",
+          "#ffffff",
           "#0a2cff"
         ],
         "width": 5,

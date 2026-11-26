@@ -7,18 +7,20 @@
   "layers": [
     {
       "effect": "sweep",
-      "palette": "Neon city",
       "params": {
-        "arms": 6,
-        "speed": 25
+        "colors": ["#ff00c0", "#7000ff", "#00b0ff", "#2000ff"],
+        "arms": 3,
+        "speed": 10
       },
       "fx": [
         {
           "type": "glitter",
           "params": {
-            "density": 1.2,
-            "decay": 0.12,
-            "base": 0.35
+            "density": 0.35,
+            "decay": 0.25,
+            "base": 0.6,
+            "whiteness": 0.95,
+            "bloom": 0.4
           }
         }
       ]

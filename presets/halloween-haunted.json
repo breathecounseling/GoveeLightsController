@@ -7,14 +7,14 @@
   "layers": [
     {
       "effect": "plasma",
-      "opacity": 0.75,
+      "opacity": 1.0,
       "params": {
         "colors": [
-          "#6000ff",
-          "#9000ff",
+          "#8000ff",
+          "#b040ff",
           "#20ff40",
-          "#7000e0",
-          "#5000c0"
+          "#9000ff",
+          "#7000ff"
         ],
         "scale": 10,
         "speed": 2
@@ -31,12 +31,12 @@
           "#e0e8ff"
         ],
         "speed": 1.4,
-        "every": 5,
-        "count": 2,
+        "every": 3.5,
+        "count": 3,
         "flicker": 0.2,
         "pop": 0,
-        "background": "#5000c0",
-        "glow": 0.5,
+        "background": "#6000ff",
+        "glow": 0.6,
         "outline": 0.7,
         "seed": 13,
         "level": 1.0
@@ -51,7 +51,7 @@
       "blend": "add",
       "params": {
         "color": "#40ff40",
-        "rate": 6,
+        "rate": 10,
         "decay": 0.12,
         "seed": 13
       }

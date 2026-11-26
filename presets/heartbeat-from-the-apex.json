@@ -7,14 +7,14 @@
     {
       "effect": "solid",
       "params": {
-        "color": "#48000c"
+        "color": "#800010"
       },
       "target": "all"
     },
     {
       "effect": "heartbeat",
       "params": {
-        "colors": ["#ff1030", "#ff1030", "#ffffff"],
+        "colors": ["#ff1030", "#ff0060"],
         "bpm": 56,
         "decay": 0.2
       },
@@ -25,7 +25,7 @@
           "type": "cascade",
           "params": {
             "mode": "from apex",
-            "delay": 1.4,
+            "delay": 0.3,
             "curve": 1.0,
             "depth_fade": 0.35
           }

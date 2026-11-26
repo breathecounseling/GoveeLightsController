@@ -7,13 +7,13 @@
     {
       "effect": "solid",
       "params": {
-        "color": "#08142a"
+        "color": "#0a2060"
       }
     },
     {
       "effect": "sweep",
       "params": {
-        "arms": 1,
+        "arms": 2,
         "speed": 15,
         "colors": [
           "#fff2c0",

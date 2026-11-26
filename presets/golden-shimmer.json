@@ -6,12 +6,20 @@
   ],
   "layers": [
     {
-      "effect": "shimmer",
-      "palette": "Champagne",
+      "effect": "solid",
       "params": {
-        "level": 0.28,
-        "width": 10,
-        "spacing": 80,
+        "color": "#ff8c00"
+      },
+      "opacity": 0.55
+    },
+    {
+      "effect": "shimmer",
+      "blend": "add",
+      "params": {
+        "colors": ["#ffd890", "#ffc060", "#ffe8c0"],
+        "level": 0,
+        "width": 16,
+        "spacing": 90,
         "speed": 14,
         "density": 4
       }

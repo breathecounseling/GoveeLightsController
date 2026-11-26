@@ -79,7 +79,7 @@ class EvolveTests(unittest.TestCase):
                 Scene.from_dict(v).render(1.0, L)        # always renders
         base = json.load(open("presets/festive-glitter.json"))
         v = evolve.variation(base, 1, 0.2, "x")
-        self.assertLess(abs(v["layers"][0]["params"]["length"] - base["layers"][0]["params"]["length"]), 20)
+        self.assertLess(abs(v["layers"][0]["params"]["width"] - base["layers"][0]["params"]["width"]), 5)
         self.assertEqual(evolve.variation(base, 5, 0.2, "x"), evolve.variation(base, 5, 0.2, "x"))   # deterministic
 
 

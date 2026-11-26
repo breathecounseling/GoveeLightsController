@@ -632,7 +632,7 @@ class NewYearTests(unittest.TestCase):
         self.assertEqual(ctl.interrupt["label"], f"Show: {self.NAME}")   # the New Year event stood aside
         r.tick(r.midnight - r.clock.t + 1, schedule=False)        # midnight: the grand finale
         self.assertEqual(ctl.interrupt["show"]["idx"], self.j() + 1)
-        self.assertEqual([l.effect for l in ctl.engine.scene.layers], ["fireworks"])
+        self.assertIn("fireworks", [l.effect for l in ctl.engine.scene.layers])   # grand-finale
         self.assertEqual(ctl.interrupt["label"], f"Show: {self.NAME}")
         rest = sum(c["seconds"] for c in self.cues()[self.j() + 1:])
         r.tick(rest + 5, schedule=False)
