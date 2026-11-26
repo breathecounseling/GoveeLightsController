@@ -179,6 +179,7 @@ class Scene:
     def __post_init__(self):
         self._last_t: float | None = None
         self._cache: dict = {}
+        self._layout = None             # the layout the caches and layer memory belong to
 
     @classmethod
     def from_dict(cls, d: dict, palettes: dict | None = None) -> "Scene":
@@ -212,6 +213,7 @@ class Scene:
             return
         dup = _copy.deepcopy if copy else (lambda v: v)
         self._last_t = old._last_t
+        self._layout = old._layout
         for a, b in zip(self.layers, old.layers):
             if a.effect == b.effect and b.clock is not None:
                 a.clock, a.travel, a.state = b.clock, b.travel, dup(b.state)
@@ -240,6 +242,16 @@ class Scene:
         n = layout.n
         out = [BLACK] * n
         px = layout.pixels
+        if self._layout is not layout:
+            # a rebuilt layout can reuse a freed one's id(), which the geometry caches are
+            # keyed on: drop them, and layer memory built on the old geometry
+            if self._layout is not None:
+                self._cache.pop("ctx", None)
+                for L in self.layers:
+                    L.state = {}
+                    for U in L.units:
+                        U.state = {}
+            self._layout = layout
         ctx_cache = self._cache.setdefault("ctx", {})
         for li, L in enumerate(self.layers):
             if not L.enabled:
