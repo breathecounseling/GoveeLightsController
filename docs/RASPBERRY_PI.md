@@ -215,10 +215,10 @@ Handy commands (in an `ssh` window):
 The tunnel now runs on the Pi instead of the PC. Follow [REMOTE.md](../REMOTE.md), with
 these differences:
 
-* **Step 1, password:** already done if you copied `govee_auth.json`. Otherwise run
+* **A2, password:** already done if you copied `govee_auth.json`. Otherwise run
   `python3 -m goveelights set-password` on the Pi.
-* **Step 2:** done (step 8 above).
-* **Step 3, the tunnel:** in Cloudflare → Zero Trust → Networks → Tunnels (newer
+* **A1:** done (step 8 above). **A3–A4** (domain, Zero Trust): skip if already done for the PC.
+* **A5, the tunnel:** in Cloudflare → Zero Trust → Networks → Tunnels (newer
   dashboards may put this under Networks → **Connectors**):
   * If you already made a tunnel for the PC, open it. Otherwise create one.
   * Under the install instructions choose **Debian** and **arm64-bit** (64-bit ARM).
@@ -229,7 +229,7 @@ these differences:
   * If the tunnel used to run on the PC, remove it there so Cloudflare only sends visits
     to the Pi: in an administrator PowerShell, `cloudflared.exe service uninstall`. In the
     tunnel's page in Cloudflare, only the Pi should be listed as a connector.
-* **Step 4, Access** (the email login in front of the page) stays exactly as it is.
+* **A6, Access** (the email login in front of the page) and **A7** (visitor page) stay exactly as they are.
 
 Now open `https://lights.your-new-domain.com` on your phone with Wi-Fi off. On your
 laptop, use the same address from anywhere. Bookmark it; the laptop needs nothing else.
