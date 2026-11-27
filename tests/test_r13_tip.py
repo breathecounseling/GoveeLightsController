@@ -248,10 +248,10 @@ TIP_GOLDEN = {
     "snowy-evening": "ba2267fdd9303da1", "sparkler-tree": "dfe331fae718aec8", "spooky-tree": "607e9a43296c4c4f",
     "spring-garden": "dafde51e69ffae29", "st-patricks": "3a70dda848208231", "starry-night": "5aeffa5a346fc93e",
     "starry-night-sleigh": "64c07353762dfa83", "summer-evening": "789df580428842c6", "summer-fireflies": "c12c960aadfe9c5b",
-    "text-give-thanks": "f0ac6a9aebce6e72", "text-go-broncos": "91a8b8fb62e73515", "text-happy-new-year": "1862872b5c5bdb24",
-    "text-merry-christmas": "b6fcc6d61b94f0b3", "text-scoreboard": "7ef7c055069da063", "thanksgiving-harvest": "1954ca90a1e28ffc",
-    "text-give-thanks-scroll": "ffc18422853331d9", "text-go-broncos-scroll": "eac86ecc4c09a0a2", "text-happy-new-year-scroll": "8610c3b8c6491846",
-    "text-merry-christmas-scroll": "239bbf4fd7823459", "text-scoreboard-scroll": "0fc622415646d622", "text-touchdown-scroll": "5a13a84405d9d9cf",
+    "text-give-thanks-letters": "f0ac6a9aebce6e72", "text-go-broncos-letters": "91a8b8fb62e73515", "text-happy-new-year-letters": "1862872b5c5bdb24",
+    "text-merry-christmas-letters": "b6fcc6d61b94f0b3", "text-scoreboard-letters": "7ef7c055069da063", "thanksgiving-harvest": "1954ca90a1e28ffc",
+    "text-give-thanks": "ffc18422853331d9", "text-go-broncos": "eac86ecc4c09a0a2", "text-happy-new-year": "8610c3b8c6491846",
+    "text-merry-christmas": "239bbf4fd7823459", "text-scoreboard": "0fc622415646d622", "text-touchdown": "5a13a84405d9d9cf",
     "tree-lighting-ceremony": "82cedf68e54d0160", "twin-coasters": "60157576150ea074", "valentines-glow": "5a06fa830c5230c2",
     "valentines-hearts": "10b4a969c23c880e", "warm-white": "e253164cd9245bb6", "winter-elegance": "4255ee8d325042c5",
     "winter-sparkle": "4256ee9c4b9c1025",
@@ -262,9 +262,9 @@ TIP_SAME = {"apex-ripples", "halloween-pumpkin", "july-4th-flag", "valentines-gl
     "peak-joy", "peak-rudolph", "peak-snowman", "peak-wreath", "plasma-party",
     "porch-fireworks", "rainbow-roofline", "santas-sleigh", "scanner-trails", "sequin-wave", "sleigh-grand-tour",
     "snow-piling-up", "snowy-evening", "spring-garden", "st-patricks", "starry-night", "starry-night-sleigh",
-    "summer-evening", "summer-fireflies", "text-give-thanks", "text-go-broncos", "text-happy-new-year",
-    "text-merry-christmas", "text-scoreboard", "text-give-thanks-scroll", "text-go-broncos-scroll",
-    "text-happy-new-year-scroll", "text-merry-christmas-scroll", "text-scoreboard-scroll", "text-touchdown-scroll",
+    "summer-evening", "summer-fireflies", "text-give-thanks-letters", "text-go-broncos-letters", "text-happy-new-year-letters",
+    "text-merry-christmas-letters", "text-scoreboard-letters", "text-give-thanks", "text-go-broncos",
+    "text-happy-new-year", "text-merry-christmas", "text-scoreboard", "text-touchdown",
     "warm-white", "winter-elegance", "winter-sparkle"}
 
 
