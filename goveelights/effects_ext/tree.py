@@ -11,14 +11,19 @@ How the tree is drawn (round 13: built for the triangular honeycomb screen)
 The Peak's rows are offset half a bulb (a honeycomb triangle, see hexcanvas). Lighting
 it edge to edge in green only says "the gable is green", so the tree is a picture on it
 (tree_plan):
-* a tiered fir, centred on the widest rows: two-row tiers whose sides run along the
-  lattice's 60-degree lines (half a bulb in per row), each tier stepping out by
-  `spread` below the one above;
+* a fir in TRUE proportions (round 15: the rows really hang hexcanvas.aspect, ~0.66, of
+  a bulb spacing apart, so a tree drawn one bulb per row was 2-3x too wide on the
+  house): its sides grow half a bulb a row (the narrowest step the lattice has), in
+  tiers of three rows that step back in under the tier above; about 1.5x taller than
+  wide with the Tip, about square without it (it is only six rows tall); `spread`
+  steps each tier further out for a wider tree;
 * a night sky round it (dim, faint far stars) with a black margin hugging the tree;
-* a trunk: the middle of the bottom row, the rest of that row is dark ground;
+* a trunk: the middle of the bottom row (one bulb under a slender tree), the rest of
+  that row is dark ground;
 * the star on the top row's middle (with the Tip: the apex and the two under it), with
-  dimmer rays either side; it lights on target "Peak" alone too;
-* ornaments as bold PAIRS of side-by-side bulbs in two or three colours, well apart;
+  dimmer rays either side over a wide tree; it lights on target "Peak" alone too;
+* ornaments as bold PAIRS of side-by-side bulbs in two or three colours, well apart
+  (single bulbs on a slender tree, where a pair would fill a row);
 * the garland as a swag along a lattice diagonal (or, "strand", dashes along each
   tier's hem).
 Every per-bulb choice is seeded by the cell's lattice position, so a dead bulb never
@@ -231,10 +236,12 @@ TREE_PARAMS = [
           help="keep it low: the tree reads best as a bright shape on a dark gable; 0 = black"),
     Param("sky_twinkle", "number", 0.02, "Far stars", 0, 1, 0.01,
           help="faint stars twinkling in the sky round the tree (glints per bulb per second)"),
-    Param("spread", "number", 1.0, "Tier step", 0, 3, 0.5,
-          help="how far each tier of boughs steps out past the one above (bulbs each side); "
-               "the honeycomb rows sit half a bulb apart, so a half step only shows on some "
-               "layouts (on the Peak without the Tip 1 and 1.5 draw the same tree)"),
+    Param("spread", "number", 0.0, "Tier step", 0, 3, 0.5,
+          help="0 draws the tree in true proportions (about 1.5 times taller than wide as "
+               "the rows really hang, each tier stepping back in under the one above); more "
+               "steps each tier of boughs further out (bulbs each side) for a wider, squatter "
+               "tree. The honeycomb rows sit half a bulb apart, so a half step only shows on "
+               "some rows"),
     Param("seed", "int", 7, "Seed", 0, 9999, 1, help="which bulbs are ornaments, and the sparkle pattern"),
 ]
 
@@ -441,7 +448,33 @@ def _tree_flat(t, ctx, P, state):
 # and a bold star on the top (the Tip's apex when there is one). Every per-bulb choice is
 # seeded by the cell's lattice key, so a dead bulb never moves the picture.
 
-def tree_plan(layout, idx: list[int], spread: float = 1.0) -> dict | None:
+def _tier_sizes(f: int) -> list[int]:
+    """Rows per tier of boughs, top tier first: one tier for a very short tree, two of two
+    rows for four (the Peak without the Tip: a straight triangle unless `spread` steps the
+    lower tier out), else tiers of three (the tier that is left over at the top is two
+    rows, a row over goes to the bottom tier)."""
+    if f <= 3:
+        return [f] if f > 0 else []
+    if f == 4:
+        return [2, 2]
+    n3, rem = divmod(f, 3)
+    sizes = [3] * n3
+    if rem == 1:
+        sizes[-1] += 1
+    elif rem == 2:
+        sizes.insert(0, 2)
+    return sizes
+
+
+def _snap(h: float, half: bool) -> float:
+    """The smallest half-width >= h that a centred row can have: a half row's cells sit at
+    k + 0.5, a whole row's at k."""
+    if half:
+        return math.ceil(h - 0.5 - 1e-6) + 0.5
+    return float(math.ceil(h - 1e-6))
+
+
+def tree_plan(layout, idx: list[int], spread: float = 0.0) -> dict | None:
     """The tree drawn on the target's honeycomb, or None when the target has no zigzag
     (then the flat tree is used). Cached per layout, target and spread."""
     spread = round(max(0.0, min(3.0, spread)) * 2) / 2
@@ -449,7 +482,7 @@ def tree_plan(layout, idx: list[int], spread: float = 1.0) -> dict | None:
     cache = geometry._cache(layout)
     if key in cache:
         return cache[key]
-    hc = hexcanvas.get(layout, idx)
+    hc = hexcanvas.true(layout, idx)
     if hc is None or hc.top < 3:
         cache[key] = None
         return None
@@ -467,42 +500,38 @@ def tree_plan(layout, idx: list[int], spread: float = 1.0) -> dict | None:
         put(top, 0, "star")
         put(top - 1, -0.5, "star")
         put(top - 1, 0.5, "star")
-        put(top - 1, -1.5, "ray")
-        put(top - 1, 1.5, "ray")
+        ray_at = [(top - 1, -1.5), (top - 1, 1.5)]
         fol_top = top - 2
     else:
         for c in hc.apex_cells:
             role[c.key] = "star"
         sx = max(abs(c.x) for c in hc.apex_cells)
-        put(top, -sx - 1, "ray")
-        put(top, sx + 1, "ray")
+        ray_at = [(top, -sx - 1), (top, sx + 1)]
         fol_top = top - 1
-    # the trunk: the middle of the bottom row (3 bulbs on a whole row, 2 on a half row)
-    for c in hc.row(0):
-        if abs(c.x) <= 1.0 + 1e-6:
-            role[c.key] = "trunk"
-    # the boughs: tiers of two rows from the bottom (three on top when the count is odd);
-    # each row half a bulb wider each side (the lattice's 60-degree edge), each tier
-    # stepping out by `spread` more
+    # the boughs, in TRUE proportions (a row is hc.aspect bulb spacings tall, ~0.66 on the
+    # house): a fir is ~1.5x taller than it is wide, so its sides grow by the narrowest
+    # step the honeycomb allows, half a bulb a row (the 60-degree lattice line; rows
+    # alternate whole and half places, so a centred row is always one bulb wider than the
+    # one above). Tiers of three rows step back in by half a bulb under the tier above (a
+    # fir's layered silhouette at the same slender slope); `spread` steps each tier out
+    # further (wider, squatter trees).
     frows = list(range(fol_top, 0, -1))           # top first
-    sizes, k = [], len(frows)
-    while k > 0:
-        n = 3 if k == 3 else min(2, k)
-        sizes.append(n)
-        k -= n
-    sizes.reverse()
+    sizes = _tier_sizes(len(frows))
     hw, n_r, tier_of, bottom_rows, hw_of = None, 0, {}, set(), {}
+    tier_top = None
     for t_i, n in enumerate(sizes):
         for j in range(n):
             r = frows[n_r]
             n_r += 1
             half = bool(hc.row(r)) and hc.row(r)[0].d % 2 != 0
             if hw is None:
-                hw = 0.5 if half else 1.0
+                hw = 0.5 if half else 0.0
             elif j == 0:
-                hw += 0.5 + spread
+                hw = _snap(tier_top + 0.5 + spread, half)
             else:
                 hw += 0.5
+            if j == 0:
+                tier_top = hw
             lim = min(hw, max(abs(c.x) for c in hc.row(r)) - 1.0) if hc.row(r) else hw
             hw_of[r] = lim
             tier_of[r] = t_i
@@ -511,6 +540,19 @@ def tree_plan(layout, idx: list[int], spread: float = 1.0) -> dict | None:
             for c in hc.row(r):
                 if abs(c.x) <= lim + 1e-6 and c.key not in role:
                     role[c.key] = "leaf"
+    # dimmer rays either side of the star, only over a wide tree: over a slender one they
+    # make the top a bar as wide as the boughs below it (a T, not a star)
+    slender = max(hw_of.values(), default=0.0) <= 2.0
+    if not slender:
+        for r, x in ray_at:
+            put(r, x, "ray")
+    # the trunk: the middle of the bottom row, one bulb under a slender tree (three under a
+    # wide one), so it is narrower than the boughs as a real trunk is
+    hem = hw_of.get(1, hw or 0.0)
+    th = 1.0 if hem >= 2.5 else 0.5
+    for c in hc.row(0):
+        if abs(c.x) <= th + 1e-6:
+            role[c.key] = "trunk"
     allowed = hc.allowed
     px = layout.pixels
     star, rays, trunk, sky = [], [], [], []
@@ -563,9 +605,12 @@ def tree_plan(layout, idx: list[int], spread: float = 1.0) -> dict | None:
             sid[i] = (1 << 20) + (c.r << 10) + c.d + 512 if c is not None else \
                 (zlib.crc32(str(px[i].mac).encode()) % 4093 << 12) + px[i].local
     out = {"hc": hc, "star": star, "sid": sid,
-           "leaf_cells": sum(1 for w in role.values() if w == "leaf"), "rays": rays, "trunk": trunk, "leaf": leaf, "sky": sky,
+           "leaf_cells": sum(1 for w in role.values() if w == "leaf"),
+           "leaf_inner": {v[6] for v in leaf.values() if not v[4]} | {
+               c.key for c in hc.cells if c.i is None and role.get(c.key) == "leaf"
+               and abs(c.x) < hw_of.get(c.r, 1.0) - 0.5 - 1e-6}, "rays": rays, "trunk": trunk, "leaf": leaf, "sky": sky,
            "margin": margin, "rest": rest, "dist": dist, "pairs": pairs, "tip": tip,
-           "rows": top + 1, "fol_top": fol_top, "tiers": len(sizes),
+           "rows": top + 1, "fol_top": fol_top, "tiers": len(sizes), "slender": slender,
            "ph": {i: (hash01(*v[6], 11) * TAU, 0.25 + 0.35 * hash01(*v[6], 12), hash01(*v[6], 13))
                   for i, v in leaf.items()}}
     cache[key] = out
@@ -579,8 +624,8 @@ def _hexdist(a, b) -> int:
 
 
 def hex_ornaments(plan: dict, density: float, seed: int, ncol: int, state: dict | None = None) -> dict:
-    """Ornaments as bold PAIRS of side-by-side bulbs: {bulb index: colour index}.
-    Placed by lattice key (dead bulbs never move them), never touching each other."""
+    """Ornaments as bold PAIRS of side-by-side bulbs (single bulbs on a slender tree):
+    {bulb index: colour index}. Placed by lattice key (dead bulbs never move them), never touching each other."""
     density = round(max(0.0, density) * 100) / 100
     key = ("hex", id(plan), density, seed, ncol)
     memo = state if state is not None else plan
@@ -589,27 +634,37 @@ def hex_ornaments(plan: dict, density: float, seed: int, ncol: int, state: dict 
         return hit[1]
     hc = plan["hc"]
     nleaf = plan["leaf_cells"]                    # dead bulbs included: nothing moves when one dies
-    want = int(round(density * nleaf / 2.2))
-    cand = sorted(plan["pairs"], key=lambda p: hash01(*p[0].key, seed, 41))
+    if plan.get("slender"):
+        # a slender tree is only two to four bulbs across: a pair would fill a row, so
+        # its ornaments are single bulbs with green between them, inside the silhouette
+        # (one on the edge reads as a bough sticking out)
+        want = int(round(density * nleaf * 1.2))
+        cand = sorted(((c,) for c in hc.cells if c.key in plan["leaf_inner"]),
+                      key=lambda p: hash01(*p[0].key, seed, 41))
+        gap = 1
+    else:
+        want = int(round(density * nleaf / 2.2))
+        cand = sorted(plan["pairs"], key=lambda p: hash01(*p[0].key, seed, 41))
+        gap = 2
     taken: list = []
     chosen = []
-    for a, b in cand:
+    for grp in cand:
         if len(chosen) >= want:
             break
-        # at least two bulbs of green between ornaments, so each pair reads on its own
-        if any(_hexdist(c, o) <= 2 for c in (a, b) for o in taken):
+        # green between ornaments (two bulbs of it round pairs), so each reads on its own
+        if any(_hexdist(c, o) <= gap for c in grp for o in taken):
             continue
         # keep the top tier's tip and the star's neighbourhood clear
-        if a.r >= plan["fol_top"]:
+        if grp[0].r >= plan["fol_top"]:
             continue
-        chosen.append((a, b))
-        taken += [a, b]
+        chosen.append(grp)
+        taken += list(grp)
     chosen.sort(key=lambda p: (-p[0].r, p[0].d))
     out = {}
     k0 = int(hash01(seed, 43) * max(1, ncol))
-    for n, (a, b) in enumerate(chosen):
+    for n, grp in enumerate(chosen):
         k = (k0 + n) % max(1, ncol)
-        for c in (a, b):
+        for c in grp:
             if c.i is not None and c.i in plan["leaf"]:
                 out[c.i] = k
     memo["horn"] = (key, out)
