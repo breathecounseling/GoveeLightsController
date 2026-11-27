@@ -55,7 +55,31 @@ def frames(what: str, L: Layout, times: list[float], fps: float):
     return [(t, out[t]) for t in times if t in out]
 
 
-def svg(L: Layout, cols, W=470, box=None, r=2.6):
+def honeycomb_positions(L: Layout) -> dict:
+    """Where the Peak's (and the Tip's) bulbs really sit if the rows are offset half a bulb
+    each (the honeycomb, see goveelights/hexfont.py), as {bulb: (x, y)} in house units."""
+    from goveelights import hexfont
+    try:
+        idx = L.indices("Peak")
+    except Exception:  # noqa: BLE001
+        return {}
+    lat = hexfont.lattice(L, idx)
+    if not lat.rows:
+        return {}
+    px = L.pixels
+    base = [i for i, _ in lat.rows[0]]
+    dx = sorted(px[b].x - px[a].x for r in lat.rows for (a, _), (b, _) in zip(r, r[1:]) if px[b].x > px[a].x)
+    pitch = dx[len(dx) // 2] if dx else 1.0
+    c0 = (px[base[0]].x + px[base[-1]].x) / 2
+    out = {}
+    for row in lat.rows:
+        y = sum(px[i].y for i, _ in row) / len(row)
+        for i, X in row:
+            out[i] = (c0 + X * pitch, y)
+    return out
+
+
+def svg(L: Layout, cols, W=470, box=None, r=2.6, pos=None):
     """The house (or the part of it inside box = (x0, x1, y0, y1)) as dots."""
     pad = 8
     x0, x1, y0, y1 = box or (L.minx, L.maxx, L.miny, L.maxy)
@@ -66,10 +90,12 @@ def svg(L: Layout, cols, W=470, box=None, r=2.6):
     def rgb(c):
         return f"rgb({int(min(1, c[0]) * 255)},{int(min(1, c[1]) * 255)},{int(min(1, c[2]) * 255)})"
     dots = []
-    for p, c in zip(L.pixels, cols):
-        if not (x0 - 0.01 <= p.x <= x1 + 0.01 and y0 - 0.01 <= p.y <= y1 + 0.01):
+    pos = pos or {}
+    for k, (p, c) in enumerate(zip(L.pixels, cols)):
+        bx, by = pos.get(k, (p.x, p.y))
+        if not (x0 - 0.01 <= bx <= x1 + 0.01 and y0 - 0.01 <= by <= y1 + 0.01):
             continue
-        x, y = pad + (p.x - x0) * sx, H - pad - (p.y - y0) * sx * yex
+        x, y = pad + (bx - x0) * sx, H - pad - (by - y0) * sx * yex
         if max(c) > 0.01:      # a soft halo, roughly how a bulb blooms in a photo from the street
             dots.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r * 2.1:.1f}" fill="{rgb(c)}" opacity="0.28"/>')
         dots.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r}" fill="{rgb(c) if max(c) > 0.01 else "#1a1f27"}"/>')
@@ -89,6 +115,10 @@ def main(argv=None):
     ap.add_argument("--tip-rows", default="", help="the Tip's bulbs per row from bulb 0 (default 7,4,1)")
     ap.add_argument("--layout", default=str(default_layout_file().relative_to(ROOT)))
     ap.add_argument("--focus", help="also draw this target (e.g. 'Whole front gable') close up")
+    ap.add_argument("--honeycomb", action="store_true",
+                    help="draw the Peak's rows offset half a bulb each, as they are on the house")
+    ap.add_argument("--zoom-only", action="store_true", help="with --focus: only the close-up")
+    ap.add_argument("--labels", default="", help="comma-separated captions, one per frame, instead of 'preset · t'")
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
     lay = Path(a.layout)
@@ -119,11 +149,15 @@ def main(argv=None):
             px = L.pixels
             box = (min(px[i].x for i in ii) - 1, max(px[i].x for i in ii) + 1,
                    min(px[i].y for i in ii) - 0.5, max(px[i].y for i in ii) + 0.5)
+    pos = honeycomb_positions(L) if a.honeycomb else None
+    caps = [c for c in a.labels.split(",")] if a.labels else []
     cells = []
     for label, pid, ts in jobs:
         for t, cols in frames(pid, L, ts, a.fps):
-            zoom = svg(L, cols, box=box, r=7) if box else ""
-            cells.append(f'<div><div class="l">{label} · t={t:g}s</div>{svg(L, cols)}{zoom}</div>')
+            zoom = svg(L, cols, box=box, r=7, pos=pos) if box else ""
+            whole = "" if (a.zoom_only and box) else svg(L, cols, pos=pos)
+            cap = caps[len(cells)] if len(cells) < len(caps) else f"{label} · t={t:g}s"
+            cells.append(f'<div><div class="l">{cap}</div>{whole}{zoom}</div>')
     title = a.show or ", ".join(a.presets)
     html = (f'<meta charset="utf-8"><style>body{{background:#000;color:#bbb;font:12px sans-serif;margin:8px}}'
             f'.g{{display:grid;grid-template-columns:repeat({a.cols},480px);gap:6px}}.l{{margin:3px 0}}</style>'
