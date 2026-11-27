@@ -73,8 +73,11 @@ const { chromium } = require('playwright');
     await page.click('#mtSw button[data-k="cool"]');
     await page.waitForSelector('#mtSw button.on[data-k="cool"]');
     await page.click('#nav button[data-t="play"]');
-    await page.waitForTimeout(300);
-    out.match4 = (await api('status')).match;
+    for (let i = 0; i < 30; i++) {                     // (the start may still be on its way: it is stopped when it lands)
+      await page.waitForTimeout(100);
+      out.match4 = (await api('status')).match;
+      if (out.match4 === null) break;
+    }
     out.steps.push('leave');
   } catch (e) {
     out.errors.push('flow: ' + e.message);

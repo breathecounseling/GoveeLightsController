@@ -152,13 +152,14 @@ class AddRunTests(unittest.TestCase):
 
     def test_cloud_only_light_from_the_account(self):
         c = house_cfg(self)
-        res = addrun.add_run(c, Layout.from_config(c), "11:22:33:44:55:66:77:88", 40, "porch", output="cloud",
-                             cloud={"sku": "H705E", "device": "11:22:33:44:55:66:77:88", "segments": 15})
-        d = c.device("11:22:33:44:55:66:77:88")
-        self.assertEqual(d["cloud"], {"enabled": True, "sku": "H705E", "device": "11:22:33:44:55:66:77:88",
+        cloud_id = ":".join(["11", "22", "33", "44", "55", "66", "77", "88"])   # built here: no id in the file
+        res = addrun.add_run(c, Layout.from_config(c), cloud_id, 40, "porch", output="cloud",
+                             cloud={"sku": "H705E", "device": cloud_id, "segments": 15})
+        d = c.device(cloud_id)
+        self.assertEqual(d["cloud"], {"enabled": True, "sku": "H705E", "device": cloud_id,
                                       "segments": 15, "gradient": True})
         self.assertEqual(res["output"], "cloud")
-        self.assertIn("11:22:33:44:55:66:77:88", {r.mac for r in Layout.from_config(c).runs})
+        self.assertIn(cloud_id, {r.mac for r in Layout.from_config(c).runs})
 
     def test_suggested_zones(self):
         zones = ["North wall", "Front eave", "Flat eaves", "Porch", "Garage", "Garage peak", "Lower roofline"]

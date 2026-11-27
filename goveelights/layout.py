@@ -141,10 +141,15 @@ def dead_bulbs(d: dict) -> set[int]:
     bulb count; anything unreadable is ignored (a hand-edited file must not stop the show)."""
     out = set()
     n = d.get("pixel_count")
-    for k in d.get("dead") or ():
+    v = d.get("dead")
+    if isinstance(v, (int, str)) and not isinstance(v, bool):
+        v = [v]                                  # "dead": 12 or "12" means bulb 12
+    for k in v if isinstance(v, (list, tuple)) else ():
+        if isinstance(k, bool) or isinstance(k, float) and not k.is_integer():
+            continue
         try:
             k = int(k)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             continue
         if k >= 0 and (not n or k < int(n)):
             out.add(k)

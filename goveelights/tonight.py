@@ -890,20 +890,50 @@ def _calendar_checks(ctl, cfg: dict, sch: dict, preset_list, d: date, on: dateti
             new_prog = prog
         if new_prog and new_prog != prog:
             tonight_bits.append(f"tonight's program becomes {after.program(new_prog)}")
+        elif isinstance(prog, dict) and prog.get("playlist") in ch["playlists"]:
+            tonight_bits.append(f"the {after.program(prog)} playing tonight gets the calendar's new looks")
     else:
         later = [str(st["show"]) for st in ch["showtimes"]]
     parts = []
     if tonight_bits:
         parts.append("New tonight: " + "; ".join(tonight_bits) + ".")
+    else:
+        parts.append("Tonight's show is unchanged.")
     if later:
         parts.append("Also new: " + ", ".join(later) + ".")
-    more = [n for n in ch["rules"] + ch["playlists"] if n]
-    if more and not tonight_bits:
-        parts.append("Updated: " + ", ".join(dict.fromkeys(more)) + ".")
+    more = _calendar_updates(ch, after, d)
+    if tonight_bits:
+        more = [x for x in more if not x.endswith(" tonight")]     # said above
+    if more:
+        parts.append(("Also updated: " if tonight_bits else "Updated: ") + ", ".join(more) + ".")
     parts.append("Your own rules, shows and playlists stay as they are; changes you made to the "
                  "calendar's own entries are replaced.")
     return [_check("calendar", WARN, "The holiday calendar has an update", " ".join(parts),
                    "Tap, then 'Update the holiday calendar'", "calendar")]
+
+
+def _calendar_updates(ch: dict, after: Names, d: date) -> list[str]:
+    """The rules and rotations an update changes, by their names on the card, in the order
+    they first play from tonight on, each with the night it starts ("from Fri Nov 27")."""
+    first = {}
+    for k in range(370):
+        day = d + timedelta(days=k)
+        try:
+            p, rule = sched.program_for(day, ch["schedule"])
+        except (KeyError, TypeError, ValueError):
+            break
+        first.setdefault(("rule", rule), day)
+        if isinstance(p, dict) and p.get("playlist"):
+            first.setdefault(("pl", p["playlist"]), day)
+    items = [(first.get(("rule", n)), str(n)) for n in ch["rules"] if n]
+    items += [(first.get(("pl", n)), after.program({"playlist": n})) for n in ch["playlists"] if n]
+    items.sort(key=lambda x: x[0] or date.max)
+    out = []
+    for when, name in items:
+        txt = name if when is None else f"{name} {'tonight' if when == d else f'from {when:%a} {when:%b} {when.day}'}"
+        if txt not in out:
+            out.append(txt)
+    return out
 
 
 def _show_checks(ctl, cfg: dict, tonight_sts: list[dict], names: Names) -> list[dict]:

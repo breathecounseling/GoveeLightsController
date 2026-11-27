@@ -52,7 +52,8 @@ LOCATIONS = {
               "zones": ()},
 }
 _PREV_KEYS = ("name", "pixel_count", "order", "geometry", "geometry_guess", "hidden", "enabled", "role",
-              "location", "cloud", "reversed", "follows", "dead", "rehung", "extends", "tip")
+              "location", "cloud", "reversed", "follows", "dead", "rehung", "extends", "tip",
+              "calibration", "trim")
 
 # The Tip's rows, from its bulb 0: what the owner's landmarks give (Nov 2026). Bulb 0 is
 # "Left (South) corner bottom row", 6 "Right (North) corner 2nd row" (read as the NORTH

@@ -1735,6 +1735,8 @@ class Controller:
         with self.cfg.lock:
             for d in self.cfg.devices.values():       # undo steps back this apply only
                 d.pop("geometry_prev", None)
+                d.pop("rehung_prev", None)
+            marks = {m: json.dumps(d["rehung"]) for m, d in self.cfg.devices.items() if "rehung" in d}
             for mac, knots in geo.items():
                 d = self.cfg.devices[mac]
                 d["geometry_prev"] = d.get("geometry", [])
@@ -1742,6 +1744,10 @@ class Controller:
                 if d.pop("geometry_guess", None):          # measured now, not a placeholder
                     d["geometry_guess_prev"] = True
             clear_rehung(self.cfg, L, measured)     # re-hung sections the camera has now seen
+            for m, was in marks.items():            # undo brings back the marks this cleared
+                d = self.cfg.devices[m]
+                if json.dumps(d.get("rehung")) != was:
+                    d["rehung_prev"] = json.loads(was)
             self.cfg.save()
         self.build_engine()
         return {"mapped": len(measured), "runs": [self.cfg.devices[m].get("name") for m in geo]}
@@ -1754,6 +1760,8 @@ class Controller:
                     d["geometry"], n = d.pop("geometry_prev"), n + 1
                     if d.pop("geometry_guess_prev", None):
                         d["geometry_guess"] = True
+                if "rehung_prev" in d:
+                    d["rehung"] = d.pop("rehung_prev")
             self.cfg.save()
         self.build_engine()
         return n
