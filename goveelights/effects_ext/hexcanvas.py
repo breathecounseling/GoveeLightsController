@@ -20,6 +20,19 @@ Distances (circles, line widths, arcs) are measured with a row ``row_h`` columns
 (the ideal honeycomb, sqrt(3)/2, by default), so a circle of radius 3 is round on the
 lattice and a line at 60 degrees runs straight along it.
 
+TRUE PROPORTIONS. On the house the rows are closer than the ideal honeycomb: a row is
+``hc.aspect`` bulb spacings tall (about 0.66 on this Peak, from the owner's photos), so a
+picture drawn one row per unit of height comes out flattened and too wide. hc.aspect is
+the one source of truth: the camera-mapped geometry when the zigzag has been mapped, else
+the run's "aspect" in the layout (layouts/house.json), else PEAK_ASPECT; hc.aspect_source
+says which ("camera", "layout", "default"); hc.geometry_aspect is what the layout's
+geometry alone says (a hand-drawn guess until camera mapping).
+
+    hexcanvas.true(layout, idx)           the canvas with row_h = aspect: shapes come out as drawn
+    hc.to_physical(x, y) / hc.from_physical(X, Y)   design <-> bulb spacings as hung
+    hc.rows_for(h) / hc.columns_for(rows)  a height in rows / a row count's true width
+    hc.physical_size                       (width, height) in bulb spacings
+
     hc.rows / hc.widths / hc.row(r)        the rows bottom first and their bulb counts
     hc.cell(r, x) / hc.at(r, x)            the cell (or its bulb index; None if dead/none)
     hc.at_axial(q, r), hc.nearest(x, y)
@@ -55,6 +68,37 @@ DIRECTIONS = {
     "ne": (1, 1), "nw": (-1, 1),
     "se": (1, -1), "sw": (-1, -1),
 }
+
+
+# The Peak's TRUE row gap in bulb spacings, as hung (the owner's night photos of the gable,
+# 2026-11: rows about 0.6-0.7 of a bulb spacing apart seen from the yard, about 0.66 face
+# on). layouts/house.json carries it on the Peak ("aspect"); this is the fallback when no
+# layout says (it must match house.json: tests/test_peak_aspect.py).
+PEAK_ASPECT = 0.66
+
+
+def _camera_mapped(run) -> bool:
+    """Whether a run's geometry looks measured by camera mapping (a knot per bulb, not a
+    placeholder) rather than drawn by hand (a few knots at the rows' ends)."""
+    if getattr(run, "guess", False):
+        return False
+    knots = {int(k[0]) for k in run.geometry or () if len(k) >= 3}
+    shown = run.count - len(run.hidden)
+    return shown > 0 and len(knots) >= 0.6 * shown
+
+
+def _resolve_aspect(host, exts, measured: float) -> tuple[float, str]:
+    """(row gap / bulb pitch, where it came from): "camera" (the zigzag's camera-mapped
+    geometry, when believable), "layout" (the run's "aspect" in the config / layout file),
+    else "default" (PEAK_ASPECT, this house's photo-measured value)."""
+    from ..layout import ASPECT_RANGE
+    if _camera_mapped(host) and ASPECT_RANGE[0] <= measured <= ASPECT_RANGE[1]:
+        return measured, "camera"
+    for run in [host, *exts]:
+        a = getattr(run, "aspect", None)
+        if isinstance(a, (int, float)) and not isinstance(a, bool) and ASPECT_RANGE[0] <= a <= ASPECT_RANGE[1]:
+            return float(a), "layout"
+    return PEAK_ASPECT, "default"
 
 
 # ====================================================================== cells and rows
@@ -402,7 +446,12 @@ class HexCanvas:
             ys.append(sum(b[2][1] for b in bulbs) / len(bulbs))
             self.rows.append(row)
         gaps = sorted(b - a for a, b in zip(ys, ys[1:]))
-        self.aspect = (gaps[len(gaps) // 2] / self.pitch) if gaps else 1.0     # measured row gap / pitch
+        # the row gap / pitch the layout's geometry says (the Peak's own rows when it has
+        # two or more: a Tip's placeholder rows must not decide it)
+        own = [y for y, rw in zip(ys, self.rows) if not rw.tip]
+        hg = sorted(b - a for a, b in zip(own, own[1:])) if len(own) >= 2 else gaps
+        self.geometry_aspect = (hg[len(hg) // 2] / self.pitch) if hg else 1.0
+        self.aspect, self.aspect_source = _resolve_aspect(host, exts, self.geometry_aspect)
         self.allowed = set(self._by_i) if idx is None else set(self._by_i) & set(idx)
         self._fit()
 
@@ -504,6 +553,40 @@ class HexCanvas:
         hw = self._a + pad - self._b * bot
         top = self.tip_y + pad / self.row_h
         return [(-hw, bot), (hw, bot), (0.0, top)]
+
+    # ------------------------------------------------------------ true proportions
+    # The lattice's design units are one COLUMN (bulb spacing) across and one ROW up, but on
+    # the house a row is only `aspect` bulb spacings tall (about 0.66 on this Peak: rows are
+    # close together). "Physical" units below are bulb spacings both ways, as the gable hangs.
+    def to_physical(self, x: float, y: float) -> tuple[float, float]:
+        """Design (x columns, y rows) -> physical (X, Y) in bulb spacings, as hung."""
+        return (float(x), float(y) * self.aspect)
+
+    def from_physical(self, X: float, Y: float) -> tuple[float, float]:
+        """Physical (X, Y) in bulb spacings -> design (x columns, y rows)."""
+        return (float(X), float(Y) / self.aspect)
+
+    def rows_for(self, height: float) -> float:
+        """How many rows a height of `height` bulb spacings covers (2 spacings ~ 3 rows)."""
+        return float(height) / self.aspect
+
+    def columns_for(self, rows: float) -> float:
+        """How many columns (bulb spacings) wide a thing `rows` rows tall is on the house:
+        a circle of radius R rows is R * aspect columns wide (not R)."""
+        return float(rows) * self.aspect
+
+    @property
+    def physical_size(self) -> tuple[float, float]:
+        """(width, height) of the screen in bulb spacings as hung: the bottom row's span and
+        the bottom-to-top-row height."""
+        b = self.rows[0]
+        return (b.x1 - b.x0, self.top * self.aspect)
+
+    @property
+    def is_true(self) -> bool:
+        """Whether this canvas measures distances in true proportions (row_h == aspect):
+        then Circle(cx, cy, r) is round on the house, r columns across each way."""
+        return abs(self.row_h - self.aspect) < 1e-9
 
     def live(self) -> list[int]:
         """Every working bulb on the screen (in the target), bottom row first, left to right."""
@@ -647,6 +730,15 @@ class HexCanvas:
                 buf[c.d - dmin] = ch
             lines.append("".join(buf).rstrip())
         return "\n".join(lines)
+
+
+def true(layout, idx=None) -> HexCanvas | None:
+    """The canvas measured in TRUE proportions: its row_h is the Peak's real row gap
+    (HexCanvas.aspect), so shapes come out on the house as drawn (a Circle is round, a
+    60-degree line is 60 degrees as seen) instead of ~1.3x too wide as on get()'s ideal
+    honeycomb. Design units stay columns and rows."""
+    hc = get(layout, idx)
+    return None if hc is None else get(layout, idx, row_h=hc.aspect)
 
 
 def get(layout, idx=None, row_h: float = ROW_H) -> HexCanvas | None:

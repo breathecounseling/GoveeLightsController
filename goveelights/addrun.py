@@ -115,7 +115,7 @@ def copy_runs(layout, leave_out=()) -> list:
     from .layout import Run
     return [Run(mac=r.mac, name=r.name, count=r.count, reverse=r.reverse, hidden=set(r.hidden),
                 geometry=r.geometry, trim=r.trim, bright=r.bright, rgamma=r.rgamma, fade=r.fade, role=r.role,
-                guess=r.guess, follows=r.follows, dead=set(r.dead), extends=r.extends)
+                guess=r.guess, follows=r.follows, dead=set(r.dead), extends=r.extends, aspect=r.aspect)
             for r in layout.runs if r.mac not in leave_out]
 
 

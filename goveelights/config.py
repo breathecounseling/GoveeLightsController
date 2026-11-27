@@ -279,12 +279,12 @@ class Config:
                     misfits.add(entry.get("name") or src)
                     notes.append(f"layout run '{entry.get('name') or src}' has {entry['pixel_count']} bulbs, "
                                  f"your box {d.get('name') or mac} {d['pixel_count']}: kept your box's shape")
-                for k in ("name", "order", "reversed", "hidden", "pixel_count", "geometry", "enabled"):
+                for k in ("name", "order", "reversed", "hidden", "pixel_count", "geometry", "enabled", "aspect"):
                     if k not in entry or (k == "name" and d.get("name") and not self.auto_name(mac, d)):
                         continue
                     if k == "pixel_count" and src != mac and d.get("pixel_count"):
                         continue                     # another house's box: your bulb count stays
-                    if misfit and k in ("hidden", "geometry"):
+                    if misfit and k in ("hidden", "geometry", "aspect"):
                         continue
                     d[k] = entry[k]
                 if src != mac and entry.get("name") and d.get("name") != entry["name"]:

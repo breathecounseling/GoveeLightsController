@@ -35,7 +35,7 @@ from goveelights.layout import Layout, Run  # noqa: E402
 
 def with_extra_run(L: Layout, count: int) -> Layout:
     runs = [Run(mac=r.mac, name=r.name, count=r.count, reverse=r.reverse, hidden=set(r.hidden),
-                geometry=r.geometry, role=r.role, extends=r.extends) for r in L.runs]
+                geometry=r.geometry, role=r.role, extends=r.extends, aspect=r.aspect) for r in L.runs]
     runs.append(Run(mac="EXTRA", name="Run 4", count=count))
     return Layout(runs, L.zone_specs, L.aliases)
 
@@ -56,9 +56,11 @@ def frames(what: str, L: Layout, times: list[float], fps: float):
     return [(t, out[t]) for t in times if t in out]
 
 
-def honeycomb_positions(L: Layout) -> dict:
+def honeycomb_positions(L: Layout, even: bool = False) -> dict:
     """Where the Peak's (and the Tip's) bulbs really sit if the rows are offset half a bulb
-    each (the honeycomb, see goveelights/hexfont.py), as {bulb: (x, y)} in house units."""
+    each (the honeycomb, see goveelights/hexfont.py), as {bulb: (x, y)} in house units.
+    even: rows evenly spaced (the layout's mean row gap), as they hang, instead of at the
+    hand-drawn geometry's uneven heights (for --street-aspect)."""
     from goveelights import hexfont
     try:
         idx = L.indices("Peak")
@@ -72,9 +74,11 @@ def honeycomb_positions(L: Layout) -> dict:
     dx = sorted(px[b].x - px[a].x for r in lat.rows for (a, _), (b, _) in zip(r, r[1:]) if px[b].x > px[a].x)
     pitch = dx[len(dx) // 2] if dx else 1.0
     c0 = (px[base[0]].x + px[base[-1]].x) / 2
+    ys = [sum(px[i].y for i, _ in row) / len(row) for row in lat.rows]
+    gap = (ys[-1] - ys[0]) / (len(ys) - 1) if len(ys) > 1 else 0.0
     out = {}
-    for row in lat.rows:
-        y = sum(px[i].y for i, _ in row) / len(row)
+    for k, row in enumerate(lat.rows):
+        y = ys[0] + k * gap if even else ys[k]
         for i, X in row:
             out[i] = (c0 + X * pitch, y)
     return out
@@ -103,22 +107,17 @@ def svg(L: Layout, cols, W=470, box=None, r=2.6, pos=None, yex=1.6):
     return f'<svg width="{W}" height="{H}" style="background:#04060a;display:block">{"".join(dots)}</svg>'
 
 
-STREET_ROW = 0.69          # row spacing / bulb spacing on the Peak in the owner's night photos
-
-
 def street_yex(L: Layout, ii) -> float:
-    """The height stretch that draws the zigzag's rows STREET_ROW bulb spacings apart."""
-    from goveelights import geometry as geo
-    px = L.pixels
-    rows = geo._rows_by_reversal(px, [i for i in ii if not getattr(px[i], "ext", False)]) or []
-    rows = [sorted(r, key=lambda i: px[i].x) for r in rows if len(r) > 1]
-    if len(rows) < 2:
+    """The height stretch that draws the zigzag's rows the Peak's TRUE row gap apart:
+    hexcanvas.aspect (camera-mapped geometry, else the layout's "aspect", else the
+    photo-measured PEAK_ASPECT), the one source of truth pictures are designed with."""
+    from goveelights.effects_ext import hexcanvas
+    hc = hexcanvas.get(L, ii)
+    if hc is None or len(hc.rows) < 2:
         return 1.6
-    ys = sorted(sum(px[i].y for i in r) / len(r) for r in rows)
-    dy = (ys[-1] - ys[0]) / (len(ys) - 1)
-    dx = sorted(abs(px[b].x - px[a].x) for r in rows for a, b in zip(r, r[1:]))
-    dx = dx[len(dx) // 2]
-    return max(0.2, STREET_ROW * dx / max(1e-6, dy))
+    ys = [sum(c.pos[1] for c in rw.cells) / rw.n for rw in hc.rows]
+    dy = (ys[-1] - ys[0]) / (len(ys) - 1)       # the mean row gap in layout units
+    return max(0.2, hc.aspect * hc.pitch / max(1e-6, dy))
 
 
 def main(argv=None):
@@ -138,8 +137,8 @@ def main(argv=None):
                     help="draw the Peak's rows offset half a bulb each, as they are on the house")
     ap.add_argument("--zoom-only", action="store_true", help="with --focus: only the close-up")
     ap.add_argument("--street-aspect", action="store_true",
-                    help="draw the close-up with the Peak's proportions as seen from the street (the "
-                         "owner's photos: rows about 0.7 of a bulb spacing apart), not stretched tall")
+                    help="draw the close-up with the Peak's true proportions (rows hexcanvas.aspect "
+                         "bulb spacings apart, evenly: about 0.66 on this house), not stretched tall")
     ap.add_argument("--labels", default="", help="comma-separated captions, one per frame, instead of 'preset · t'")
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
@@ -171,7 +170,7 @@ def main(argv=None):
             px = L.pixels
             box = (min(px[i].x for i in ii) - 1, max(px[i].x for i in ii) + 1,
                    min(px[i].y for i in ii) - 0.5, max(px[i].y for i in ii) + 0.5)
-    pos = honeycomb_positions(L) if a.honeycomb else None
+    pos = honeycomb_positions(L, even=bool(box and a.street_aspect)) if a.honeycomb else None
     yz = street_yex(L, L.indices(a.focus)) if box and a.street_aspect else 1.6
     caps = [c for c in a.labels.split(",")] if a.labels else []
     cells = []

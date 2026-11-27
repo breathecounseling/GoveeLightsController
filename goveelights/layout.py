@@ -20,6 +20,9 @@ Per-device layout lives in the device's config entry:
             the tree and text treat the two as one triangle) and a layer aimed at the
             host's name lights them too; the run keeps its own name for its own layers,
             the Bulb check and the camera. Without such a run nothing changes.
+  aspect    (a zigzag run, the Peak) its rows' true spacing in bulb spacings, as the house
+            hangs (row gap / bulb pitch, e.g. 0.64): the shape pictures are drawn in until
+            camera mapping measures it. See effects_ext/hexcanvas.py (HexCanvas.aspect).
 """
 from __future__ import annotations
 
@@ -53,6 +56,7 @@ class Run:
     follows: str | None = None           # opt-in: a run or zone it copies when a scene leaves it dark
     dead: set[int] = field(default_factory=set)   # marked broken in the Bulb check: dark, skipped
     extends: str | None = None           # another run (id or name) this one continues (the Tip -> the Peak)
+    aspect: float | None = None          # a zigzag's row gap / bulb pitch as hung (None: not given)
     pixels: list[Pixel] = field(default_factory=list)   # visible, virtual order
 
     def positions(self) -> list[tuple[float, float]]:
@@ -134,6 +138,22 @@ def _house_names(cfg) -> list[str]:
         return out
     except (OSError, ValueError, AttributeError, TypeError):
         return []
+
+
+ASPECT_RANGE = (0.2, 2.0)                # a believable row gap / bulb pitch
+
+
+def run_aspect(d: dict) -> float | None:
+    """A device entry's "aspect" (its zigzag rows' gap in bulb spacings) when it is a
+    believable number, else None (a hand-edited file must not stop the show)."""
+    v = d.get("aspect") if isinstance(d, dict) else None
+    if isinstance(v, bool):
+        return None
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return None
+    return v if ASPECT_RANGE[0] <= v <= ASPECT_RANGE[1] else None
 
 
 def dead_bulbs(d: dict) -> set[int]:
@@ -437,7 +457,8 @@ class Layout:
                             guess=bool(d.get("geometry_guess")),
                             follows=str(d["follows"]) if d.get("follows") else None,
                             dead=dead_bulbs(d),
-                            extends=str(d["extends"]) if d.get("extends") else None))
+                            extends=str(d["extends"]) if d.get("extends") else None,
+                            aspect=run_aspect(d)))
         return cls(runs, cfg.data.get("zones", []), cfg.data.get("target_aliases"), dark + _house_names(cfg))
 
     def summary(self) -> str:
