@@ -1,52 +1,61 @@
-"""December pictures for the zigzag: the Peak as a tiny picture screen (six rows, about 27
-bulbs across at the bottom and 10 at the top), with a matching trim on every other run.
+"""December pictures for the zigzag: the Peak as a tiny picture screen, with a matching
+trim on every other run.
+
+The Peak is a triangle of OFFSET rows (27, 23, 20, 16, 12 and 10 bulbs, and with the Tip
+7, 4 and 1 on up to the apex): every bulb hangs midway between two bulbs of the row
+below, so the screen is a honeycomb, not a square grid (see hexcanvas.py). Each picture
+is drawn for that lattice, bulb by bulb: bold shapes two bulbs thick, every bulb either
+fully in the picture or dark (no dim half-lit edges), a few strong colours, centred on
+the wide rows and with dark space round it so it reads from the street at night.
 
     peak_picture  One of several winter pictures drawn on the zigzag with a gentle
-                  animation, while the rest of the target (eaves, porch, garage, a fourth
-                  run) gets a trim that goes with it and keeps time with the picture:
+                  animation, while the rest of the target gets a trim that goes with it.
+                  The trim follows the hardware: the Eaves (a single row of bulbs
+                  pointing out to the street) carry rhythm and sparkle; the Accent / porch
+                  run (pointing down at the siding) washes the wall in one big colour.
 
-        wreath       a green wreath with a red bow, berries and little lights that twinkle,
-                     a gold light running round the ring; trim: warm white garland with
-                     red berry glints
-        snowman      a snowman's face (coal eyes that blink, carrot nose, coal smile, rosy
-                     cheeks) in a red bobble hat and a striped scarf, snow falling round
-                     him; trim: icy blue with drifting snow glints
-        gingerbread  a gingerbread house: white icing, gumdrops on the roof, a candy door
-                     and two windows glowing warm; trim: a slow candy-cane stripe
+        wreath       a round green wreath with a red bow at the bottom and warm lights
+                     twinkling in it, a gold light running round the ring; eaves: warm
+                     white with red glints; wash: deep red
+        snowman      a snowman's face: a red hat, coal eyes that blink, a carrot nose, a
+                     coal smile, a few flakes drifting past; eaves: icy sparkle; wash: icy blue
+        gingerbread  a gingerbread house: iced roof with gumdrops, walls with two warm
+                     windows and a red door; eaves: candy-cane stripe; wash: warm amber
         present      a red present with a gold ribbon and bow that unties itself, the lid
-                     lifts, gold light pours out, then it wraps itself again; trim: red and
-                     gold that flashes gold when the present opens
-        star         a big white-gold five-pointed star filling the gable, its icy glow
-                     pulsing outward; trim: deep blue with pulses running out from the gable
-        ornament     a red bauble with a gold cap hanging from the apex, swinging gently,
-                     a glint on its shine; trim: green garland with gold beads
-        rudolph      Rudolph's face (brow, ears, eyes that blink, a tan muzzle) under
-                     branching antlers, his red nose at the bottom blinking; trim: night
-                     blue with stars and a red glow that runs out with each blink
-        joy          J, O, Y in gold on red, one big letter at a time (strokes two bulbs
-                     thick), then a burst of gold glitter under a star;
-                     trim: red and gold with glitter
+                     lifts, gold light pours out, then it wraps itself again; eaves: red and
+                     gold, flashing gold when it opens; wash: red, glowing gold when it opens
+        star         a big warm-white five-pointed star on the dark gable, a shimmer
+                     running up through it, a few far-off stars twinkling; eaves: icy pulses
+                     running out from the apex; wash: deep blue
+        ornament     a big red bauble on a gold cap swinging from the apex, a glint on its
+                     shine, and two little gold baubles either side; eaves: green garland
+                     with gold beads; wash: warm red
+        rudolph      Rudolph's face (brown, white eyes that blink) under wide branching
+                     antlers, his big red nose blinking; eaves: night blue with stars and a
+                     red glow that runs out with each blink; wash: blue that blushes red
+        joy          J, O, Y in gold, one big letter at a time on the dark gable, then a
+                     burst of gold glitter under a star; eaves: red and gold; wash: red
 
-The picture is drawn in "bulb units" (X across, about one unit per bulb, 0 at the
-middle; Y up, 0 on the bottom row and 5 on the top row), so shapes keep their proportions
-on the house's wide, flat triangle. Every moving edge is anti-aliased between bulbs.
-Without a zigzag in the target the target's bounding box is the canvas.
+With the Tip (a run that carries the zigzag on up to the gable apex, see addrun.py) the
+pictures use its rows: the star grows to fill the taller triangle with its top point on
+the apex, the wreath hangs from a gold bow on the apex, the snowman's hat rises to a
+point with its bobble on the apex, the gingerbread roof comes to an iced point, the
+present's bow and the light pouring out reach up into it, the ornament's hook and the
+JOY star sit on the apex and Rudolph's antlers branch up into it.
 
-With the Tip (a run that carries the zigzag on up to the gable apex, see addrun.py) its
-rows sit above the top row at Y of about 5.9, 6.8 and 7.6 (the apex), on the same scale,
-and each picture uses them: the wreath hangs from a red ribbon with a gold bow at the
-apex, the snowman's hat rises to a point with its bobble on the apex, the gingerbread
-roof comes to an iced point, the present's bow gets a gold loop, the star and the
-ornament's hook sit on the apex itself, Rudolph's antlers branch up into it and JOY's
-star moves up to the apex. Without the Tip every picture is exactly as before.
+Without a zigzag in the target (a porch on its own, say) the target gets the trim.
+Details (twinkles, flakes, gumdrops) are seeded per lattice cell, so nothing shifts when
+a bulb is marked dead.
 """
 from __future__ import annotations
 
 import math
 
-from ..color import BLACK, hash01, lerp, noise2
+from ..color import BLACK, hash01, lerp
 from ..effects import Param, frame_effect
+from ..layout import role_of
 from ..sparkle import glint, wobble
+from . import hexcanvas as hx
 from .showpieces import _apex, _clamp, canvas
 
 TAU = 2 * math.pi
@@ -55,6 +64,9 @@ STYLES = ["wreath", "snowman", "gingerbread", "present", "star", "ornament", "ru
 WARM = (1.0, 0.6, 0.24)
 GOLD = (1.0, 0.62, 0.1)
 NIGHT = (0.0, 0.03, 0.28)
+RED = (1.0, 0.0, 0.03)
+WHITE = (1.0, 1.0, 1.0)
+SNOW = (0.85, 0.92, 1.0)
 
 
 def _sm(x: float) -> float:
@@ -65,51 +77,6 @@ def _sm(x: float) -> float:
     return x * x * (3 - 2 * x)
 
 
-def _cov(sd: float, soft: float = 0.45) -> float:
-    """Coverage of a shape at signed distance sd (negative inside), soft at the edge."""
-    return min(1.0, max(0.0, 0.5 - sd / (2 * soft)))
-
-
-def _ell(X, Y, cx, cy, a, b) -> float:
-    """Signed distance (roughly, in bulb units) to an ellipse."""
-    return (math.hypot((X - cx) / a, (Y - cy) / b) - 1.0) * min(a, b)
-
-
-def _box(X, Y, x0, x1, y0, y1) -> float:
-    dx = max(x0 - X, X - x1)
-    dy = max(y0 - Y, Y - y1)
-    return max(dx, dy)
-
-
-def _seg(X, Y, ax, ay, bx, by) -> float:
-    """Distance to the segment a-b (bulb units)."""
-    dx, dy = bx - ax, by - ay
-    L2 = dx * dx + dy * dy
-    t = 0.0 if L2 <= 0 else min(1.0, max(0.0, ((X - ax) * dx + (Y - ay) * dy) / L2))
-    return math.hypot(X - ax - t * dx, Y - ay - t * dy)
-
-
-def _poly(X, Y, pts) -> float:
-    """Signed distance to a closed polygon (negative inside)."""
-    d = min(_seg(X, Y, *pts[k - 1], *pts[k]) for k in range(len(pts)))
-    inside = False
-    for k in range(len(pts)):
-        (x0, y0), (x1, y1) = pts[k - 1], pts[k]
-        if (y0 > Y) != (y1 > Y) and X < x0 + (Y - y0) * (x1 - x0) / (y1 - y0):
-            inside = not inside
-    return -d if inside else d
-
-
-def _star5(cx, cy, r, sx, inner=0.4):
-    """A five-pointed star's outline, point up, stretched sx times across."""
-    pts = []
-    for k in range(10):
-        a = math.pi / 2 + k * math.pi / 5
-        rr = r if k % 2 == 0 else r * inner
-        pts.append((cx + rr * math.cos(a) * sx, cy + rr * math.sin(a)))
-    return pts
-
-
 def _sc(c, v):
     return (c[0] * v, c[1] * v, c[2] * v)
 
@@ -118,296 +85,458 @@ def _mix(a, b, w):
     return lerp(a, b, min(1.0, max(0.0, w)))
 
 
+def _seed(cell) -> int:
+    """A per-cell seed that never moves (the cell's place on the lattice)."""
+    return (cell.r + 20) * 1000 + cell.d + 500
+
+
+# ====================================================================== designs
+# A design is rows of spans: {row: [(x from, x to, character), ...]}, x in columns (0 is
+# the centre line; even rows sit on whole columns, odd rows on half columns, as on the
+# house), every bulb from..to inclusive. Characters are looked up by each picture's
+# shader. Rows 0-5 are the Peak, 6-8 the Tip.
+
+def _cells(hc, design: dict) -> list:
+    """[(cell, character)] of a design on this screen (spans off the screen drop out)."""
+    out = []
+    for r, spans in design.items():
+        for a, b, ch in spans:
+            n = int(round(b - a))
+            for k in range(n + 1):
+                c = hc.cell(r, a + k)
+                if c is not None:
+                    out.append((c, ch))
+    return out
+
+
+def _with(base: dict, **rows) -> dict:
+    d = dict(base)
+    for k, v in rows.items():
+        d[int(k[1:])] = v
+    return d
+
+
+# ---- the star: its top point on the top row, arms across the middle, legs apart
+STAR = {
+    5: [(-0.5, 0.5, "S")],
+    4: [(-1, 1, "S")],
+    3: [(-5.5, -1.5, "S"), (-0.5, 0.5, "C"), (1.5, 5.5, "S")],
+    2: [(-3, -1, "S"), (0, 0, "C"), (1, 3, "S")],
+    1: [(-2.5, -1.5, "S"), (-0.5, 0.5, "S"), (1.5, 2.5, "S")],
+    0: [(-4, -3, "S"), (3, 4, "S")],
+}
+# with the Tip: a taller star, its top point on the apex
+STAR_TIP = {
+    8: [(0, 0, "S")],
+    7: [(-0.5, 0.5, "S")],
+    6: [(-1, 1, "S")],
+    5: [(-4.5, -0.5, "S"), (0.5, 4.5, "S")],
+    4: [(-3, -1, "S"), (0, 0, "C"), (1, 3, "S")],
+    3: [(-2.5, -0.5, "S"), (0.5, 2.5, "S")],
+    2: [(-3, -1, "S"), (1, 3, "S")],
+    1: [(-4.5, -2.5, "S"), (2.5, 4.5, "S")],
+    0: [(-5, -4, "S"), (4, 5, "S")],
+}
+
+# ---- the wreath: a ring two bulbs thick round a dark middle, the bow on the bottom of
+# the ring itself (in the hole it read as a red smile)
+WREATH = {
+    5: [(-2.5, 2.5, "G")],
+    4: [(-5, -2, "G"), (2, 5, "G")],
+    3: [(-6.5, -3.5, "G"), (3.5, 6.5, "G")],
+    2: [(-7, -5, "G"), (5, 7, "G")],
+    1: [(-6.5, -5.5, "G"), (-4.5, -3.5, "R"), (3.5, 4.5, "R"), (5.5, 6.5, "G")],
+    0: [(-5, -4, "G"), (-3, -1, "R"), (0, 0, "K"), (1, 3, "R"), (4, 5, "G")],
+}
+WREATH_TIP = {          # hung from a gold bow on the apex by a red ribbon
+    8: [(0, 0, "Y")],
+    7: [(-1.5, -0.5, "Y"), (0.5, 1.5, "Y")],
+    6: [(0, 0, "r")],
+}
+
+# ---- the snowman's face under a red hat
+SNOWMAN = {
+    5: [(-3.5, 3.5, "H")],
+    4: [(-5, 5, "H")],
+    3: [(-4.5, -3.5, "W"), (-2.5, -1.5, "E"), (-0.5, 0.5, "W"), (1.5, 2.5, "E"), (3.5, 4.5, "W")],
+    2: [(-6, -1, "W"), (0, 3, "O"), (4, 6, "W")],
+    1: [(-5.5, -3.5, "W"), (-2.5, 2.5, "M"), (3.5, 5.5, "W")],
+    0: [(-4, 4, "W")],
+}
+SNOWMAN_TIP = {         # the hat rises to a point, its bobble on the apex
+    8: [(0, 0, "P")],
+    7: [(-0.5, 0.5, "H")],
+    6: [(-2, 2, "H")],
+}
+
+# ---- the gingerbread house: iced roof with gumdrops over walls with windows and a door
+GINGER = {
+    5: [(-4.5, -4.5, "I"), (-3.5, -2.5, "g"), (-1.5, -1.5, "u"), (-0.5, 0.5, "g"), (1.5, 1.5, "v"),
+        (2.5, 3.5, "g"), (4.5, 4.5, "I")],
+    4: [(-6, -6, "I"), (-5, -4, "g"), (-3, -3, "v"), (-2, 1, "g"), (2, 2, "u"), (3, 4, "g"), (5, 5, "I")],
+    3: [(-7.5, 7.5, "I")],
+    2: [(-6, -5, "g"), (-4, -3, "Y"), (-2, 2, "g"), (3, 4, "Y"), (5, 6, "g")],
+    1: [(-5.5, -4.5, "g"), (-3.5, -3.5, "Y"), (-2.5, -1.5, "g"), (-0.5, 0.5, "D"), (1.5, 2.5, "g"),
+        (3.5, 3.5, "Y"), (4.5, 5.5, "g")],
+    0: [(-6, -2, "g"), (-1, 1, "D"), (2, 6, "g")],
+}
+GINGER_TIP = {
+    8: [(0, 0, "I")],
+    7: [(-1.5, -1.5, "I"), (-0.5, 0.5, "g"), (1.5, 1.5, "I")],
+    6: [(-3, -3, "I"), (-2, -1, "g"), (0, 0, "u"), (1, 2, "g"), (3, 3, "I")],
+}
+
+# ---- the present: a box with a gold ribbon, its lid and a bow (drawn in parts: they move)
+BOX = {
+    2: [(-6, -2, "B"), (-1, 1, "Y"), (2, 6, "B")],
+    1: [(-5.5, -1.5, "B"), (-0.5, 0.5, "Y"), (1.5, 5.5, "B")],
+    0: [(-6, -2, "B"), (-1, 1, "Y"), (2, 6, "B")],
+}
+LID = [(-7.5, -1.5, "B"), (-0.5, 0.5, "Y"), (1.5, 7.5, "B")]       # on a half row
+BOW = {
+    5: [(-3.5, -2.5, "Y"), (2.5, 3.5, "Y")],
+    4: [(-4, -4, "Y"), (-2, -2, "Y"), (-1, 1, "K"), (2, 2, "Y"), (4, 4, "Y")],
+}
+BOW_TIP = {             # with the Tip the bow stands taller
+    7: [(-1.5, -1.5, "Y"), (1.5, 1.5, "Y")],
+    6: [(-3, -2, "Y"), (-1, 1, "K"), (2, 3, "Y")],
+    5: [(-3.5, -3.5, "Y"), (-1.5, -1.5, "Y"), (-0.5, 0.5, "Y"), (1.5, 1.5, "Y"), (3.5, 3.5, "Y")],
+    4: [(-1, 1, "Y")],
+}
+
+# ---- Rudolph: antlers, ears, a brown face with white eyes, the red nose at the bottom
+RUDOLPH = {
+    5: [(-4.5, -4.5, "A"), (-2.5, -2.5, "A"), (2.5, 2.5, "A"), (4.5, 4.5, "A")],
+    4: [(-5, -2, "A"), (2, 5, "A")],
+    3: [(-6.5, -5.5, "F"), (-3.5, 3.5, "F"), (5.5, 6.5, "F")],
+    2: [(-4, -3, "F"), (-2, -2, "E"), (-1, 1, "F"), (2, 2, "E"), (3, 4, "F")],
+    1: [(-3.5, -1.5, "F"), (-0.5, 0.5, "N"), (1.5, 3.5, "F")],
+    0: [(-2, -2, "F"), (-1, 1, "N"), (2, 2, "F")],
+}
+RUDOLPH_TIP = {         # the antlers' tines reach up into the Tip
+    7: [(-1.5, -1.5, "A"), (1.5, 1.5, "A")],
+    6: [(-3, -3, "A"), (-2, -2, "A"), (2, 2, "A"), (3, 3, "A")],
+    5: [(-4.5, -4.5, "A"), (-2.5, -2.5, "A"), (2.5, 2.5, "A"), (4.5, 4.5, "A")],
+}
+
+# ---- JOY: one big letter at a time, strokes two bulbs thick
+LETTERS = {
+    "J": {
+        5: [(-1.5, 4.5, "L")],
+        4: [(2, 3, "L")],
+        3: [(1.5, 3.5, "L")],
+        2: [(2, 3, "L")],
+        1: [(-4.5, -3.5, "L"), (1.5, 3.5, "L")],
+        0: [(-4, 2, "L")],
+    },
+    "O": {
+        5: [(-2.5, 2.5, "L")],
+        4: [(-4, -3, "L"), (3, 4, "L")],
+        3: [(-5.5, -4.5, "L"), (4.5, 5.5, "L")],
+        2: [(-6, -5, "L"), (5, 6, "L")],
+        1: [(-5.5, -4.5, "L"), (4.5, 5.5, "L")],
+        0: [(-4, 4, "L")],
+    },
+    "Y": {
+        5: [(-4.5, -3.5, "L"), (3.5, 4.5, "L")],
+        4: [(-3, -2, "L"), (2, 3, "L")],
+        3: [(-1.5, 1.5, "L")],
+        2: [(-1, 1, "L")],
+        1: [(-0.5, 0.5, "L")],
+        0: [(-1, 1, "L")],
+    },
+}
+JOY_STAR = {
+    5: [(-0.5, 0.5, "S")],
+    4: [(-2, 2, "S")],
+    3: [(-1.5, -1.5, "S"), (1.5, 1.5, "S")],
+}
+JOY_STAR_TIP = {
+    8: [(0, 0, "S")],
+    7: [(-1.5, 1.5, "S")],
+    6: [(-1, -1, "S"), (1, 1, "S")],
+}
+
+
 # ====================================================================== the pictures
-# each takes (X, Y, i, T, P, g) and returns a colour; i is the bulb's stable seed (Pixel.si,
-# its place as if no bulb were marked dead), g carries per-frame values
+# each takes (hc, T, g) and returns {bulb index: colour} for the lit cells; every other
+# cell of the screen stays dark
 
-def _wreath(X, Y, i, T, P, g):
-    bg = _sc(NIGHT, 0.5)
-    cy, a, b = 2.75, 6.6, 2.6
-    r = math.hypot(X / a, (Y - cy) / b)
-    c = bg
-    ring = _cov((abs(r - 0.76) - 0.26) * 4.5, 0.5)
-    if ring > 0:
-        n = noise2(X * 0.7, Y * 0.9, 7)
-        green = _mix((0.0, 0.55, 0.06), (0.05, 0.85, 0.12), n)
-        if hash01(i, 41) < 0.16:                          # red berries
-            green = (1.0, 0.02, 0.02)
-        elif hash01(i, 42) < 0.14:                        # little warm lights that twinkle
-            tw = glint(i, T, 0.35, 0.15, 0.6, 5)[0]
-            green = _mix(_sc((1.0, 0.8, 0.45), 0.8), (1.0, 0.95, 0.8), tw)
-        ang = math.atan2((Y - cy) / b, X / a) / TAU % 1.0   # a gold light running round
-        d = (ang - g["run"]) % 1.0
-        d = min(d, 1 - d)
-        green = _mix(green, GOLD, 0.9 * max(0.0, 1 - d / 0.05))
-        c = _mix(c, green, ring)
-    # the bow, low in the middle: two loops, a knot and two tails
-    br = 0.9 + 0.1 * math.sin(T * 1.3)
-    loops = min(_ell(X, Y, -1.7, 0.75, 1.5 * br, 0.6), _ell(X, Y, 1.7, 0.75, 1.5 * br, 0.6))
-    knot = _ell(X, Y, 0, 0.6, 0.6, 0.6)
-    tails = min(_box(X, Y, -2.6 - 0.4 * br, -0.6, -0.4, 0.4), _box(X, Y, 0.6, 2.6 + 0.4 * br, -0.4, 0.4))
-    red = (1.0, 0.0, 0.03)
-    bow = _cov(min(loops, tails))
-    c = _mix(c, red, bow)
-    c = _mix(c, (1.0, 0.18, 0.12), _cov(knot))
-    if g["tip"] and Y > g["top"] + 0.4:                   # hung from the apex on a red ribbon
-        if Y > g["apex"] - 0.3:
-            return _mix(red, GOLD, 0.35 + 0.25 * math.sin(T * 1.3))
-        return _mix(c, red, _cov(abs(X) - 0.7, 0.4))
-    return c
+def _paint(hc, design, shade, T, g, out=None, dx=0.0, dy=0):
+    out = {} if out is None else out
+    if dx or dy:
+        design = {r + dy: [(a + dx, b + dx, ch) for a, b, ch in sp] for r, sp in design.items()}
+    for c, ch in _cells(hc, design):
+        if c.i is None or c.i not in hc.allowed:
+            continue
+        col = shade(ch, c, T, g)
+        if col is not None:
+            out[c.i] = col
+    return out
 
 
-def _snowman(X, Y, i, T, P, g):
-    # falling snow round him on a night-blue sky
-    sky = _sc(NIGHT, 0.55)
-    fl = (hash01(int((X + 20) * 1.0 + 0.5), 7) * 4 + T * 0.55) % 4.0
-    snow = max(0.0, 1 - abs((Y + fl) % 4.0 - 2.0) / 0.45) if hash01(int(X + 40.5), 3) < 0.55 else 0.0
-    c = _mix(sky, (0.75, 0.82, 1.0), snow * 0.8)
-    face = (0.86, 0.92, 1.0)
-    head = _ell(X, Y, 0, 1.6, 6.2, 2.6)
-    c = _mix(c, face, _cov(head))
-    if head < 0.3:
-        # rosy cheeks
-        c = _mix(c, (1.0, 0.3, 0.42), _cov(min(_ell(X, Y, -3.4, 2.07, 0.9, 0.4), _ell(X, Y, 3.4, 2.07, 0.9, 0.4))))
-        # coal eyes (they blink: the lids close for a moment)
-        if abs(Y - 3.25) < 0.5:
-            eyes = abs(abs(X) - 2.0) - 0.6
-            c = _mix(c, (0.0, 0.0, 0.0), _cov(eyes, 0.15) * (1 - g["blink"]))
-        # the carrot: thick at the face, thinner and deeper to the tip, a little wiggle
-        tip = 3.6 + 0.35 * math.sin(T * 2.2)
-        if 0.0 <= X <= tip and abs(Y - 2.07) < 0.5:
-            f = X / tip
-            c = _mix(c, _mix((1.0, 0.42, 0.0), (0.9, 0.18, 0.0), f), _cov(f - 1.0, 0.08))
-        # coal smile on the row below
-        if abs(Y - 1.18) < 0.5:
-            for k in (-2.4, -1.2, 0.0, 1.2, 2.4):
-                c = _mix(c, (0.0, 0.0, 0.0), _cov(abs(X - k) - 0.35, 0.2))
-    # a striped scarf on the bottom row, its end blowing a little
-    if Y < 0.5:
-        flap = 0.6 * math.sin(T * 1.7)
-        if abs(X) < 6.2 + (flap if X > 0 else 0):
-            stripe = (math.floor((X + 20) / 1.5) % 2 == 0)
-            c = (1.0, 0.02, 0.04) if stripe else (0.0, 0.7, 0.12)
-    # a red bobble hat above his face with a white fur brim and bobble
-    if Y > 3.9:
-        if Y < 4.7 and abs(X) < 4.4:
-            c = (0.9, 0.92, 1.0)
-        elif Y >= 4.7 and g["tip"]:                      # with the Tip: a tall hat, its bobble on the apex
-            if Y > g["apex"] - 0.3:
-                c = _sc((1.0, 1.0, 1.0), 0.9 + 0.1 * math.sin(T * 2.0))
-            else:
-                w = 3.6 * max(0.0, (g["apex"] - Y) / max(0.5, g["apex"] - 4.7)) + 0.6
-                if abs(X) < w:
-                    c = (1.0, 0.0, 0.03)
-        elif Y >= 4.7:
-            if abs(X) < 0.9:
-                c = (1.0, 1.0, 1.0)
-            elif abs(X) < 3.6:
-                c = (1.0, 0.0, 0.03)
-    return c
+def _dark_cells(hc, lit):
+    return [c for c in hc.cells if c.i is not None and c.i in hc.allowed and c.i not in lit]
 
 
-def _gingerbread(X, Y, i, T, P, g):
-    ginger = (0.62, 0.17, 0.0)
-    icing = (0.95, 0.95, 1.0)
-    edge = i in g["ends"]                                # bulbs on the triangle's outline
-    if Y > 2.6:                                          # the roof (the zigzag's own triangle)
-        if g["tip"] and Y > g["apex"] - 0.3:             # with the Tip: an iced point on the apex
-            return _sc(icing, 0.9 + 0.1 * glint(i, T, 0.25, 0.05, 0.4, 2)[0])
-        if edge:
-            return _sc(icing, 0.85 + 0.15 * glint(i, T, 0.25, 0.05, 0.4, 2)[0])
-        k = int(math.floor(X + 0.5))
-        if k % 3 == 0:
-            gum = [(1.0, 0.0, 0.05), (0.0, 0.85, 0.1), (1.0, 0.85, 0.0), (0.6, 0.0, 1.0)][(k // 3 + int(Y)) % 4]
-            return _sc(gum, 0.75 + 0.25 * wobble(i, T, 0.5, 4))
-        return _sc(ginger, 0.85)
-    if Y > 1.6:                                          # the icing along the eave, dripping
-        return _mix(icing, ginger, 0.5 if int(math.floor(X + 0.5)) % 3 == 0 else 0.0)
-    # the walls sit in from the roof's edge, with snow on the ground either side
-    if abs(X) > 7.6:
-        return _sc((0.55, 0.65, 1.0), 0.5) if Y < 0.5 else _sc(NIGHT, 0.5)
-    if abs(X) < 1.3:                                     # a candy-cane door
-        return (1.0, 0.05, 0.1) if (math.floor((X + Y + 9) * 1.2) % 2 == 0) else (1.0, 0.85, 0.85)
-    for wx in (-4.6, 4.6):                               # two windows glowing warm
-        if abs(X - wx) < 1.4 and Y > 0.6:
-            f = 0.75 + 0.25 * wobble(i, T, 1.6, 11)
-            return _sc((1.0, 0.75, 0.2), f)
-    if abs(abs(X) - 7.6) < 0.5:                          # icing on the corners
-        return _sc(icing, 0.8)
-    return ginger
+def _sky(hc, lit, T, seed, colour, rate=0.04, peak=0.45):
+    """A few faint twinkles in the dark round the picture (never more than a handful)."""
+    out = {}
+    for c in _dark_cells(hc, lit):
+        if c.r == 0:
+            continue
+        v = glint(_seed(c), T, rate, 0.25, 0.9, seed)[0]
+        if v > 0.02:
+            out[c.i] = _sc(colour, v * peak)
+    return out
 
 
-def _present(X, Y, i, T, P, g):
+def _star(hc, T, g):
+    tip = hc.has_tip
+    design = STAR_TIP if tip else STAR
+    beat = 0.5 + 0.5 * math.sin(T * 1.5)
+
+    def shade(ch, c, T, g):
+        # warm white-gold with a shimmer running up through it
+        s = 0.5 + 0.5 * math.cos((c.y * 0.9 + abs(c.x) * 0.35 - T * 2.4))
+        body = _mix((1.0, 0.72, 0.28), (1.0, 0.95, 0.8), 0.35 + 0.65 * s ** 3)
+        if ch == "C":
+            body = _mix(body, WHITE, 0.4 + 0.5 * beat)
+        return _mix(body, WHITE, glint(_seed(c), T, 0.4, 0.05, 0.4, 13)[0] * 0.8)
+    lit = _paint(hc, design, shade, T, g)
+    out = _sky(hc, lit, T, 9, (0.6, 0.75, 1.0), 0.02, 0.4)       # a few far-off stars
+    out.update(lit)
+    return out
+
+
+def _wreath(hc, T, g):
+    run = (T * 0.12) % 1.0
+    sway = math.sin(T * 1.3)
+
+    def shade(ch, c, T, g):
+        if ch == "G":
+            k = _seed(c)
+            green = (0.0, 0.62, 0.08) if hash01(k, 7) < 0.6 else (0.08, 0.85, 0.14)
+            if hash01(k, 42) < 0.22:                     # little warm lights that twinkle
+                tw = glint(k, T, 0.35, 0.15, 0.6, 5)[0]
+                green = _mix((0.85, 0.6, 0.3), (1.0, 0.95, 0.8), tw)
+            ang = math.atan2(c.y - 2.6, c.x / 2.4) / TAU % 1.0  # a gold light running round
+            d = (ang - run) % 1.0
+            d = min(d, 1 - d)
+            return _mix(green, GOLD, 0.95 * max(0.0, 1 - d / 0.06))
+        if ch in "Rr":
+            return _sc(RED, 0.85 + 0.15 * sway)
+        if ch == "K":
+            return (1.0, 0.15, 0.1)
+        return _mix(GOLD, (1.0, 0.85, 0.4), 0.5 + 0.5 * sway)    # Y: the bow on the apex
+    out = _paint(hc, WREATH, shade, T, g)
+    if hc.has_tip:
+        _paint(hc, WREATH_TIP, shade, T, g, out)
+    return out
+
+
+def _snowman(hc, T, g):
+    blink = g["blink"]
+
+    def shade(ch, c, T, g):
+        if ch == "W":
+            return SNOW
+        if ch == "H":
+            return RED
+        if ch == "P":
+            return _sc(WHITE, 0.9 + 0.1 * math.sin(T * 2.0))
+        if ch == "O":                                   # the carrot, deeper to its tip
+            f = c.x / 3.0
+            return _mix((1.0, 0.45, 0.0), (1.0, 0.2, 0.0), f)
+        if ch == "E":                                   # coal eyes: the lids close a moment
+            return _sc(SNOW, blink) if blink > 0.05 else None
+        return None                                     # M: the coal smile (dark)
+    lit = _paint(hc, SNOWMAN, shade, T, g)
+    if hc.has_tip:
+        _paint(hc, SNOWMAN_TIP, shade, T, g, lit)
+    face = {c.i for c, _ in _cells(hc, SNOWMAN) if c.i is not None}
+    out = {}
+    # a few flakes drifting down past him, out to the sides
+    for c in _dark_cells(hc, lit):
+        if c.i in face or abs(c.x) < 7:
+            continue
+        col = c.d
+        if hash01(col + 400, 3) > 0.45:
+            continue
+        fall = (hash01(col + 400, 7) * 6 + T * 0.7) % 7.0
+        v = max(0.0, 1 - abs((hc.peak_rows - fall) - c.y) / 0.6)
+        if v > 0:
+            out[c.i] = _sc((0.7, 0.8, 1.0), 0.5 * v)
+    out.update(lit)
+    return out
+
+
+def _gingerbread(hc, T, g):
+    def shade(ch, c, T, g):
+        k = _seed(c)
+        if ch == "g":
+            return (0.62, 0.18, 0.0)
+        if ch == "I":
+            return _sc((0.95, 0.95, 1.0), 0.85 + 0.15 * glint(k, T, 0.25, 0.05, 0.4, 2)[0])
+        if ch == "u":
+            return (1.0, 0.0, 0.05)
+        if ch == "v":
+            return (0.0, 0.85, 0.1)
+        if ch == "Y":                                   # windows glowing warm
+            return _sc((1.0, 0.88, 0.5), 0.85 + 0.15 * wobble(k, T, 1.6, 11))
+        return (1.0, 0.03, 0.08)                         # D: the red candy door
+    out = _paint(hc, GINGER, shade, T, g)
+    if hc.has_tip:
+        _paint(hc, GINGER_TIP, shade, T, g, out)
+    return out
+
+
+def _present(hc, T, g):
     ph = g["phase"]                                      # 0..1 through one wrap-open-wrap cycle
-    red, gold = (1.0, 0.0, 0.04), (1.0, 0.66, 0.0)
-    bg = _sc(NIGHT, 0.45)
-    # timeline: 0-.35 wrapped and twinkling, .35-.5 the bow unties and the ribbon slides off,
-    # .5-.6 the lid lifts, .6-.85 light pours out, .85-1 it wraps itself again
+    gold = (1.0, 0.66, 0.0)
+    # timeline: 0-.35 wrapped, .35-.5 the bow unties and the ribbon slides off, .5-.6 the
+    # lid lifts, .6-.85 light pours out, .85-1 it wraps itself again
     untie = _sm((ph - 0.35) / 0.15) * (1 - _sm((ph - 0.86) / 0.1))
     lift = _sm((ph - 0.5) / 0.1) * (1 - _sm((ph - 0.86) / 0.1))
-    glow = _sm((ph - 0.58) / 0.06) * (1 - _sm((ph - 0.8) / 0.08))
-    c = bg
-    box = _box(X, Y, -5.2, 5.2, -0.5, 2.6)
-    if box < 0.5:
-        c = _mix(c, red, _cov(box))
-        rib = abs(X) - 0.6 + untie * 7.0                 # the ribbon shrinks away from the middle
-        rib_h = abs(Y - 1.18) - 0.45 + untie * 2.0
-        if rib < 0 or (rib_h < 0 and abs(X) > untie * 5.5):
-            c = gold
-    # the lid: row 3 when shut, lifts and tilts away when open
-    ly = 3.25 + lift * 1.75
-    lx = lift * 8.0                                      # it slides off to the side
-    lid = _box(X, Y, -5.6 + lx, 5.6 + lx, ly - 0.45, ly + 0.45)
-    if lid < 0.5:
-        c = _mix(c, red, _cov(lid))
-        if abs(X - lx) < 0.6 and untie < 0.5:
-            c = gold
-    # the bow on top (unties: its loops shrink)
-    bs = 1 - untie
-    if bs > 0.05:
-        loops = min(_ell(X, Y, -1.6, 4.7, 1.4 * bs, 0.55), _ell(X, Y, 1.6, 4.7, 1.4 * bs, 0.55))
-        c = _mix(c, gold, _cov(loops) * bs)
-        c = _mix(c, (1.0, 0.85, 0.3), _cov(_ell(X, Y, 0, 4.4, 0.6, 0.5)) * bs)
-        if g["tip"] and Y > g["top"] + 0.4:              # with the Tip: the bow's loop stands up into it
-            loop = abs(_ell(X, Y, 0, (g["top"] + g["apex"]) / 2 + 0.3, 1.6, (g["apex"] - g["top"]) / 2)) - 0.45
-            c = _mix(c, gold, _cov(loop, 0.4) * bs)
-    if glow > 0 and Y > 2.5 and abs(X) < 8.0 and _box(X, Y, -5.6 + lx, 5.6 + lx, ly - 0.45, ly + 0.45) > 0.3:
+    glow = _sm((ph - 0.52) / 0.1) * (1 - _sm((ph - 0.8) / 0.08))
+
+    def shade(ch, c, T, g):
+        if ch == "B":
+            return RED
+        if ch == "K":
+            return _mix((1.0, 0.85, 0.3), RED, untie) if untie < 0.98 else None
+        # Y: the ribbon slides off from the middle out
+        gone = untie * 9.0 - abs(c.x) * 0.6 - abs(c.y - 1.5) * 0.4
+        if ch == "Y" and gone > 0.5:
+            return RED if c.r <= 3 else None
+        return gold
+    out = _paint(hc, BOX, shade, T, g)
+    # the lid: row 3 when shut, lifts two rows and slides off to the side when open
+    dy = int(round(lift * 2))
+    dx = round(lift * 6)
+    lid = {3 + dy: [(a + dx, b + dx, ch) for a, b, ch in LID]}
+    lid_cells = {}
+    _paint(hc, lid, shade, T, g, lid_cells)
+    if untie < 0.98:
+        bow = BOW_TIP if hc.has_tip else BOW
+        _paint(hc, bow, shade, T, g, out, dy=dy)
+    if glow > 0:
         # gold light pours up out of the open box, with sparkles
-        ray = 0.55 + 0.45 * math.cos(math.atan2(Y - 2.0, X) * 9 - T * 3.0)
-        v = glow * (1 - abs(X) / 9.0) * ray * 1.4
-        sp = glint(i, T, 2.0, 0.03, 0.3, 17)[0] * glow
-        c = _mix(c, (1.0, 0.8, 0.35), min(1.0, v + sp))
-    return c
+        for c in hc.cells:
+            if c.i is None or c.i not in hc.allowed or c.r < 3 or c.i in lid_cells:
+                continue
+            ray = 0.55 + 0.45 * math.cos(math.atan2(c.y - 2.0, c.x) * 9 - T * 3.0)
+            spread = max(0.0, 1 - abs(c.x) / (6.0 + (c.y - 2) * 1.0))
+            v = glow * spread * ray * 1.3
+            sp = glint(_seed(c), T, 2.0, 0.03, 0.3, 17)[0] * glow
+            if v + sp > 0.03:
+                out[c.i] = _mix(out.get(c.i, BLACK), (1.0, 0.8, 0.35), min(1.0, v + sp))
+    out.update(lid_cells)
+    return out
 
 
-# a five-pointed star drawn for the six rows (a regular one loses its feet between rows):
-# its top point on the top two rows, arms on the fourth, two legs apart on the bottom rows
-_STAR_R = [(0.0, 6.0), (1.7, 4.0), (6.6, 3.5), (3.4, 1.9), (6.4, -0.9), (0.0, 1.6)]
-STAR = _STAR_R + [(-x, y) for x, y in reversed(_STAR_R[1:-1])]
-
-
-def _star(X, Y, i, T, P, g):
-    # a big five-pointed star filling the gable (its top point on the top row, its arms
-    # on the middle row, its feet on the bottom row), white-gold with an icy glow and
-    # pulses of light running outward through the night round it
-    bg = _sc(NIGHT, 0.6)
-    tw = glint(i, T, 0.12, 0.2, 0.8, 9)[0]
-    c = _mix(bg, (0.6, 0.7, 1.0), tw * 0.5)
-    sd = _poly(X, Y, STAR)
-    r = math.hypot(X / 2.3, Y - 2.6)
-    if sd > 0:                                           # the glow and the outward pulses
-        pulse = 0.5 + 0.5 * math.cos((r - T * 2.2) * 2.0)
-        glow = max(0.0, 1 - sd / 1.6) * (0.25 + 0.75 * pulse ** 3)
-        c = _mix(c, (0.3, 0.55, 1.0), glow * 0.6)
-    core = max(0.0, 1 - r / 1.6) * (0.5 + 0.5 * math.sin(T * 1.5))
-    body = _mix((1.0, 0.82, 0.4), (1.0, 1.0, 0.95), core + 0.25)
-    body = _mix(body, (1.0, 1.0, 1.0), glint(i, T, 0.5, 0.06, 0.5, 13)[0])
-    return _mix(c, body, _cov(sd, 0.35))
-
-
-def _ornament(X, Y, i, T, P, g):
+def _ornament(hc, T, g):
     ang = g["swing"]
-    px, py = 0.0, 8.5                                    # the pivot, above the apex
-    L = 6.0
-    cx, cy = px + L * math.sin(ang), py - L * math.cos(ang)
-    bg = _sc((0.0, 0.45, 0.06), 0.5)                    # dark green, like the tree behind
-    tw = glint(i, T, 0.15, 0.1, 0.7, 21)[0]
-    c = _mix(bg, WARM, tw * 0.7)
-    # the hook string to the cap
-    t = (Y - cy) / (py - cy) if py != cy else 0.0
-    if 0 < t <= 1 and Y > cy + 2.2:
-        sx = cx + (px - cx) * t
-        c = _mix(c, (1.0, 0.75, 0.3), _cov(abs(X - sx) - 0.15, 0.4) * 0.8)
-    # the cap
-    cap = _box(X - cx, Y - cy, -1.1, 1.1, 2.2, 2.9)
-    c = _mix(c, GOLD, _cov(cap, 0.4))
-    ball = _ell(X, Y, cx, cy, 3.3, 2.35)
-    if ball < 0.6:
-        # shading: brighter up-left, deeper red at the rim, a gold band round the middle
-        rx, ry = (X - cx) / 3.3, (Y - cy) / 2.35
-        shade = 0.6 + 0.4 * max(0.0, 1 - math.hypot(rx + 0.35, ry - 0.35))
-        col = _sc((1.0, 0.0, 0.05), shade)
-        if abs(Y - cy) < 0.45:
-            col = (1.0, 0.6, 0.05)
-        hl = max(0.0, 1 - math.hypot(rx + 0.45, ry - 0.5) / 0.32)
-        col = _mix(col, (1.0, 0.85, 0.8), hl * (0.6 + 0.4 * g["shine"]))
-        c = _mix(c, col, _cov(ball, 0.45))
-    return c
+    top = hc.top
+    py = top + 3.0                                       # the pivot, above the apex
+    cy = 1.9 if not hc.has_tip else 2.4
+    L = py - cy
+    cx = L * math.sin(ang)
+    R = 2.6 if not hc.has_tip else 2.9
+    out = {}
+    # the hook: a gold thread from the apex to the cap
+    capy = cy + R / hc.row_h
+    thread = hx.Line([(cx * (py - top) / L, top + 0.2), (cx * (py - capy - 0.6) / L, capy + 0.6)], 1.05)
+    for i, w in hc.raster(thread).items():
+        out[i] = _sc((1.0, 0.7, 0.25), 0.85)
+    for i, w in hc.raster(hx.Line([(cx - 1.0, capy - 0.2), (cx + 1.0, capy - 0.2)], 0.9)).items():
+        out[i] = GOLD                                    # the cap
+    # two little gold baubles hanging from the roof either side
+    for sx in (-1, 1):
+        bx = sx * 8.5 + 0.4 * math.sin(T * TAU / 2.9 + sx)
+        for i in hc.raster(hx.Line([(sx * 8.5, 2.6), (bx, 1.8)], 0.5)):
+            out[i] = _sc((1.0, 0.7, 0.25), 0.7)
+        for i in hc.raster(hx.Circle(bx, 0.6, 1.2)):
+            out[i] = GOLD
+    # the bauble: deep red, brighter up-left, a glint on its shine
+    ball = hc.raster(hx.Circle(cx, cy, R), 0.2)
+    for i, w in ball.items():
+        c = hc.of(i)
+        rx, ry = (c.x - cx) / R, (c.y - cy) * hc.row_h / R
+        shade = 0.7 + 0.3 * max(0.0, 1 - math.hypot(rx + 0.35, ry - 0.35))
+        col = _sc(RED, shade)
+        hl = max(0.0, 1 - math.hypot(rx + 0.45, ry - 0.45) / 0.3)
+        col = _mix(col, (1.0, 0.85, 0.8), hl * (0.5 + 0.5 * g["shine"]))
+        out[i] = _mix(out.get(i, BLACK), col, w)
+    return out
 
 
-def _rudolph(X, Y, i, T, P, g):
-    # his face from the front: a broad brow narrowing to his muzzle, ears out to the
-    # sides, branching antlers on the top rows, and his nose at the bottom of his face
-    # (the brightest thing in the picture) blinking, its glow spilling on to his muzzle
-    bg = _sc(NIGHT, 0.6)
-    tw = glint(i, T, 0.12, 0.2, 0.9, 31)[0]
-    c = _mix(bg, (0.8, 0.85, 1.0), tw * 0.7)
-    fur = (0.5, 0.17, 0.0)
-    muzzle = (0.85, 0.5, 0.2)
-    antler = (1.0, 0.8, 0.5)
-    ax = abs(X)
-    horns = min(_seg(ax, Y, 1.6, 3.6, 5.5, 4.6), _seg(ax, Y, 2.5, 3.9, 1.5, 5.2),
-                _seg(ax, Y, 4.5, 4.3, 4.4, 5.2))
-    c = _mix(c, antler, _cov(horns - 0.45, 0.3))
-    if g["tip"] and Y > g["top"] + 0.4:                  # with the Tip: the antlers' tines reach up into it
-        spans = [(1.5, 3.0)] if Y < g["apex"] - 1.2 else [(0.6, 1.6)] if Y < g["apex"] - 0.3 else []
-        for lo, hi in spans:
-            c = _mix(c, antler, _cov(max(lo - ax, ax - hi), 0.25))
-    head = _poly(ax, Y, [(0.0, 3.8), (3.4, 3.7), (3.7, 2.6), (2.2, 0.9), (1.6, -0.4), (0.0, -0.4)])
-    ears = _ell(ax, Y, 4.9, 3.2, 1.5, 0.45)
-    c = _mix(c, fur, _cov(min(head, ears), 0.4))
-    c = _mix(c, muzzle, _cov(_ell(X, Y, 0, 0.4, 2.3, 1.15), 0.4))
-    eyes = _ell(ax, Y, 1.6, 2.1, 0.55, 0.45)
-    c = _mix(c, (1.0, 1.0, 1.0), _cov(eyes, 0.3) * (1 - g["blink"]))
+def _rudolph(hc, T, g):
     nb = g["nose"]
-    halo = max(0.0, 1 - math.hypot(X / 3.0, Y / 1.4)) * nb
-    c = _mix(c, (1.0, 0.15, 0.05), halo * 0.5)
-    nose = _ell(X, Y, 0, 0.1, 1.4, 0.75)
-    return _mix(c, _sc((1.0, 0.0, 0.0), 0.3 + 0.7 * nb), _cov(nose, 0.35))
+    blink = g["blink"]
+
+    def shade(ch, c, T, g):
+        if ch == "A":
+            return (1.0, 0.72, 0.35)
+        if ch == "F":
+            if c.r <= 1 and abs(c.x) < 2.6:             # his nose's glow on his muzzle
+                # (only while it blinks: at rest plain brown frames the red nose)
+                return _mix((0.55, 0.16, 0.0), (1.0, 0.1, 0.02), 0.5 * (nb - 0.6) / 0.4)
+            return (0.55, 0.16, 0.0)
+        if ch == "E":
+            return _sc(WHITE, 1 - blink) if blink < 0.95 else (0.55, 0.16, 0.0)
+        return _sc(RED, 0.4 + 0.6 * nb)                  # N: the nose, never below 3/4
+    lit = _paint(hc, RUDOLPH, shade, T, g)
+    if hc.has_tip:
+        _paint(hc, RUDOLPH_TIP, shade, T, g, lit)
+    out = _sky(hc, lit, T, 31, (0.8, 0.85, 1.0), 0.03, 0.45)
+    out.update(lit)
+    return out
 
 
 # JOY one big letter at a time (six rows are too few for three letters side by side to
-# read from the street): each letter is drawn with strokes two bulbs thick, filling the
-# gable, and the word ends with a burst of gold glitter under a star
+# read from the street), then the word ends with a burst of gold glitter under a star
 JOY_STEP, JOY_BURST = 2.2, 1.8
 JOY_CYCLE = 3 * JOY_STEP + JOY_BURST
 
 
-def _letter(ch, X, Y) -> float:
-    w = 0.85                                             # half the stroke width
-    if ch == "J":
-        return min(_seg(X, Y, -3.2, 4.75, 3.6, 4.75), _seg(X, Y, 1.8, 4.75, 1.8, 1.6),
-                   abs(_ell(X, Y, -0.6, 1.6, 2.4, 1.6)) + (0 if Y <= 1.6 else 9),
-                   _seg(X, Y, -3.0, 1.6, -3.0, 2.2)) - w
-    if ch == "O":
-        return abs(_ell(X, Y, 0, 2.5, 4.2, 2.5)) - w
-    return min(_seg(X, Y, -4.0, 5.0, 0, 2.3), _seg(X, Y, 4.0, 5.0, 0, 2.3),
-               _seg(X, Y, 0, 2.3, 0, -0.3)) - w
-
-
-def _joy(X, Y, i, T, P, g):
-    red = (0.32, 0.0, 0.01)
+def _joy(hc, T, g):
     gold = (1.0, 0.62, 0.05)
-    if g["tip"] and Y > g["top"] + 0.4:                  # with the Tip: a star on the apex
-        tw = 0.6 + 0.4 * math.sin(T * 2.5)
-        d = math.hypot(X, (Y - g["apex"]) * 1.4)
-        return _mix(red, (1.0, 0.9, 0.6), max(0.0, 1 - d / 1.6) * tw)
+    out = {}
     k, u = g["joy"]
+
+    def star(ch, c, T, g):
+        tw = 0.8 + 0.2 * math.sin(T * 2.5)
+        return _sc((1.0, 0.9, 0.6), tw)
+    if hc.has_tip:                                       # a star on the apex all along
+        _paint(hc, JOY_STAR_TIP, star, T, g, out)
     if k < 3:
         # the letter wipes in from the left, a shimmer runs through it, then it fades
-        sd = _letter("JOY"[k], X, Y)
-        wipe = _sm((u * 6.0 - (X + 6.0) / 12.0) / 0.25)
         fade = 1 - _sm((u - 0.86) / 0.14)
-        s = (X + 8.0 - u * 30.0) % 24.0
-        shimmer = max(0.0, 1 - abs(s - 12) / 2.0)
-        col = _mix(gold, (1.0, 0.95, 0.75), shimmer)
-        return _mix(red, col, _cov(sd, 0.35) * wipe * fade)
-    # the burst: gold glitter all over the gable, a star on the top rows
-    sp = glint(i, T, 3.0, 0.05, 0.35, 23)[0]
+
+        def letter(ch, c, T, g):
+            wipe = 1.0 if (c.x + 7.0) / 14.0 < u * 5.0 else 0.0
+            s = (c.x + 8.0 - u * 30.0) % 24.0
+            shimmer = max(0.0, 1 - abs(s - 12) / 2.0)
+            v = wipe * fade
+            return _sc(_mix(gold, (1.0, 0.95, 0.75), shimmer), v) if v > 0.01 else None
+        _paint(hc, LETTERS["JOY"[k]], letter, T, g, out)
+        return out
+    # the burst: a sprinkle of gold glitter over the gable, a star on the top rows at
+    # full level in a dark ring of its own (dense glitter swallowed it)
     fade = (1 - _sm((u - 0.7) / 0.3)) * _sm(u / 0.1)
-    c = _mix(red, (1.0, 0.85, 0.4), sp * fade)
-    st = _cov(_poly(X, Y, _star5(0.0, 4.4, 1.0, 2.0)), 0.35)
-    return _mix(c, (1.0, 0.95, 0.7), st * fade)
+    sfade = _sm(u / 0.04) * (1 - _sm((u - 0.85) / 0.15))
+    for c in hc.cells:
+        if c.i is None or c.i not in hc.allowed:
+            continue
+        if not hc.has_tip and c.r >= 2 and abs(c.x) <= 3.5:
+            continue
+        sp = glint(_seed(c), T, 0.3, 0.05, 0.35, 23)[0] * fade
+        if sp > 0.02:
+            out[c.i] = _sc((1.0, 0.85, 0.4), sp)
+    if not hc.has_tip:
+        _paint(hc, JOY_STAR, lambda *a: _sc((1.0, 0.95, 0.7), sfade), T, g, out)
+    return out
 
 
 DRAW = {"wreath": _wreath, "snowman": _snowman, "gingerbread": _gingerbread, "present": _present,
@@ -415,9 +544,40 @@ DRAW = {"wreath": _wreath, "snowman": _snowman, "gingerbread": _gingerbread, "pr
 
 
 # ====================================================================== the trims
+def _trim_kind(L, name) -> str:
+    """'wash' for a run that lights a wall (the Accent / porch, pointing down at the
+    siding), else 'eaves' (a row of bulbs pointing out at the street)."""
+    r = L.run(name) if hasattr(L, "run") else None
+    role = (getattr(r, "role", None) if r is not None else None) or role_of(name)
+    n = str(name).lower()
+    if role in ("porch", "accent") or any(w in n for w in ("porch", "accent", "garage", "door", "window")):
+        return "wash"
+    return "eaves"
+
+
+def _wash(style, i, f, T, g):
+    """The Accent / porch: one big colour washing the siding, breathing slowly."""
+    b = 0.85 + 0.15 * math.sin(T * 0.7 + f * 2.0)
+    if style == "wreath":
+        return _sc((1.0, 0.02, 0.03), 0.8 * b)
+    if style == "snowman":
+        return _sc((0.25, 0.55, 1.0), 0.75 * b)
+    if style == "gingerbread":
+        return _sc((1.0, 0.45, 0.08), 0.8 * b)
+    if style == "present":
+        return _mix(_sc(RED, 0.8 * b), (1.0, 0.7, 0.2), g["flash"])
+    if style == "star":
+        return _sc((0.05, 0.15, 0.85), 0.7 * b)
+    if style == "ornament":
+        return _sc((1.0, 0.05, 0.02), 0.75 * b)
+    if style == "rudolph":
+        return _mix(_sc((0.05, 0.12, 0.75), 0.7 * b), (1.0, 0.03, 0.0), 0.65 * (g["nose"] - 0.6) / 0.4)
+    return _sc((1.0, 0.02, 0.05), 0.8 * b)               # joy
+
+
 def _trim(style, i, d, f, T, g, seed):
-    """Colour of a bulb off the zigzag: d = distance from the apex (layout units, along
-    x mostly), f = 0..1 height. Each trim goes with its picture."""
+    """The Eaves (and any other run): rhythm and sparkle; d = distance from the gable's
+    centre line (layout units), f = 0..1 height."""
     if style == "wreath":
         base = _sc(WARM, 0.8 + 0.2 * wobble(i, T, 0.3, seed))
         b = glint(i, T, 0.12, 0.15, 0.9, seed + 1)[0]
@@ -471,8 +631,9 @@ def _trim(style, i, d, f, T, g, seed):
     Param("seed", "int", 8, "Seed", 0, 9999, 1),
 ], "The Peak as a little picture screen for December: a wreath with a bow, a snowman, a "
    "gingerbread house, a present that unwraps itself, a winter star, a swinging ornament, "
-   "Rudolph with his blinking nose, or JOY. Everything else in the target (the eaves, porch, "
-   "garage) gets a trim that goes with the picture. Leave the target as the whole house. "
+   "Rudolph with his blinking nose, or JOY, each drawn bulb by bulb for the Peak's offset "
+   "rows, bold on a dark gable. The eaves sparkle and the porch / accent lights wash the "
+   "wall in a colour that goes with the picture. Leave the target as the whole house. "
    "Made for a Peak with six rows of zigzag; on a different zigzag the picture still "
    "lights but may look squashed or cut off.",
    group="Scenes")
@@ -483,81 +644,70 @@ def peak_picture(t, ctx, P, st):
     idx = [i for i in ctx.idx if 0 <= i < n]
     if not idx:
         return frame
-    cv = canvas(L, idx)
     clock = ctx.clock
     if "start" not in st or clock < st["start"] - 1e-6:
         st["start"] = clock
     T = (clock - st["start"]) * P["speed"]
     style = P["style"] if P["style"] in DRAW else "wreath"
     lvl, tl, seed = P["level"], P["trim_level"], P["seed"]
+    hc = hx.get(L, idx)
 
     geo = st.get("geo")
-    if geo is None or st.get("geo_key") != id(cv):
-        # bulb units: one unit per bulb across (the bottom row's spacing), 5 between the
-        # bottom and top rows
+    if geo is None or st.get("geo_key") != (id(L), tuple(idx)):
         px = L.pixels
-        zig = cv["zig"]
-        # each row as (x, bulb); a dead bulb (bulb None) still holds its place, so the
-        # picture keeps its scale and outline round it
-        rows: dict[int, list] = {}
-        for i in zig:
-            rows.setdefault(round(cv["uv"][i][1] * 20), []).append((px[i].x, i))
-        for x, _, _, v in cv.get("gone", ()):
-            rows.setdefault(round(v * 20), []).append((x, None))
-        bottom = sorted(rows.get(min(rows), []) if rows else [], key=lambda e: e[0])
-        if len(bottom) > 1:
-            pitch = (bottom[-1][0] - bottom[0][0]) / (len(bottom) - 1)
+        screen = set(hc.live()) if hc else set()
+        rest_i = [i for i in idx if i not in screen]
+        if hc:
+            # the centre line of the gable in layout units (for the eaves' rhythm)
+            bot = [c.pos[0] for c in hc.rows[0].cells]
+            mid = (min(bot) + max(bot)) / 2
+            cv = canvas(L, idx)
+            crown_l = _apex(L, idx, 1) if cv["rest"] else []
         else:
-            pitch = 1.0
-        allx = [x for r in rows.values() for x, _ in r]
-        hw = (max(allx) - min(allx)) / 2 if zig else 1.0
-        sx = hw / max(1e-6, abs(pitch)) if pitch else 1.0
-        xy = {i: (u * sx, v * 5.0) for i, (u, v) in cv["uv"].items()}
-        ends = set()
-        for r in rows.values():                    # the outline: each row's two end bulbs
-            r = sorted(r, key=lambda e: e[0])
-            ends.update(px[i].si for _, i in (r[0], r[-1]) if i is not None)
-        ax, ay = cv["apex"]
-        rest = [(i, math.hypot(px[i].x - ax, (px[i].y - ay) * 0.5),
-                 (px[i].y - L.miny) / max(1e-6, L.maxy - L.miny)) for i in cv["rest"]]
-        # the Tip (if any): its bulbs sit above the zigzag's own top row (Y 5)
-        tip = bool(cv.get("tip"))
-        geo = st["geo"] = {"xy": xy, "ends": ends, "rest": rest, "tip": tip, "top": 5.0,
-                           "apex": max((y for _, y in xy.values()), default=5.0),
-                           "crown": sorted(cv["tip"], key=lambda i: (-xy[i][1], abs(xy[i][0])))[:1] if tip else []}
-        st["geo_key"] = id(cv)
-    xy, ends = geo["xy"], geo["ends"]
+            mid = (min(px[i].x for i in idx) + max(px[i].x for i in idx)) / 2
+            crown_l = []
+        # heights from the bulbs that are not a Tip, so the trims look the same with it
+        ys = [p.y for p in px if not getattr(p, "ext", False)] or [0.0]
+        miny, maxy = min(ys), max(ys)
+        rest = [(i, abs(px[i].x - mid),
+                 (px[i].y - miny) / max(1e-6, maxy - miny), _trim_kind(L, px[i].run)) for i in rest_i]
+        crown = []
+        if hc and hc.has_tip:
+            crown = [c.i for c in hc.apex_cells if c.i is not None and c.i in hc.allowed][:1]
+        geo = st["geo"] = {"rest": rest, "screen": screen, "crown": crown, "crown_l": crown_l}
+        st["geo_key"] = (id(L), tuple(idx))
 
-    g = {"ends": ends, "tip": geo["tip"], "top": geo["top"], "apex": geo["apex"]}
+    g = {}
     # per-frame values shared by the bulbs
-    g["run"] = (T * 0.12) % 1.0
     bt = T % 5.3                                             # a blink every few seconds
     g["blink"] = max(0.0, 1 - abs(bt - 4.9) / 0.15)
     g["phase"] = (T / max(1.0, P["cycle"])) % 1.0
     ph = g["phase"]
     g["flash"] = _sm((ph - 0.58) / 0.04) * (1 - _sm((ph - 0.72) / 0.12))
-    g["swing"] = 0.22 * math.sin(T * TAU / 3.4)
+    g["swing"] = 0.07 * math.sin(T * TAU / 3.4)
     g["shine"] = max(0.0, math.cos(T * TAU / 3.4))
     nt = T % 2.4                                             # Rudolph's nose: blink, and a double blink
     nose = max(math.exp(-((nt - 0.3) / 0.22) ** 2), 0.8 * math.exp(-((nt - 0.95) / 0.18) ** 2))
-    g["nose"] = 0.25 + 0.75 * nose
+    g["nose"] = 0.6 + 0.4 * nose                             # bright, blinking brighter
     g["ripple"] = nt * 30.0
     jt = T % JOY_CYCLE                                       # JOY: which letter, how far in
     g["joy"] = (int(jt // JOY_STEP), (jt % JOY_STEP) / JOY_STEP) if jt < 3 * JOY_STEP \
         else (3, (jt - 3 * JOY_STEP) / JOY_BURST)
 
-    draw = DRAW[style]
-    px = L.pixels                                  # details are seeded per bulb (si), so they
-    for i, (X, Y) in xy.items():                   # stay on their bulbs when one is marked dead
-        c = draw(X, Y, px[i].si, T, P, g)
-        frame[i] = _sc(c, lvl)
+    if hc is not None:
+        for i, c in DRAW[style](hc, T, g).items():
+            frame[i] = _sc(c, lvl)
     if tl > 0:
-        for i, d, f in geo["rest"]:
-            frame[i] = _sc(_trim(style, px[i].si, d, f, T, g, seed), tl)
-    if style in ("star", "ornament") and geo["crown"]:
-        for i in geo["crown"]:                     # with the Tip: the apex itself crowns the picture
-            frame[i] = _sc((1.0, 0.95, 0.8) if style == "star" else GOLD, lvl)
-    elif tl > 0 and style in ("star", "ornament") and cv["rest"]:
-        for i in _apex(L, idx, 1):                 # the bulb crowning the picture
-            frame[i] = _sc((1.0, 0.95, 0.8) if style == "star" else GOLD, lvl)
+        px = L.pixels                              # details are seeded per bulb (si), so they
+        for i, d, f, kind in geo["rest"]:          # stay on their bulbs when one is marked dead
+            si = px[i].si
+            c = _wash(style, si, f, T, g) if kind == "wash" else _trim(style, si, d, f, T, g, seed)
+            frame[i] = _sc(c, tl)
+    if style in ("star", "ornament"):
+        if geo["crown"]:
+            for i in geo["crown"]:                 # with the Tip: the apex itself crowns the picture
+                frame[i] = _sc((1.0, 0.95, 0.8) if style == "star" else GOLD, lvl)
+        elif tl > 0:
+            for i in geo["crown_l"]:               # the bulb over the gable crowning the picture
+                frame[i] = _sc((1.0, 0.95, 0.8) if style == "star" else GOLD, lvl)
     return _clamp(frame, idx)

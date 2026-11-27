@@ -18,7 +18,7 @@ from goveelights import calendar_builtin as cal  # noqa: E402
 from goveelights import schedule as sched  # noqa: E402
 from goveelights import shows_builtin  # noqa: E402
 from goveelights.effects import EFFECTS  # noqa: E402
-from goveelights.effects_ext import peak_pictures  # noqa: E402
+from goveelights.effects_ext import hexcanvas, peak_pictures  # noqa: E402
 from goveelights.scene import Scene  # noqa: E402
 
 from test_r10_showpieces import EXAMPLE, HOUSE, digest, layout, render  # noqa: E402
@@ -28,9 +28,9 @@ PRESETS = [f"peak-{s}" for s in STYLES]
 
 # 40 frames at t = k/10 on the owner's layout (the pictures don't read the clock or date)
 GOLDEN = {
-    "peak-wreath": "8e65ed7e84364442", "peak-snowman": "2fc5f79bc0fc00b1", "peak-gingerbread": "777a778cde8a9000",
-    "peak-present": "2394214a0a1348e9", "peak-star": "3cd62cc555b80b6d", "peak-ornament": "2ae9eb0db050c9a3",
-    "peak-rudolph": "e9536fe69ee08890", "peak-joy": "cd182b2cf2bb58dc",
+    "peak-wreath": "39395c3e3b6a1554", "peak-snowman": "a761ceb01dd4e85a", "peak-gingerbread": "074c9adb468a5a44",
+    "peak-present": "88b5879475bc53ce", "peak-star": "21a45e612201a2c7", "peak-ornament": "4207e045f99c8cf8",
+    "peak-rudolph": "b1934e0d90629046", "peak-joy": "15cd38dcf757b304",
 }
 
 
@@ -88,8 +88,15 @@ class PeakPicturePresets(unittest.TestCase):
                     for cols in a:
                         self.assertEqual(len(cols), L.n)
                         self.assertTrue(all(0.0 <= c <= 1.0 for px in cols for c in px))
-                    lit = sum(1 for px in a[-1] if max(px) > 0.02)
-                    self.assertGreater(lit, L.n * 0.8, "the whole house takes part")
+                    # the whole house takes part: every bulb off the Peak gets the trim,
+                    # while the picture keeps dark space round it on the Peak
+                    hc = hexcanvas.get(L, list(range(L.n)))
+                    screen = set(hc.live())
+                    off = [i for i in range(L.n) if i not in screen]
+                    lit = sum(1 for i in off if max(a[-1][i]) > 0.02)
+                    self.assertGreater(lit, len(off) * 0.95, "the whole house takes part")
+                    dark = sum(1 for i in screen if max(a[-1][i]) < 0.05)
+                    self.assertGreater(dark, len(screen) * 0.25, "dark space round the picture")
                     if four:                         # a fourth run gets the trim by itself
                         self.assertGreater(sum(1 for i in four if max(a[-1][i]) > 0.02), 90)
 
