@@ -6,7 +6,9 @@ The Peak is a triangle of OFFSET rows (27, 23, 20, 16, 12 and 10 bulbs, and with
 below, so the screen is a honeycomb, not a square grid (see hexcanvas.py). Each picture
 is drawn for that lattice, bulb by bulb: bold shapes two bulbs thick, every bulb either
 fully in the picture or dark (no dim half-lit edges), a few strong colours, centred on
-the wide rows and with dark space round it so it reads from the street at night.
+the wide rows and with dark space round it so it reads from the street at night. Each is
+sized in TRUE proportions: on the house the rows hang only about 0.66 of a bulb spacing
+apart (hexcanvas's hc.aspect), so a round wreath six rows tall is six bulbs wide, not fifteen.
 
     peak_picture  One of several winter pictures drawn on the zigzag with a gentle
                   animation, while the rest of the target gets a trim that goes with it.
@@ -116,37 +118,52 @@ def _with(base: dict, **rows) -> dict:
     return d
 
 
+# TRUE PROPORTIONS. On the house the Peak's rows hang about 0.66 of a bulb spacing apart
+# (hc.aspect: measured in the owner's night photos, see hexcanvas.PEAK_ASPECT and the
+# layout's "aspect"; the one source of truth, never a copy here), so six rows are only about four
+# bulb spacings tall. A picture drawn one row per unit of height and one bulb per unit of
+# width comes out two or three times too wide (the first wreath read as a flat oval across
+# the gable). Each design below is sized in those physical units: a round thing six rows
+# tall is about five or six bulbs wide. The width that frees is left dark or carries a
+# little context (far-off stars, falling flakes, little baubles, glitter).
 # ---- the star: its top point on the top row, arms across the middle, legs apart
 STAR = {
     5: [(-0.5, 0.5, "S")],
     4: [(-1, 1, "S")],
-    3: [(-5.5, -1.5, "S"), (-0.5, 0.5, "C"), (1.5, 5.5, "S")],
-    2: [(-3, -1, "S"), (0, 0, "C"), (1, 3, "S")],
-    1: [(-2.5, -1.5, "S"), (-0.5, 0.5, "S"), (1.5, 2.5, "S")],
-    0: [(-4, -3, "S"), (3, 4, "S")],
+    3: [(-2.5, -1.5, "S"), (-0.5, 0.5, "C"), (1.5, 2.5, "S")],
+    2: [(-1, -1, "S"), (0, 0, "C"), (1, 1, "S")],
+    1: [(-1.5, -1.5, "S"), (1.5, 1.5, "S")],
+    0: [(-2, -2, "S"), (2, 2, "S")],
 }
 # with the Tip: a taller star, its top point on the apex
 STAR_TIP = {
     8: [(0, 0, "S")],
     7: [(-0.5, 0.5, "S")],
     6: [(-1, 1, "S")],
-    5: [(-4.5, -0.5, "S"), (0.5, 4.5, "S")],
-    4: [(-3, -1, "S"), (0, 0, "C"), (1, 3, "S")],
-    3: [(-2.5, -0.5, "S"), (0.5, 2.5, "S")],
-    2: [(-3, -1, "S"), (1, 3, "S")],
-    1: [(-4.5, -2.5, "S"), (2.5, 4.5, "S")],
-    0: [(-5, -4, "S"), (4, 5, "S")],
+    5: [(-3.5, -1.5, "S"), (-0.5, 0.5, "C"), (1.5, 3.5, "S")],
+    4: [(-2, -1, "S"), (0, 0, "C"), (1, 2, "S")],
+    3: [(-1.5, 1.5, "S")],
+    2: [(-2, -1, "S"), (1, 2, "S")],
+    1: [(-2.5, -2.5, "S"), (2.5, 2.5, "S")],
+    0: [(-3, -3, "S"), (3, 3, "S")],
+}
+# little far-off stars in the width the true-size star leaves dark
+STAR_FAR = {
+    3: [(-6.5, -6.5, "s"), (5.5, 5.5, "s")],
+    2: [(8, 8, "s")],
+    1: [(-8.5, -8.5, "s"), (6.5, 6.5, "s")],
+    0: [(-5, -5, "s"), (10, 10, "s")],
 }
 
-# ---- the wreath: a ring two bulbs thick round a dark middle, the bow on the bottom of
-# the ring itself (in the hole it read as a red smile)
+# ---- the wreath: a round ring (six rows tall, six bulbs wide) round a dark middle, the
+# bow on the bottom of the ring itself (in the hole it read as a red smile)
 WREATH = {
-    5: [(-2.5, 2.5, "G")],
-    4: [(-5, -2, "G"), (2, 5, "G")],
-    3: [(-6.5, -3.5, "G"), (3.5, 6.5, "G")],
-    2: [(-7, -5, "G"), (5, 7, "G")],
-    1: [(-6.5, -5.5, "G"), (-4.5, -3.5, "R"), (3.5, 4.5, "R"), (5.5, 6.5, "G")],
-    0: [(-5, -4, "G"), (-3, -1, "R"), (0, 0, "K"), (1, 3, "R"), (4, 5, "G")],
+    5: [(-1.5, 1.5, "G")],
+    4: [(-2, -1, "G"), (1, 2, "G")],
+    3: [(-2.5, -1.5, "G"), (1.5, 2.5, "G")],
+    2: [(-2, -2, "G"), (2, 2, "G")],
+    1: [(-2.5, -2.5, "G"), (-1.5, -1.5, "R"), (1.5, 1.5, "R"), (2.5, 2.5, "G")],
+    0: [(-2, -2, "G"), (-1, -1, "R"), (0, 0, "K"), (1, 1, "R"), (2, 2, "G")],
 }
 WREATH_TIP = {          # hung from a gold bow on the apex by a red ribbon
     8: [(0, 0, "Y")],
@@ -154,92 +171,93 @@ WREATH_TIP = {          # hung from a gold bow on the apex by a red ribbon
     6: [(0, 0, "r")],
 }
 
-# ---- the snowman's face under a red hat
+# ---- the snowman's face under a red hat (the carrot points out past his cheek)
 SNOWMAN = {
-    5: [(-3.5, 3.5, "H")],
-    4: [(-5, 5, "H")],
-    3: [(-4.5, -3.5, "W"), (-2.5, -1.5, "E"), (-0.5, 0.5, "W"), (1.5, 2.5, "E"), (3.5, 4.5, "W")],
-    2: [(-6, -1, "W"), (0, 3, "O"), (4, 6, "W")],
-    1: [(-5.5, -3.5, "W"), (-2.5, 2.5, "M"), (3.5, 5.5, "W")],
-    0: [(-4, 4, "W")],
+    5: [(-1.5, 1.5, "H")],
+    4: [(-3, 3, "H")],
+    3: [(-2.5, -2.5, "W"), (-1.5, -1.5, "E"), (-0.5, 0.5, "W"), (1.5, 1.5, "E"), (2.5, 2.5, "W")],
+    2: [(-2, -1, "W"), (0, 3, "O")],
+    1: [(-2.5, -2.5, "W"), (-1.5, 1.5, "M"), (2.5, 2.5, "W")],
+    0: [(-2, 2, "W")],
 }
 SNOWMAN_TIP = {         # the hat rises to a point, its bobble on the apex
     8: [(0, 0, "P")],
     7: [(-0.5, 0.5, "H")],
-    6: [(-2, 2, "H")],
+    6: [(-1, 1, "H")],
 }
 
-# ---- the gingerbread house: iced roof with gumdrops over walls with windows and a door
+# ---- the gingerbread house: iced roof with a gumdrop over walls with windows and a door
 GINGER = {
-    5: [(-4.5, -4.5, "I"), (-3.5, -2.5, "g"), (-1.5, -1.5, "u"), (-0.5, 0.5, "g"), (1.5, 1.5, "v"),
-        (2.5, 3.5, "g"), (4.5, 4.5, "I")],
-    4: [(-6, -6, "I"), (-5, -4, "g"), (-3, -3, "v"), (-2, 1, "g"), (2, 2, "u"), (3, 4, "g"), (5, 5, "I")],
-    3: [(-7.5, 7.5, "I")],
-    2: [(-6, -5, "g"), (-4, -3, "Y"), (-2, 2, "g"), (3, 4, "Y"), (5, 6, "g")],
-    1: [(-5.5, -4.5, "g"), (-3.5, -3.5, "Y"), (-2.5, -1.5, "g"), (-0.5, 0.5, "D"), (1.5, 2.5, "g"),
-        (3.5, 3.5, "Y"), (4.5, 5.5, "g")],
-    0: [(-6, -2, "g"), (-1, 1, "D"), (2, 6, "g")],
+    5: [(-0.5, 0.5, "I")],
+    4: [(-2, -2, "I"), (-1, -1, "g"), (0, 0, "u"), (1, 1, "g"), (2, 2, "I")],
+    3: [(-3.5, 3.5, "I")],
+    2: [(-3, -3, "g"), (-2, -2, "Y"), (-1, 1, "g"), (2, 2, "Y"), (3, 3, "g")],
+    1: [(-2.5, -1.5, "g"), (-0.5, 0.5, "D"), (1.5, 2.5, "g")],
+    0: [(-3, -2, "g"), (-1, 1, "D"), (2, 3, "g")],
 }
-GINGER_TIP = {
-    8: [(0, 0, "I")],
-    7: [(-1.5, -1.5, "I"), (-0.5, 0.5, "g"), (1.5, 1.5, "I")],
-    6: [(-3, -3, "I"), (-2, -1, "g"), (0, 0, "u"), (1, 2, "g"), (3, 3, "I")],
+GINGER_TIP = {          # with the Tip a steep roof with gumdrops rises to an iced point
+    8: [(0, 0, "I")],   # (rows 4 and 5 replace the low roof's)
+    7: [(-0.5, 0.5, "I")],
+    6: [(-1, -1, "I"), (0, 0, "u"), (1, 1, "I")],
+    5: [(-1.5, -1.5, "I"), (-0.5, -0.5, "g"), (0.5, 0.5, "v"), (1.5, 1.5, "I")],
+    4: [(-2, -2, "I"), (-1, -1, "v"), (0, 0, "g"), (1, 1, "u"), (2, 2, "I")],
 }
 
 # ---- the present: a box with a gold ribbon, its lid and a bow (drawn in parts: they move)
 BOX = {
-    2: [(-6, -2, "B"), (-1, 1, "Y"), (2, 6, "B")],
-    1: [(-5.5, -1.5, "B"), (-0.5, 0.5, "Y"), (1.5, 5.5, "B")],
-    0: [(-6, -2, "B"), (-1, 1, "Y"), (2, 6, "B")],
+    3: [(-2.5, -1.5, "B"), (-0.5, 0.5, "Y"), (1.5, 2.5, "B")],
+    2: [(-2, -1, "B"), (0, 0, "Y"), (1, 2, "B")],
+    1: [(-2.5, -1.5, "B"), (-0.5, 0.5, "Y"), (1.5, 2.5, "B")],
+    0: [(-2, -1, "B"), (0, 0, "Y"), (1, 2, "B")],
 }
-LID = [(-7.5, -1.5, "B"), (-0.5, 0.5, "Y"), (1.5, 7.5, "B")]       # on a half row
+LID_ROW = 4
+LID = [(-3, -1, "B"), (0, 0, "Y"), (1, 3, "B")]                    # on a whole row
 BOW = {
-    5: [(-3.5, -2.5, "Y"), (2.5, 3.5, "Y")],
-    4: [(-4, -4, "Y"), (-2, -2, "Y"), (-1, 1, "K"), (2, 2, "Y"), (4, 4, "Y")],
+    5: [(-1.5, -1.5, "Y"), (-0.5, 0.5, "K"), (1.5, 1.5, "Y")],
 }
-BOW_TIP = {             # with the Tip the bow stands taller
+BOW_TIP = {             # with the Tip the bow stands taller: two loops over the knot
     7: [(-1.5, -1.5, "Y"), (1.5, 1.5, "Y")],
-    6: [(-3, -2, "Y"), (-1, 1, "K"), (2, 3, "Y")],
-    5: [(-3.5, -3.5, "Y"), (-1.5, -1.5, "Y"), (-0.5, 0.5, "Y"), (1.5, 1.5, "Y"), (3.5, 3.5, "Y")],
-    4: [(-1, 1, "Y")],
+    6: [(-2, -2, "Y"), (0, 0, "K"), (2, 2, "Y")],
+    5: [(-1.5, -1.5, "Y"), (-0.5, 0.5, "Y"), (1.5, 1.5, "Y")],
 }
 
-# ---- Rudolph: antlers, ears, a brown face with white eyes, the red nose at the bottom
+# ---- Rudolph: antlers over a brown head (its ears the top corners) with white eyes,
+# tapering down to his red nose at the bottom
 RUDOLPH = {
-    5: [(-4.5, -4.5, "A"), (-2.5, -2.5, "A"), (2.5, 2.5, "A"), (4.5, 4.5, "A")],
-    4: [(-5, -2, "A"), (2, 5, "A")],
-    3: [(-6.5, -5.5, "F"), (-3.5, 3.5, "F"), (5.5, 6.5, "F")],
-    2: [(-4, -3, "F"), (-2, -2, "E"), (-1, 1, "F"), (2, 2, "E"), (3, 4, "F")],
-    1: [(-3.5, -1.5, "F"), (-0.5, 0.5, "N"), (1.5, 3.5, "F")],
-    0: [(-2, -2, "F"), (-1, 1, "N"), (2, 2, "F")],
+    5: [(-3.5, -3.5, "A"), (-1.5, -1.5, "A"), (1.5, 1.5, "A"), (3.5, 3.5, "A")],
+    4: [(-3, -1, "A"), (1, 3, "A")],
+    3: [(-2.5, 2.5, "F")],
+    2: [(-2, -2, "F"), (-1, -1, "E"), (0, 0, "F"), (1, 1, "E"), (2, 2, "F")],
+    1: [(-1.5, -1.5, "F"), (-0.5, 0.5, "N"), (1.5, 1.5, "F")],
+    0: [(-1, 1, "N")],
 }
 RUDOLPH_TIP = {         # the antlers' tines reach up into the Tip
     7: [(-1.5, -1.5, "A"), (1.5, 1.5, "A")],
     6: [(-3, -3, "A"), (-2, -2, "A"), (2, 2, "A"), (3, 3, "A")],
-    5: [(-4.5, -4.5, "A"), (-2.5, -2.5, "A"), (2.5, 2.5, "A"), (4.5, 4.5, "A")],
+    5: [(-3.5, -3.5, "A"), (-1.5, -1.5, "A"), (1.5, 1.5, "A"), (3.5, 3.5, "A")],
 }
 
-# ---- JOY: one big letter at a time, strokes two bulbs thick
+# ---- JOY: one big letter at a time, six rows tall and five or six bulbs wide
 LETTERS = {
     "J": {
-        5: [(-1.5, 4.5, "L")],
-        4: [(2, 3, "L")],
-        3: [(1.5, 3.5, "L")],
-        2: [(2, 3, "L")],
-        1: [(-4.5, -3.5, "L"), (1.5, 3.5, "L")],
-        0: [(-4, 2, "L")],
+        5: [(-1.5, 1.5, "L")],
+        4: [(0, 1, "L")],
+        3: [(0.5, 1.5, "L")],
+        2: [(0, 1, "L")],
+        1: [(-2.5, -2.5, "L"), (0.5, 1.5, "L")],
+        0: [(-2, 0, "L")],
     },
     "O": {
-        5: [(-2.5, 2.5, "L")],
-        4: [(-4, -3, "L"), (3, 4, "L")],
-        3: [(-5.5, -4.5, "L"), (4.5, 5.5, "L")],
-        2: [(-6, -5, "L"), (5, 6, "L")],
-        1: [(-5.5, -4.5, "L"), (4.5, 5.5, "L")],
-        0: [(-4, 4, "L")],
+        5: [(-1.5, 1.5, "L")],
+        4: [(-2, -1, "L"), (1, 2, "L")],
+        3: [(-2.5, -1.5, "L"), (1.5, 2.5, "L")],
+        2: [(-2, -2, "L"), (2, 2, "L")],
+        1: [(-2.5, -1.5, "L"), (1.5, 2.5, "L")],
+        0: [(-1, 1, "L")],
     },
     "Y": {
-        5: [(-4.5, -3.5, "L"), (3.5, 4.5, "L")],
-        4: [(-3, -2, "L"), (2, 3, "L")],
+        5: [(-2.5, -1.5, "L"), (1.5, 2.5, "L")],
+        4: [(-2, -1, "L"), (1, 2, "L")],
         3: [(-1.5, 1.5, "L")],
         2: [(-1, 1, "L")],
         1: [(-0.5, 0.5, "L")],
@@ -279,11 +297,12 @@ def _dark_cells(hc, lit):
     return [c for c in hc.cells if c.i is not None and c.i in hc.allowed and c.i not in lit]
 
 
-def _sky(hc, lit, T, seed, colour, rate=0.04, peak=0.45):
-    """A few faint twinkles in the dark round the picture (never more than a handful)."""
+def _sky(hc, lit, T, seed, colour, rate=0.04, peak=0.45, clear=0.0):
+    """A few faint twinkles in the dark round the picture (never more than a handful),
+    none within `clear` columns of the centre line (dark space round the picture)."""
     out = {}
     for c in _dark_cells(hc, lit):
-        if c.r == 0:
+        if c.r == 0 or abs(c.x) <= clear:
             continue
         v = glint(_seed(c), T, rate, 0.25, 0.9, seed)[0]
         if v > 0.02:
@@ -304,7 +323,11 @@ def _star(hc, T, g):
             body = _mix(body, WHITE, 0.4 + 0.5 * beat)
         return _mix(body, WHITE, glint(_seed(c), T, 0.4, 0.05, 0.4, 13)[0] * 0.8)
     lit = _paint(hc, design, shade, T, g)
-    out = _sky(hc, lit, T, 9, (0.6, 0.75, 1.0), 0.02, 0.4)       # a few far-off stars
+
+    def far(ch, c, T, g):                                # little stars twinkling far off
+        return _sc((0.75, 0.85, 1.0), 0.22 + 0.2 * wobble(_seed(c), T, 0.9, 19))
+    out = _paint(hc, STAR_FAR, far, T, g)
+    out.update(_sky(hc, lit, T, 9, (0.6, 0.75, 1.0), 0.02, 0.4, clear=4))
     out.update(lit)
     return out
 
@@ -317,10 +340,10 @@ def _wreath(hc, T, g):
         if ch == "G":
             k = _seed(c)
             green = (0.0, 0.62, 0.08) if hash01(k, 7) < 0.6 else (0.08, 0.85, 0.14)
-            if hash01(k, 42) < 0.22:                     # little warm lights that twinkle
+            if hash01(k, 42) < 0.12:                     # little warm lights that twinkle
                 tw = glint(k, T, 0.35, 0.15, 0.6, 5)[0]
                 green = _mix((0.85, 0.6, 0.3), (1.0, 0.95, 0.8), tw)
-            ang = math.atan2(c.y - 2.6, c.x / 2.4) / TAU % 1.0  # a gold light running round
+            ang = math.atan2((c.y - 2.5) * hc.aspect, c.x) / TAU % 1.0  # a gold light running round
             d = (ang - run) % 1.0
             d = min(d, 1 - d)
             return _mix(green, GOLD, 0.95 * max(0.0, 1 - d / 0.06))
@@ -329,9 +352,11 @@ def _wreath(hc, T, g):
         if ch == "K":
             return (1.0, 0.15, 0.1)
         return _mix(GOLD, (1.0, 0.85, 0.4), 0.5 + 0.5 * sway)    # Y: the bow on the apex
-    out = _paint(hc, WREATH, shade, T, g)
+    lit = _paint(hc, WREATH, shade, T, g)
     if hc.has_tip:
-        _paint(hc, WREATH_TIP, shade, T, g, out)
+        _paint(hc, WREATH_TIP, shade, T, g, lit)
+    out = _sky(hc, lit, T, 5, WARM, 0.03, 0.4, clear=4)       # warm lights far round it
+    out.update(lit)
     return out
 
 
@@ -358,7 +383,7 @@ def _snowman(hc, T, g):
     out = {}
     # a few flakes drifting down past him, out to the sides
     for c in _dark_cells(hc, lit):
-        if c.i in face or abs(c.x) < 7:
+        if c.i in face or abs(c.x) < 4.5:
             continue
         col = c.d
         if hash01(col + 400, 3) > 0.45:
@@ -385,10 +410,8 @@ def _gingerbread(hc, T, g):
         if ch == "Y":                                   # windows glowing warm
             return _sc((1.0, 0.88, 0.5), 0.85 + 0.15 * wobble(k, T, 1.6, 11))
         return (1.0, 0.03, 0.08)                         # D: the red candy door
-    out = _paint(hc, GINGER, shade, T, g)
-    if hc.has_tip:
-        _paint(hc, GINGER_TIP, shade, T, g, out)
-    return out
+    design = {**GINGER, **GINGER_TIP} if hc.has_tip else GINGER
+    return _paint(hc, design, shade, T, g)
 
 
 def _present(hc, T, g):
@@ -406,27 +429,29 @@ def _present(hc, T, g):
         if ch == "K":
             return _mix((1.0, 0.85, 0.3), RED, untie) if untie < 0.98 else None
         # Y: the ribbon slides off from the middle out
-        gone = untie * 9.0 - abs(c.x) * 0.6 - abs(c.y - 1.5) * 0.4
+        gone = untie * 9.0 - abs(c.x) * 0.6 - abs(c.y - 2.0) * 0.4
         if ch == "Y" and gone > 0.5:
-            return RED if c.r <= 3 else None
+            return RED if c.r <= LID_ROW else None
         return gold
     out = _paint(hc, BOX, shade, T, g)
-    # the lid: row 3 when shut, lifts two rows and slides off to the side when open
-    dy = int(round(lift * 2))
-    dx = round(lift * 6)
-    lid = {3 + dy: [(a + dx, b + dx, ch) for a, b, ch in LID]}
+    # the lid: on the box when shut; lifts a row (two with the Tip) and slides off to the
+    # side when open (a row of the other parity sits half a column over)
+    dy = int(round(lift * (2 if hc.has_tip else 1)))
+    half = 0.5 * (dy % 2)
+    dx = round(lift * 4) + half
+    lid = {LID_ROW + dy: [(a + dx, b + dx, ch) for a, b, ch in LID]}
     lid_cells = {}
     _paint(hc, lid, shade, T, g, lid_cells)
     if untie < 0.98:
         bow = BOW_TIP if hc.has_tip else BOW
-        _paint(hc, bow, shade, T, g, out, dy=dy)
+        _paint(hc, bow, shade, T, g, out, dx=half, dy=dy)
     if glow > 0:
         # gold light pours up out of the open box, with sparkles
         for c in hc.cells:
-            if c.i is None or c.i not in hc.allowed or c.r < 3 or c.i in lid_cells:
+            if c.i is None or c.i not in hc.allowed or c.r < LID_ROW or c.i in lid_cells:
                 continue
-            ray = 0.55 + 0.45 * math.cos(math.atan2(c.y - 2.0, c.x) * 9 - T * 3.0)
-            spread = max(0.0, 1 - abs(c.x) / (6.0 + (c.y - 2) * 1.0))
+            ray = 0.55 + 0.45 * math.cos(math.atan2((c.y - 3.0) * hc.aspect, c.x) * 9 - T * 3.0)
+            spread = max(0.0, 1 - abs(c.x) / (2.5 + (c.y - 4) * 0.8))
             v = glow * spread * ray * 1.3
             sp = glint(_seed(c), T, 2.0, 0.03, 0.3, 17)[0] * glow
             if v + sp > 0.03:
@@ -439,13 +464,14 @@ def _ornament(hc, T, g):
     ang = g["swing"]
     top = hc.top
     py = top + 3.0                                       # the pivot, above the apex
-    cy = 1.9 if not hc.has_tip else 2.4
+    # a round ball in true proportions: R in bulb spacings, a row hc.aspect of one
+    cy = 2.0 if not hc.has_tip else 2.5
     L = py - cy
-    cx = L * math.sin(ang)
-    R = 2.6 if not hc.has_tip else 2.9
+    cx = L * hc.aspect * math.sin(ang)
+    R = 2.2 if not hc.has_tip else 2.45
     out = {}
     # the hook: a gold thread from the apex to the cap
-    capy = cy + R / hc.row_h
+    capy = cy + R / hc.aspect
     thread = hx.Line([(cx * (py - top) / L, top + 0.2), (cx * (py - capy - 0.6) / L, capy + 0.6)], 1.05)
     for i, w in hc.raster(thread).items():
         out[i] = _sc((1.0, 0.7, 0.25), 0.85)
@@ -453,22 +479,28 @@ def _ornament(hc, T, g):
         out[i] = GOLD                                    # the cap
     # two little gold baubles hanging from the roof either side
     for sx in (-1, 1):
-        bx = sx * 8.5 + 0.4 * math.sin(T * TAU / 2.9 + sx)
-        for i in hc.raster(hx.Line([(sx * 8.5, 2.6), (bx, 1.8)], 0.5)):
-            out[i] = _sc((1.0, 0.7, 0.25), 0.7)
-        for i in hc.raster(hx.Circle(bx, 0.6, 1.2)):
+        bx = sx * 6.0 + 0.3 * math.sin(T * TAU / 2.9 + sx)       # a little ball of three
+        hook = hc.cell(2, round(bx))                                # bulbs on a one-bulb hook
+        if hook is not None and hook.i is not None and hook.i in hc.allowed:
+            out[hook.i] = _sc((1.0, 0.7, 0.25), 0.7)
+        for i in hc.raster(lambda x, y, bx=bx: math.hypot(x - bx, (y - 0.6) * hc.aspect) - 0.75):
             out[i] = GOLD
     # the bauble: deep red, brighter up-left, a glint on its shine
-    ball = hc.raster(hx.Circle(cx, cy, R), 0.2)
+    ball = hc.raster(lambda x, y: math.hypot(x - cx, (y - cy) * hc.aspect) - R, 0.2)
     for i, w in ball.items():
         c = hc.of(i)
-        rx, ry = (c.x - cx) / R, (c.y - cy) * hc.row_h / R
+        rx, ry = (c.x - cx) / R, (c.y - cy) * hc.aspect / R
         shade = 0.7 + 0.3 * max(0.0, 1 - math.hypot(rx + 0.35, ry - 0.35))
         col = _sc(RED, shade)
         hl = max(0.0, 1 - math.hypot(rx + 0.45, ry - 0.45) / 0.3)
         col = _mix(col, (1.0, 0.85, 0.8), hl * (0.5 + 0.5 * g["shine"]))
         out[i] = _mix(out.get(i, BLACK), col, w)
     return out
+
+
+# his head: a bright caramel (on the house, round 15, the browns before it barely showed at
+# night: only the antlers, eyes and nose read, with a dark gap where his face should be)
+FUR = (0.95, 0.42, 0.08)
 
 
 def _rudolph(hc, T, g):
@@ -481,15 +513,15 @@ def _rudolph(hc, T, g):
         if ch == "F":
             if c.r <= 1 and abs(c.x) < 2.6:             # his nose's glow on his muzzle
                 # (only while it blinks: at rest plain brown frames the red nose)
-                return _mix((0.55, 0.16, 0.0), (1.0, 0.1, 0.02), 0.5 * (nb - 0.6) / 0.4)
-            return (0.55, 0.16, 0.0)
+                return _mix(FUR, (1.0, 0.1, 0.02), 0.5 * (nb - 0.6) / 0.4)
+            return FUR
         if ch == "E":
-            return _sc(WHITE, 1 - blink) if blink < 0.95 else (0.55, 0.16, 0.0)
+            return _sc(WHITE, 1 - blink) if blink < 0.95 else FUR
         return _sc(RED, 0.4 + 0.6 * nb)                  # N: the nose, never below 3/4
     lit = _paint(hc, RUDOLPH, shade, T, g)
     if hc.has_tip:
         _paint(hc, RUDOLPH_TIP, shade, T, g, lit)
-    out = _sky(hc, lit, T, 31, (0.8, 0.85, 1.0), 0.03, 0.45)
+    out = _sky(hc, lit, T, 31, (0.8, 0.85, 1.0), 0.03, 0.45, clear=5)
     out.update(lit)
     return out
 
@@ -515,13 +547,16 @@ def _joy(hc, T, g):
         fade = 1 - _sm((u - 0.86) / 0.14)
 
         def letter(ch, c, T, g):
-            wipe = 1.0 if (c.x + 7.0) / 14.0 < u * 5.0 else 0.0
-            s = (c.x + 8.0 - u * 30.0) % 24.0
-            shimmer = max(0.0, 1 - abs(s - 12) / 2.0)
+            wipe = 1.0 if (c.x + 3.0) / 6.0 < u * 5.0 else 0.0
+            s = (c.x + 4.0 - u * 20.0) % 16.0
+            shimmer = max(0.0, 1 - abs(s - 8) / 1.5)
             v = wipe * fade
             return _sc(_mix(gold, (1.0, 0.95, 0.75), shimmer), v) if v > 0.01 else None
         _paint(hc, LETTERS["JOY"[k]], letter, T, g, out)
-        return out
+        # a little gold glitter out to the sides, well clear of the letter
+        side = _sky(hc, out, T, 29, (1.0, 0.8, 0.35), 0.04, 0.4, clear=4.5)
+        side.update(out)
+        return side
     # the burst: a sprinkle of gold glitter over the gable, a star on the top rows at
     # full level in a dark ring of its own (dense glitter swallowed it)
     fade = (1 - _sm((u - 0.7) / 0.3)) * _sm(u / 0.1)

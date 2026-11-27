@@ -58,7 +58,7 @@ def frames(style, L, times, **params):
 TIMES = [0.5, 2.0, 3.4, 5.6, 7.2, 9.95, 11.5]
 DESIGNS = [pp.STAR, pp.STAR_TIP, pp.WREATH, pp.WREATH_TIP, pp.SNOWMAN, pp.SNOWMAN_TIP, pp.GINGER,
            pp.GINGER_TIP, pp.BOX, pp.BOW, pp.BOW_TIP, pp.RUDOLPH, pp.RUDOLPH_TIP, pp.JOY_STAR,
-           pp.JOY_STAR_TIP, {3: pp.LID}] + list(pp.LETTERS.values())
+           pp.JOY_STAR_TIP, pp.STAR_FAR, {pp.LID_ROW: pp.LID}] + list(pp.LETTERS.values())
 
 
 @unittest.skipUnless(OWNER.exists(), "the owner's layout is not in this copy")
@@ -97,20 +97,83 @@ class HoneycombPictures(unittest.TestCase):
                         dark = sum(1 for i in screen if max(cols[i]) < 0.05)
                         self.assertGreater(dark, len(screen) * 0.2, "dark space round the picture")
 
-    def test_pictures_are_bold_and_use_the_width(self):
-        # most of a picture's bulbs are fully lit (no dim half-lit edges), and the picture
-        # spans a good part of the gable's wide rows
-        L = house()
-        hc = hx.get(L)
-        for style in pp.STYLES:
-            cols = frames(style, L, [1.2])[0]
-            lit = [c for c in hc.cells if c.i is not None and max(cols[c.i]) > 0.05]
-            with self.subTest(style=style):
-                strong = [c for c in lit if max(cols[c.i]) >= 0.45]
-                self.assertGreater(len(strong), 0.8 * len(lit))
-                span = max(c.x for c in strong) - min(c.x for c in strong)
-                self.assertGreaterEqual(span, 8)
-                self.assertGreaterEqual(len({c.r for c in strong}), 5)
+    def test_pictures_are_bold_and_in_true_proportion(self):
+        # Round 15: on the house the rows hang hc.aspect (about 0.66, hexcanvas's one source
+        # of truth) of a bulb spacing apart, so a picture's width in bulbs over its height
+        # in rows * aspect is its real shape from the street. The first pictures ran 3 to
+        # 3.6 times as wide as tall (the owner's wreath read as a flat oval); now each is
+        # between upright and twice as wide (a gingerbread house, antlers), and the round
+        # ones are near round. The picture's own bulbs are fully lit (no dim half-lit
+        # edges); context round it (far-off stars, flakes, glitter) stays faint or small.
+        for tip in (False, True):
+            L = house(tip=tip)
+            hc = hx.get(L)
+            self.assertAlmostEqual(hc.aspect, hx.PEAK_ASPECT, places=2)
+            for style in pp.STYLES:
+                cols = frames(style, L, [1.2])[0]
+                lit = [c for c in hc.cells if c.i is not None and max(cols[c.i]) > 0.05]
+                fig = [c for c in lit if abs(c.x) <= 5]
+                with self.subTest(tip=tip, style=style):
+                    strong = [c for c in fig if max(cols[c.i]) >= 0.45]
+                    self.assertGreater(len(strong), 0.8 * len(fig))
+                    self.assertGreaterEqual(len({c.r for c in strong}), 5)
+                    # nothing bright far out on the wide rows but the ornament's little baubles
+                    far = [c for c in lit if abs(c.x) > 5 and max(cols[c.i]) >= 0.45]
+                    self.assertLessEqual(len(far), 8 if style == "ornament" else 0)
+
+    def test_designs_in_true_proportion(self):
+        # the designs' full spans (not clipped to the middle of the gable, so a design that
+        # grew wider is caught), with and without their Tip parts, at the layout's aspect
+        a = hx.get(house()).aspect
+        rud = {**pp.RUDOLPH, **pp.RUDOLPH_TIP}
+        cases = {
+            "wreath": (pp.WREATH, 1.5), "wreath tip": ({**pp.WREATH, **pp.WREATH_TIP}, 1.5),
+            "star": (pp.STAR, 1.5), "star tip": (pp.STAR_TIP, 1.5),
+            "J": (pp.LETTERS["J"], 1.5), "O": (pp.LETTERS["O"], 1.5), "Y": (pp.LETTERS["Y"], 1.5),
+            "snowman": (pp.SNOWMAN, 2.0), "snowman tip": ({**pp.SNOWMAN, **pp.SNOWMAN_TIP}, 2.0),
+            "gingerbread": (pp.GINGER, 2.0), "gingerbread tip": ({**pp.GINGER, **pp.GINGER_TIP}, 2.0),
+            "present": ({**pp.BOX, pp.LID_ROW: pp.LID, **pp.BOW}, 2.0),
+            "rudolph": (pp.RUDOLPH, 2.0), "rudolph tip": (rud, 2.0),
+        }
+        for name, (d, most) in cases.items():
+            xs = [a0 + j for sp in d.values() for a0, b, _ in sp for j in range(int(round(b - a0)) + 1)]
+            w = max(xs) - min(xs) + 1
+            h = (max(d) - min(d)) * a + 1
+            with self.subTest(design=name):
+                self.assertGreaterEqual(w / h, 0.75)
+                self.assertLessEqual(w / h, most)
+
+    def test_round_designs_measure_round(self):
+        # the designs themselves (no animation): the wreath's ring and the O
+        a = hx.get(house()).aspect
+        for d in (pp.WREATH, pp.LETTERS["O"]):
+            xs = [a0 + j for sp in d.values() for a0, b, _ in sp for j in range(int(round(b - a0)) + 1)]
+            w = max(xs) - min(xs) + 1
+            h = (max(d) - min(d)) * a + 1               # rows apart, plus a bulb's own size
+            self.assertLessEqual(abs(w / h - 1), 0.5)
+
+    def test_pictures_use_the_canvas_aspect(self):
+        # no private copy of the row gap: hexcanvas's aspect is the one source of truth
+        self.assertFalse(hasattr(pp, "STREET_ROW"))
+
+    def test_rudolphs_face_is_one_bright_fur_at_rest(self):
+        # his face must read between the antlers and the nose at night: every face bulb
+        # (the cheeks framing the nose too) is the bright fur while the nose rests, never
+        # the old dark brown that barely showed on the house
+        for tip in (False, True):
+            L = house(tip=tip)
+            hc = hx.get(L)
+            face = [c for c, ch in pp._cells(hc, pp.RUDOLPH) if ch == "F" and c.i is not None]
+            g = {"nose": 0.6, "blink": 0.0}
+            out = pp._rudolph(hc, 2.0, g)
+            with self.subTest(tip=tip):
+                self.assertEqual(len(face), 11)
+                for c in face:
+                    col = out[c.i]
+                    for v, f in zip(col, pp.FUR):
+                        self.assertAlmostEqual(v, f, places=3)
+                self.assertGreaterEqual(pp.FUR[0], 0.9)
+                self.assertGreaterEqual(pp.FUR[1], 0.38)
 
     def test_the_tip_adds_to_the_picture(self):
         L = house(tip=True)
@@ -187,7 +250,13 @@ class ReviewFixes(unittest.TestCase):
                 with self.subTest(tip=tip, t=t):
                     n = min(cols[i][0] for i in nose)
                     self.assertGreaterEqual(n, 0.75 * peak)
-                    self.assertGreaterEqual(n - max(cols[i][0] for i in muzzle), 0.15 * peak)
+                    # Round 15: the nose stands out by its HUE, not by a dark muzzle (on the
+                    # house a dark brown face was invisible): the nose is pure red, the
+                    # cheeks framing it stay caramel fur, never a second red nose
+                    for i in nose:
+                        self.assertLessEqual(cols[i][1], 0.1 * cols[i][0])
+                    for i in muzzle:
+                        self.assertGreaterEqual(cols[i][1], 0.2 * cols[i][0])
 
     def test_wreath_hole_is_dark_and_the_bow_sits_on_the_ring(self):
         for r, spans in pp.WREATH.items():
@@ -197,8 +266,9 @@ class ReviewFixes(unittest.TestCase):
         for tip in (False, True):
             L = house(tip=tip)
             hc = hx.get(L)
-            hole = [c.i for c in hc.cells if c.i is not None and 1 <= c.r <= 3 and abs(c.x) <= 2.5]
-            self.assertGreaterEqual(len(hole), 8)
+            # (round 15: the ring is true-size, six rows by six bulbs round a hole of 7)
+            hole = [c.i for c in hc.cells if c.i is not None and 1 <= c.r <= 3 and abs(c.x) <= 1]
+            self.assertGreaterEqual(len(hole), 7)
             for cols in frames("wreath", L, TIMES):
                 self.assertTrue(all(max(cols[i]) < 0.02 for i in hole))
 
