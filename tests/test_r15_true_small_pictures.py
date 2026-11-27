@@ -264,3 +264,66 @@ class DeadBulbs(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RisingSpritesStayApart(unittest.TestCase):
+    """Review of round 15: with the Tip hung the upper heart slows near the apex while the
+    next one rises at full speed, and the pair met point-to-lobes (an hourglass). Through
+    the whole climb there is at least one dark row between two rising sprites."""
+
+    def check(self, pid, L, seconds=60.0, dt=0.05):
+        layer = next(ly for ly in preset(pid)["layers"] if ly["effect"] == "floaters")
+        idx = L.indices("Peak") + [i for i in L.indices("Whole front gable") if i not in L.indices("Peak")]
+        hc = hx.get(L, L.indices("Peak"))
+        fx = EFFECTS["floaters"]
+        P = fx.resolve(layer["params"])
+        hsp = O._hex_sprite(P["shape"])
+        st: dict = {}
+        worst = None
+        for k in range(int(seconds / dt)):
+            clock = 1.0 + k * dt
+            fx.fn(clock, Ctx(L, idx, clock, dt), P, st)
+            rows = []
+            for s in st["sprites"]:
+                if s["pop"] is not None:
+                    continue
+                acc: dict = {}
+                x, _ = O._sprite_xy(O.field(L, idx), s, 1, 1, clock, P)
+                O._hex_stamp(hc, hsp, s["top"] - (hsp.height - 1), 0.0, acc)
+                lit = [hc.of(i).r for i, (a1, a2) in acc.items() if a1 + a2 > 0.05]
+                if lit:
+                    rows.append((min(lit), max(lit)))
+            rows.sort()
+            for (lo_a, hi_a), (lo_b, hi_b) in zip(rows, rows[1:]):
+                gap = lo_b - hi_a - 1                       # dark rows between them
+                worst = gap if worst is None else min(worst, gap)
+                self.assertGreaterEqual(gap, 1, (pid, round(clock, 2), rows))
+        return worst
+
+    def test_valentines_hearts_peak_and_tip(self):
+        for tag, L in layouts():
+            with self.subTest(tag):
+                self.check("valentines-hearts", L)
+
+    def test_easter_eggs_peak_and_tip(self):
+        for tag, L in layouts():
+            with self.subTest(tag):
+                self.check("easter-pastels", L)
+
+
+class TestLayoutKeepsAspect(unittest.TestCase):
+    """Review of round 15: tests.test_r12_bulb_check.layout_with dropped the layout file's
+    "aspect", so every test ran on PEAK_ASPECT and a change to house.json alone was hidden."""
+
+    def test_layout_with_passes_the_file_aspect_through(self):
+        import tempfile
+        data = json.loads((ROOT / LAYOUT_FILE).read_text(encoding="utf-8"))
+        peak = next(d for d in data["devices"].values() if d["name"] == "Peak")
+        peak["aspect"] = 0.8
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "house.json"
+            p.write_text(json.dumps(data), encoding="utf-8")
+            L = layout_with({}, p)
+        run = next(r for r in L.runs if r.name == "Peak")
+        self.assertAlmostEqual(run.aspect, 0.8)
+        self.assertAlmostEqual(hx.get(L, L.indices("Peak")).aspect, 0.8)

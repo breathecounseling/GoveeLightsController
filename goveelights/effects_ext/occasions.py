@@ -283,6 +283,24 @@ def sample(bitmap: list[str], u: float, v: float) -> tuple[float, float]:
     return a1, a2
 
 
+RISE_GAP = 2.0         # rows from a rising sprite's top to the bottom of the one above it
+
+
+def _rise_cap(sprites: list, s: dict, h: int) -> float:
+    """The highest a rising sprite may be: its top at least RISE_GAP rows (rounded down to
+    whole rows) below the bottom of the nearest sprite above it, popping ones included.
+    The upper one slows near the apex while the next rises at full speed, and without
+    this the pair met point-to-lobes (an hourglass, round 15 review). Sprites glide
+    between whole rows, so a sprite with its top at t lights up to row floor(t) + 1 and
+    one with its bottom at b down to row floor(b): floor(b) - RISE_GAP keeps a dark row."""
+    cap = math.inf
+    for o in sprites:
+        if o is s or o["top"] <= s["top"]:
+            continue
+        cap = min(cap, math.floor(o["top"] - (h - 1)) - RISE_GAP - 1e-3)
+    return cap
+
+
 # ------------------------------------------------------------------ floaters
 FLOATER_PARAMS = [
     Param("shape", "choice", "heart", "Shape", options=SHAPES,
@@ -327,8 +345,9 @@ def _spawn(F: dict, P: dict, st: dict, rng: random.Random, clock: float):
     st["ci"] = (k + 1 + (rng.randrange(ncol - 1) if ncol > 2 and rng.random() < 0.3 else 0)) % ncol
     s = {"col": k, "born": clock, "ph": rng.random() * 6.283, "pop": None, "seed": rng.randrange(1 << 16)}
     if P["motion"] == "rise":
-        if any(o["pop"] is None and o["top"] < h + 0.4 for o in sprites):
-            return False                             # the last one has not cleared the bottom yet
+        # the last one must have cleared the bottom with a dark row to spare (see _rise_gap)
+        if any(o["top"] - (h - 1) < RISE_GAP + 0.4 for o in sprites):
+            return False
         s.update(top=-0.6, off=rng.uniform(-1.0, 1.0))
     else:
         if n < h:
@@ -395,6 +414,7 @@ def floaters(t, ctx, P, st):
 
     # ---- move
     top_row = nrows - 1
+    hh = max(h, _hex_sprite(P["shape"]).height)
     keep = []
     for s in sprites:
         if s["pop"] is not None:
@@ -405,6 +425,7 @@ def floaters(t, ctx, P, st):
             # slow a little near the top, so each one is seen whole before it pops
             prog = max(0.0, min(1.0, (s["top"] + 0.6) / (top_row + 0.6)))
             s["top"] += speed * dt * (1 - 0.45 * _smooth(prog))
+            s["top"] = min(s["top"], _rise_cap(sprites, s, hh))
             if s["top"] >= top_row + 0.12:
                 s["top"] = top_row + 0.12
                 s["pop"] = clock
