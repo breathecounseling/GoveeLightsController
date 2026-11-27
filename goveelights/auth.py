@@ -300,10 +300,43 @@ class Auth:
             if len(self.fails) > 2000:
                 self._prune(now)
 
+    TAILNET = [ipaddress.ip_network(n) for n in ("100.64.0.0/10", "fd7a:115c:a1e0::/48")]
+
+    @classmethod
+    def access_mode(cls, handler) -> str:
+        """How this request reached the app, in one word, for More -> Security. Only a label:
+        it never grants anything (the login rules above decide that).
+          this_pc    the PC itself (localhost)
+          home       straight from the home network
+          tunnel     through the Cloudflare Tunnel
+          tailscale  through Tailscale (a 100.x address, or `tailscale serve` on *.ts.net)
+          proxy      through some other proxy
+          internet   straight from the internet (a forwarded router port)"""
+        h = handler.headers
+        host = (h.get("Host") or "").strip().lower().rsplit(":", 1)[0].rstrip(".")
+        if h.get("Cf-Ray") or h.get("Cf-Connecting-IP"):
+            return "tunnel"
+        if host.endswith(".ts.net") or h.get("Tailscale-User-Login"):
+            return "tailscale"
+        try:
+            ip = ipaddress.ip_address(handler.client_address[0])
+        except ValueError:
+            return "proxy" if cls.proxied(handler) else "internet"
+        if ip.version == 6 and ip.ipv4_mapped:
+            ip = ip.ipv4_mapped
+        if any(ip in n for n in cls.TAILNET):
+            return "tailscale"
+        if cls.proxied(handler):
+            return "proxy"
+        if ip.is_loopback:
+            return "this_pc"
+        return "home" if any(ip in n for n in PRIVATE) else "internet"
+
     def status(self, handler) -> dict:
         if not self.authorized(handler):          # strangers learn only what the login page needs
             return {"password_set": self.password_set, "trusted": False, "logged_in": False}
         return {"password_set": self.password_set, "trusted": self.trusted(handler),
                 "logged_in": self.session_ok(self.cookie(handler)), "proxied": self.proxied(handler),
                 "lan_without_login": bool(self.data.get("lan_without_login", True)),
+                "access": self.access_mode(handler),
                 "sessions": len([v for v in self.data.get("sessions", {}).values() if v > time.time()])}

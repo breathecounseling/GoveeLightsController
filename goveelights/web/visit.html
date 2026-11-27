@@ -63,6 +63,11 @@ footer{color:var(--dim);font-size:12px;text-align:center;margin-top:22px}
 </main>
 <script>
 const tok = location.pathname.split('/').filter(Boolean)[1], API = `/api/visit/${encodeURIComponent(tok || '')}/`;
+// a home-screen picture (a bookmark, not an installed app: this link changes when the owner
+// makes a new one, and the house app's manifest is for the owner). It comes from /api/visit/,
+// the one path neighbours can reach without the Cloudflare login.
+for (const rel of ['icon', 'apple-touch-icon']) {
+  const l = document.createElement('link'); l.rel = rel; l.href = API + 'icon'; document.head.appendChild(l) }
 const $ = id => document.getElementById(id), esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let L = null, S = null; const thumbs = {}, cards = new Map(); let frame = 0;
 // Every request gives up after a few seconds, and a bad answer never throws: phones on the street have bad signal.

@@ -40,6 +40,22 @@ CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 
        "img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 PUBLIC = {"/login", "/api/login", "/api/auth"}
 
+# The installable-app files (manifest + icons): served to anyone, with no login, because they
+# hold nothing private (a name, two colours and a picture of a house) and the phone fetches
+# them on its own, sometimes without the session cookie. They are cached for a while; the
+# pages and every /api reply stay no-store, so an installed app never shows a stale screen.
+STATIC = {
+    "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json", 3600),
+    "/icons/icon.svg": ("icons/icon.svg", "image/svg+xml", 604800),
+    "/icons/icon-192.png": ("icons/icon-192.png", "image/png", 604800),
+    "/icons/icon-512.png": ("icons/icon-512.png", "image/png", 604800),
+    "/icons/apple-touch-icon.png": ("icons/apple-touch-icon.png", "image/png", 604800),
+    "/apple-touch-icon.png": ("icons/apple-touch-icon.png", "image/png", 604800),   # iOS asks here too
+    "/apple-touch-icon-precomposed.png": ("icons/apple-touch-icon.png", "image/png", 604800),
+    "/favicon.ico": ("icons/icon-192.png", "image/png", 604800),        # browsers ask without a link
+}
+REMOTE_GUIDE = Path(__file__).resolve().parent.parent / "REMOTE.md"
+
 
 def _check_hm(v, what: str):
     if not isinstance(v, str):
@@ -170,10 +186,10 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
             self.send_header("Referrer-Policy", "no-referrer")
             self.send_header("Content-Security-Policy", CSP)
 
-        def _send(self, code, body: bytes, ctype="application/json", headers=None):
+        def _send(self, code, body: bytes, ctype="application/json", headers=None, cache="no-store"):
             self.send_response(code)
             self.send_header("Content-Type", ctype)
-            self.send_header("Cache-Control", "no-store")
+            self.send_header("Cache-Control", cache)
             self.send_header("Content-Length", str(len(body)))
             self._sec_headers()
             for k, v in (headers or {}).items():
@@ -204,6 +220,9 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                 return self._send(200, (WEB / "visit.html").read_bytes(), "text/html; charset=utf-8")
             if action == "state":
                 return self._json(ctl.visitor_state(auth.rate_key(auth.client_ip(self))))
+            if action == "icon":                      # home-screen picture for the visitor page
+                return self._send(200, (WEB / "icons" / "apple-touch-icon.png").read_bytes(), "image/png",
+                                  cache="public, max-age=604800")
             if action == "frame":                     # the little live view of the house
                 return self._json({"hex": ctl.visitor_frame()})
             if action == "layout":
@@ -265,8 +284,13 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                 except Exception:                                      # noqa: BLE001
                     log.exception("visitor page request failed")      # details stay in the log
                     return self._json({"ok": False, "error": "unavailable"}, 400)
+            if path in STATIC:                        # the app's manifest and icons (no login, see STATIC)
+                name, ctype, age = STATIC[path]
+                return self._send(200, (WEB / name).read_bytes(), ctype, cache=f"public, max-age={age}")
             if not self._guard(path):
                 return
+            if path == "/guide/remote":               # REMOTE.md, readable on the phone (More -> Security)
+                return self._send(200, self._guide_page(), "text/html; charset=utf-8")
             if path == "/static/qrcode.js":
                 return self._send(200, (WEB / "vendor" / "qrcode.js").read_bytes(), "text/javascript")
             if path == "/login":
@@ -360,6 +384,21 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                 log.exception("GET %s failed", path)
                 return self._json({"ok": False, "error": "internal error (see the log)"}, 500)
             self._json({"error": "not found"}, 404)
+
+        @staticmethod
+        def _guide_page() -> bytes:
+            """The remote-access guide as a plain, escaped page (no markdown renderer needed)."""
+            import html
+            try:
+                text = REMOTE_GUIDE.read_text(encoding="utf-8")
+            except OSError:
+                text = "The guide is the file REMOTE.md in the project folder."
+            return ("<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
+                    "<meta name=theme-color content='#0b0e13'><title>Use it away from home</title>"
+                    "<body style='margin:0;background:#0b0e13;color:#e8edf3;font:15px/1.5 system-ui,sans-serif;padding:16px'>"
+                    "<p><a href='/' style='color:#60a5fa'>&larr; Back to the app</a></p>"
+                    "<pre style='white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.5 ui-monospace,Menlo,Consolas,monospace'>"
+                    + html.escape(text) + "</pre></body></html>").encode()
 
         def _send_file(self, p: Path):
             """A finished clip, as a download (streamed: a PNG zip can be tens of MB)."""
