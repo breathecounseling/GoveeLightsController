@@ -68,36 +68,46 @@ SHAPES = list(SPRITES)
 
 # The same sprites drawn for the Peak as it hangs: a honeycomb, each row offset by half a
 # bulb (hexcanvas.Sprite format: one line per row, one character per HALF bulb). Bold and
-# solid so they read from the street: hearts with two round lobes and a clear notch and a
-# proper point, solid ghosts with two dark eye holes and a ragged hem, striped eggs.
+# solid so they read from the street: hearts with two lobes, a notch and a one-bulb point,
+# solid ghosts with two dark eye holes and a flared, ragged hem, striped eggs.
+# Drawn in TRUE proportions: on the house a row is only hexcanvas.aspect (about 0.66) of a
+# bulb spacing tall, so a shape n rows tall is n * 0.66 spacings tall and its width in
+# bulbs must match that (the earlier sprites, 6-7 bulbs wide and 4-5 rows tall, came out
+# about twice as wide as tall: flat hearts, squat ghosts, eggs lying on their side).
+#   heart  4 bulbs x 5 rows (3.3 spacings): a little wider than tall, as a heart is
+#   ghost  5 bulbs x 6 rows (4.0): a domed head, the hem flaring to points
+#   egg    3 bulbs x 5 rows (3.3), big egg 3 bulbs x 6 rows (4.0): taller than wide, upright
 # The bitmaps above stay for targets without a zigzag.
 HEX_SPRITES: dict[str, str] = {
     "heart": """
- 1 1 . 1 1
-1 1 1 1 1 1
- 1 1 1 1 1
-  1 1 1 1
-     1
+ 1 . 1
+1 1 1 1
+ 1 1 1
+  1 1
+   1
 """,
     "ghost": """
-    1 1 1
-   1 2 1 2 1
-  1 1 1 1 1 1
- 1 1 1 1 1 1 1
-1 . 1 . 1 . 1
+   1 1
+  1 1 1
+ 1 1 1 1
+1 2 1 2 1
+ 1 1 1 1
+1 . 1 . 1
 """,
     "egg": """
  1 1
 2 2 2
  1 1
-  1
+1 1 1
+ 1 1
 """,
     "big egg": """
-  1 1
- 2 2 2
-1 1 1 1
- 2 2 2
-  1 1
+  1
+ 1 1
+2 2 2
+ 1 1
+2 2 2
+ 1 1
 """,
 }
 _HEX_CACHE: dict = {}
@@ -555,7 +565,8 @@ FLAG_PARAMS = [
     Param("stars", "color", "#ffffff", "Stars"),
     Param("canton_rows", "int", 3, "Star field rows", 0, 6, 1, help="how many top rows the star field covers"),
     Param("canton_edge", "number", 0.5, "Star field width", 0.1, 1, 0.01,
-          help="how far across the gable (from the left) the star field reaches"),
+          help="how far across the gable (from the left) the star field may reach; on the Peak it "
+               "keeps a flag's proportions, so it is usually narrower"),
     Param("twinkle", "number", 0.5, "Star twinkle", 0, 3, 0.05, help="glints per star per second"),
     Param("wave", "number", 0.32, "Wave depth", 0, 0.9, 0.01, help="how much the ripples shade the flag"),
     Param("wavelength", "number", 9, "Ripple length (bulbs)", 2, 40, 0.5),
@@ -565,6 +576,44 @@ FLAG_PARAMS = [
           help="when the scene starts the flag unfurls from the left; 0 = no intro"),
     Param("seed", "int", 4, "Seed", 0, 9999, 1),
 ]
+
+
+CANTON_RATIO = 1.9      # the star field's width / height as seen on the house (a flag's own shape)
+
+
+def canton_cells(hc, canton_rows: int, canton_edge: float) -> dict:
+    """The flag's star field on the Peak's honeycomb: {bulb: is a star}.
+
+    The top `canton_rows` rows of the Peak (and the Tip above them when it is hung), each
+    from its left end (against the roof's slope) for as many bulbs as make the block
+    CANTON_RATIO times as wide as it is tall in TRUE proportions: a row is only
+    hc.aspect (about 0.66) of a bulb spacing tall, so 3 rows (2 spacings) take 4 bulbs, not
+    the 10-11 that stretched it into a long blue band. It never reaches past `canton_edge`
+    (the fraction of the bottom row from its left end). Stars sit on bulbs ringed by blue on
+    every side (a star touching a stripe reads as a white bar), inside the field before its
+    edge, never two side by side, so they read as separate points. Chosen by lattice place,
+    so a dead bulb shifts nothing."""
+    if canton_rows <= 0:
+        return {}
+    crow = hc.peak_rows - canton_rows
+    ex = hc.rows[0].x0 + canton_edge * (hc.rows[0].x1 - hc.rows[0].x0)
+    n = sum(1 for rw in hc.rows if rw.r >= crow)
+    per_row = max(3, int(round(CANTON_RATIO * n * hc.aspect)))
+    blue = set()
+    for rw in hc.rows:
+        if rw.r < crow:
+            continue
+        for c in rw.cells:
+            if c.x <= min(ex, rw.x0 + per_row - 1) + 1e-6:
+                blue.add(c.key)
+    stars: set = set()
+    # inside the field first (most neighbours), then bottom-left first
+    for key in sorted(blue, key=lambda k: (-len(hc.neighbours(hc._by_key[k])), k[0], k[1])):
+        c = hc._by_key[key]
+        ring = hc.neighbours(c)
+        if all(n.key in blue for n in ring) and not any(n.key in stars for n in ring):
+            stars.add(key)
+    return {hc._by_key[k].i: k in stars for k in blue if hc._by_key[k].i is not None}
 
 
 @frame_effect("flag", "Waving flag", FLAG_PARAMS,
@@ -601,22 +650,13 @@ def flag(t, ctx, P, st):
     D = P["intro"]
     front = (age / D) * (width + 4.0) - 2.0 if D > 0 and age < D else 1e9
     rate, seed = P["twinkle"], P["seed"]
-    # on the Peak's honeycomb (and up the Tip when it is hung): the star field is every
-    # bulb left of a straight cut on the top rows, and the stars sit on a third of the
-    # lattice spread evenly, each ringed by six blue bulbs (offset rows of stars, like the
-    # real flag) instead of every third bulb along each row
+    # on the Peak's honeycomb (and up the Tip when it is hung): the star field is a block in
+    # the top-left corner, against the roof's slope, in TRUE proportions (canton_cells)
     hc = hx.get(layout, idx)
     is_star = {}
     if hc is not None:
-        ex = hc.rows[0].x0 + P["canton_edge"] * (hc.rows[0].x1 - hc.rows[0].x0)
-        crow = hc.peak_rows - P["canton_rows"]
         rows = [[c.i for c in rw.cells if c.i is not None and c.i in hc.allowed] for rw in hc.rows]
-        for rw in hc.rows:
-            for c in rw.cells:
-                if c.i is not None and rw.r >= crow and c.x <= ex + 1e-6:
-                    # a star needs canton blue on every side: one on the canton's right edge
-                    # would touch the white stripe beside it and read as a white bar
-                    is_star[c.i] = (c.q - c.r) % 3 == 1 and c.x + 1 <= ex + 1e-6
+        is_star = canton_cells(hc, P["canton_rows"], P["canton_edge"])
     for r, row in enumerate(rows):
         base = cols[r % len(cols)]
         for k, i in enumerate(row):

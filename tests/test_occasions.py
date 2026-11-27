@@ -279,7 +279,8 @@ class PictureTests(unittest.TestCase):
         L = house()
         cols = run(Scene.from_dict(load("halloween-pumpkin")), L, 3)
         F = O.field(L, L.indices("Peak"))
-        eyes = F["rows"][4]                                  # second row from the top: the eyes
+        eyes = F["rows"][3]                                  # third row from the top: the eyes
+        # (round 15: the pumpkin is drawn round, in true proportions, below a stem row)
         v = [cols[i] for i in eyes]
         # Round 13: the face is carved, dark eye holes (an ember glow) in a bright orange
         # pumpkin, which reads from the street where yellow-on-orange smudged

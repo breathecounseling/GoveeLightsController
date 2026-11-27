@@ -59,7 +59,7 @@ class PictureSprites(unittest.TestCase):
                 cells = hc.sprite_cells(sp, 0, 0.0)
                 self.assertEqual(len(cells), len(sp.cells), name)          # every cell on the screen
                 lit = [c for c, ch in cells if ch != "."]
-                self.assertGreater(len(lit), 15, name)
+                self.assertGreaterEqual(len(lit), 10, name)       # true proportions: small, bold
                 # dark space round it: the bottom row's ends and the rows' outer bulbs stay dark
                 row0 = hc.rows[0].cells
                 self.assertFalse({row0[0].key, row0[-1].key} & {c.key for c in lit}, name)
@@ -69,10 +69,11 @@ class PictureSprites(unittest.TestCase):
         hc = hx.get(L, L.indices("Peak"))
         cols = call("picture", L, L.indices("Peak"), {"image": "heart", "colors": ["#ff0000"]})
         on = lambda r, x: max(cols[hc.at(r, x)]) > 0.5           # noqa: E731
-        self.assertFalse(on(5, -0.5) or on(5, 0.5) or on(4, 0))  # the notch, 2 bulbs then 1
-        self.assertTrue(all(on(5, x) for x in (-3.5, -2.5, -1.5, 1.5, 2.5, 3.5)))
+        self.assertFalse(on(5, -0.5) or on(5, 0.5))              # the notch between...
+        self.assertTrue(on(5, -1.5) and on(5, 1.5))              # ...two lobes (round 15: true size)
         self.assertEqual([x for x in range(-13, 14) if on(0, x)], [0])      # one-bulb point...
-        self.assertTrue(all(on(1, x) for x in (-1.5, -0.5, 0.5, 1.5)))      # ...under a 4-bulb row
+        self.assertTrue(all(on(1, x) for x in (-0.5, 0.5)))                 # ...under a 2-bulb row
+        self.assertEqual(sum(on(4, x) for x in range(-6, 6)), 5)            # 5 bulbs at the widest
 
     def test_beat_swells_a_glow_round_the_heart(self):
         L = layout_with({}, PATH)
@@ -99,11 +100,11 @@ class Floaters(unittest.TestCase):
         hc = hx.get(L, L.indices("Peak"))
         acc = {}
         O._hex_stamp(hc, O._hex_sprite("heart"), 1.0, 0.0, acc)            # resting on a place
-        self.assertEqual(sum(1 for a in acc.values() if a[0] >= 0.99), 20)
+        self.assertEqual(sum(1 for a in acc.values() if a[0] >= 0.99), 12)
         self.assertTrue(all(a[0] in (0.0, 1.0) for a in acc.values()))
         acc = {}
         O._hex_stamp(hc, O._hex_sprite("heart"), 0.5, 0.25, acc)           # gliding: cross-faded
-        self.assertAlmostEqual(sum(a[0] for a in acc.values()), 20, delta=0.05)
+        self.assertAlmostEqual(sum(a[0] for a in acc.values()), 12, delta=0.05)
 
 
 class Flag(unittest.TestCase):
@@ -112,12 +113,12 @@ class Flag(unittest.TestCase):
             idx = L.indices("Peak")
             hc = hx.get(L, idx)
             cols = call("flag", L, idx, {"wave": 0, "twinkle": 0, "intro": 0, "canton_edge": 0.62})
-            stars = [c for c in hc.cells if c.i is not None and min(cols[c.i]) > 0.6 and c.r >= 3
-                     and c.x <= 3.2]
-            self.assertGreater(len(stars), 6)
+            field = O.canton_cells(hc, 3, 0.62)                  # round 15: a flag-shaped field
+            stars = [c for c in hc.cells if c.i in field and min(cols[c.i]) > 0.6]
+            self.assertGreaterEqual(len(stars), 2)
             for s in stars:
                 for n in hc.neighbours(s):
-                    if n.i is not None and n.r >= 3 and n.x <= 3.2:
+                    if n.i is not None:
                         c = cols[n.i]
                         self.assertTrue(c[2] > 0.6 and c[0] < 0.3, (s.key, n.key, c))
 
@@ -130,15 +131,14 @@ class Flag(unittest.TestCase):
             hc = hx.get(L, idx)
             for P in ({"wave": 0, "twinkle": 0, "intro": 0, "canton_edge": 0.62}, {"intro": 0}):
                 R = EFFECTS["flag"].resolve(P)
-                ex = hc.rows[0].x0 + R["canton_edge"] * (hc.rows[0].x1 - hc.rows[0].x0)
-                crow = hc.peak_rows - R["canton_rows"]
+                field = O.canton_cells(hc, R["canton_rows"], R["canton_edge"])
                 st = {}
                 for k in range(0, 200, 5):
                     cols = call("flag", L, idx, P, st, clock=k * 0.05)
                     white = {c.i for c in hc.cells if c.i is not None and min(cols[c.i]) > 0.6}
-                    stars = [c for c in hc.cells if c.i in white and c.r >= crow and c.x <= ex + 1e-6]
+                    stars = [c for c in hc.cells if c.i in white and c.i in field]
                     if "wave" in P:                       # a still flag: the full star field
-                        self.assertGreaterEqual(len(stars), 6)
+                        self.assertGreaterEqual(len(stars), 2)
                     for c in stars:                      # stripe neighbours count too
                         ns_ = [n for n in hc.neighbours(c) if n.i is not None]
                         self.assertFalse([n.key for n in ns_ if n.i in white], (tag, P, c.key))
@@ -191,19 +191,21 @@ class GiftWrap(unittest.TestCase):
             self.assertTrue(all(max(cols[i]) < 0.05 for i in g["dark"]))
             self.assertGreater(len(g["dark"]), 30)
             bow = [i for i in g["bow"] if i in g["zig"]]
-            self.assertGreaterEqual(len(bow), 12)
-            self.assertTrue(all(hc.of(i).r >= 4 for i in bow))
-            rib = [i for i in g["vcov"] if i in g["zig"]]
-            self.assertEqual(sorted({len([i for i in rib if hc.of(i).r == r]) for r in range(4)}), [2, 3])
+            self.assertGreaterEqual(len(bow), 5)
+            box_top = max(hc.of(i).r for i in g["su"])
+            self.assertTrue(all(hc.of(i).r > box_top for i in bow))
+            rib = [i for i in g["vcov"] if i in g["zig"]]               # round 15: a one-bulb ribbon
+            self.assertEqual(sorted({len([i for i in rib if hc.of(i).r == r]) for r in range(4)}), [1, 2])
             for i in rib:
                 self.assertGreater(cols[i][1], 0.4)                       # gold ribbon
 
 
 class Pumpkin(unittest.TestCase):
     def test_face_is_eyes_nose_and_grin_apart(self):
-        """The carved holes (ember glow) must form separate features: two eyes, a nose and
-        the two halves of a toothed grin, none more than 2 rows tall (eyes that ran into the
-        mouth read as two dark gashes)."""
+        """The carved holes (ember glow) must form separate features: two eyes and a grin
+        (round 15: the pumpkin is drawn round, in true proportions, so there is no room for
+        a nose and a toothed grin), none more than 2 rows tall (eyes that ran into the mouth
+        read as two dark gashes)."""
         for tag, L in layouts():
             hc = hx.get(L, L.indices("Peak"))
             sc = Scene.from_dict(preset("halloween-pumpkin"))
@@ -225,7 +227,7 @@ class Pumpkin(unittest.TestCase):
                             seen.add(n.i)
                             todo.append(n.i)
                 groups.append(g)
-            self.assertEqual(len(groups), 5, tag)
+            self.assertEqual(len(groups), 3, tag)
             for g in groups:
                 rows = {hc.of(i).r for i in g}
                 self.assertLessEqual(max(rows) - min(rows), 1, (tag, sorted(rows)))

@@ -309,8 +309,9 @@ class GiftWrapTests(unittest.TestCase):
         ax = g["ax"]
         left = [i for i in top if i in g["bow"] and L.pixels[i].x < ax]
         right = [i for i in top if i in g["bow"] and L.pixels[i].x > ax]
-        self.assertGreaterEqual(len(left), 2)
-        self.assertGreaterEqual(len(right), 2)
+        # round 15: the present is drawn in true proportions, a bow 3-4 bulbs wide
+        self.assertGreaterEqual(len(left), 1)
+        self.assertGreaterEqual(len(right), 1)
         self.assertEqual(len(g["gaps"]), 4)                            # knot and loops read apart
         for i in g["gaps"]:
             self.assertLess(max(cols[i]), 0.05)                        # dark between them
@@ -326,10 +327,10 @@ class GiftWrapTests(unittest.TestCase):
         zig = ns._zigzag(L, idx)
         for r in (0, 2, 3):                                            # the box's rows outside the band
             n = sum(1 for i in zig[r] if g["vcov"].get(i, 0) > 0.9)
-            self.assertTrue(2 <= n <= 3, (r, n))                       # a ribbon 2-3 bulbs wide, centred
+            self.assertTrue(1 <= n <= 2, (r, n))                       # a ribbon 1-2 bulbs wide, centred
         paper = [i for i in idx if i in g["zig"] and i not in g["vcov"] and i not in g["hcov"]
                  and i not in g["bow"] and i not in g["dark"]]
-        self.assertGreater(len(paper), 30)
+        self.assertGreaterEqual(len(paper), 8)                         # round 15: a true-size box
         rib = [i for i in g["vcov"] if g["vcov"][i] > 0.9]
         self.assertGreater(min(cols[i][1] for i in rib), max(cols[i][1] for i in paper) + 0.4)
 
