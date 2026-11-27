@@ -162,7 +162,7 @@ class TipInTheEffects(unittest.TestCase):
             plan = tree.tree_plan(T, T.indices("Whole front gable"))
             tip = {p.i for p in T.run("Tip").pixels}
             drawn = tip & (set(plan["leaf"]) | set(plan["star"]))
-            self.assertGreaterEqual(len(drawn), 8, pid)
+            self.assertEqual(len(drawn), 6, pid)              # the star (3) and the top boughs (3)
             self.assertTrue(all(max(cols[-1][i]) > 0.2 for i in drawn), pid)
 
     def test_canvas_keeps_the_peaks_scale(self):
