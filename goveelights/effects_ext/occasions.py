@@ -68,36 +68,46 @@ SHAPES = list(SPRITES)
 
 # The same sprites drawn for the Peak as it hangs: a honeycomb, each row offset by half a
 # bulb (hexcanvas.Sprite format: one line per row, one character per HALF bulb). Bold and
-# solid so they read from the street: hearts with two round lobes and a clear notch and a
-# proper point, solid ghosts with two dark eye holes and a ragged hem, striped eggs.
+# solid so they read from the street: hearts with two lobes, a notch and a one-bulb point,
+# solid ghosts with two dark eye holes and a flared, ragged hem, striped eggs.
+# Drawn in TRUE proportions: on the house a row is only hexcanvas.aspect (about 0.66) of a
+# bulb spacing tall, so a shape n rows tall is n * 0.66 spacings tall and its width in
+# bulbs must match that (the earlier sprites, 6-7 bulbs wide and 4-5 rows tall, came out
+# about twice as wide as tall: flat hearts, squat ghosts, eggs lying on their side).
+#   heart  4 bulbs x 5 rows (3.3 spacings): a little wider than tall, as a heart is
+#   ghost  5 bulbs x 6 rows (4.0): a domed head, the hem flaring to points
+#   egg    3 bulbs x 5 rows (3.3), big egg 3 bulbs x 6 rows (4.0): taller than wide, upright
 # The bitmaps above stay for targets without a zigzag.
 HEX_SPRITES: dict[str, str] = {
     "heart": """
- 1 1 . 1 1
-1 1 1 1 1 1
- 1 1 1 1 1
-  1 1 1 1
-     1
+ 1 . 1
+1 1 1 1
+ 1 1 1
+  1 1
+   1
 """,
     "ghost": """
-    1 1 1
-   1 2 1 2 1
-  1 1 1 1 1 1
- 1 1 1 1 1 1 1
-1 . 1 . 1 . 1
+   1 1
+  1 1 1
+ 1 1 1 1
+1 2 1 2 1
+ 1 1 1 1
+1 . 1 . 1
 """,
     "egg": """
  1 1
 2 2 2
  1 1
-  1
+1 1 1
+ 1 1
 """,
     "big egg": """
-  1 1
- 2 2 2
-1 1 1 1
- 2 2 2
-  1 1
+  1
+ 1 1
+2 2 2
+ 1 1
+2 2 2
+ 1 1
 """,
 }
 _HEX_CACHE: dict = {}
@@ -273,6 +283,24 @@ def sample(bitmap: list[str], u: float, v: float) -> tuple[float, float]:
     return a1, a2
 
 
+RISE_GAP = 2.0         # rows from a rising sprite's top to the bottom of the one above it
+
+
+def _rise_cap(sprites: list, s: dict, h: int) -> float:
+    """The highest a rising sprite may be: its top at least RISE_GAP rows (rounded down to
+    whole rows) below the bottom of the nearest sprite above it, popping ones included.
+    The upper one slows near the apex while the next rises at full speed, and without
+    this the pair met point-to-lobes (an hourglass, round 15 review). Sprites glide
+    between whole rows, so a sprite with its top at t lights up to row floor(t) + 1 and
+    one with its bottom at b down to row floor(b): floor(b) - RISE_GAP keeps a dark row."""
+    cap = math.inf
+    for o in sprites:
+        if o is s or o["top"] <= s["top"]:
+            continue
+        cap = min(cap, math.floor(o["top"] - (h - 1)) - RISE_GAP - 1e-3)
+    return cap
+
+
 # ------------------------------------------------------------------ floaters
 FLOATER_PARAMS = [
     Param("shape", "choice", "heart", "Shape", options=SHAPES,
@@ -317,8 +345,9 @@ def _spawn(F: dict, P: dict, st: dict, rng: random.Random, clock: float):
     st["ci"] = (k + 1 + (rng.randrange(ncol - 1) if ncol > 2 and rng.random() < 0.3 else 0)) % ncol
     s = {"col": k, "born": clock, "ph": rng.random() * 6.283, "pop": None, "seed": rng.randrange(1 << 16)}
     if P["motion"] == "rise":
-        if any(o["pop"] is None and o["top"] < h + 0.4 for o in sprites):
-            return False                             # the last one has not cleared the bottom yet
+        # the last one must have cleared the bottom with a dark row to spare (see _rise_gap)
+        if any(o["top"] - (h - 1) < RISE_GAP + 0.4 for o in sprites):
+            return False
         s.update(top=-0.6, off=rng.uniform(-1.0, 1.0))
     else:
         if n < h:
@@ -385,6 +414,7 @@ def floaters(t, ctx, P, st):
 
     # ---- move
     top_row = nrows - 1
+    hh = max(h, _hex_sprite(P["shape"]).height)
     keep = []
     for s in sprites:
         if s["pop"] is not None:
@@ -395,6 +425,7 @@ def floaters(t, ctx, P, st):
             # slow a little near the top, so each one is seen whole before it pops
             prog = max(0.0, min(1.0, (s["top"] + 0.6) / (top_row + 0.6)))
             s["top"] += speed * dt * (1 - 0.45 * _smooth(prog))
+            s["top"] = min(s["top"], _rise_cap(sprites, s, hh))
             if s["top"] >= top_row + 0.12:
                 s["top"] = top_row + 0.12
                 s["pop"] = clock
@@ -555,7 +586,8 @@ FLAG_PARAMS = [
     Param("stars", "color", "#ffffff", "Stars"),
     Param("canton_rows", "int", 3, "Star field rows", 0, 6, 1, help="how many top rows the star field covers"),
     Param("canton_edge", "number", 0.5, "Star field width", 0.1, 1, 0.01,
-          help="how far across the gable (from the left) the star field reaches"),
+          help="how far across the gable (from the left) the star field may reach; on the Peak it "
+               "keeps a flag's proportions, so it is usually narrower"),
     Param("twinkle", "number", 0.5, "Star twinkle", 0, 3, 0.05, help="glints per star per second"),
     Param("wave", "number", 0.32, "Wave depth", 0, 0.9, 0.01, help="how much the ripples shade the flag"),
     Param("wavelength", "number", 9, "Ripple length (bulbs)", 2, 40, 0.5),
@@ -565,6 +597,44 @@ FLAG_PARAMS = [
           help="when the scene starts the flag unfurls from the left; 0 = no intro"),
     Param("seed", "int", 4, "Seed", 0, 9999, 1),
 ]
+
+
+CANTON_RATIO = 1.9      # the star field's width / height as seen on the house (a flag's own shape)
+
+
+def canton_cells(hc, canton_rows: int, canton_edge: float) -> dict:
+    """The flag's star field on the Peak's honeycomb: {bulb: is a star}.
+
+    The top `canton_rows` rows of the Peak (and the Tip above them when it is hung), each
+    from its left end (against the roof's slope) for as many bulbs as make the block
+    CANTON_RATIO times as wide as it is tall in TRUE proportions: a row is only
+    hc.aspect (about 0.66) of a bulb spacing tall, so 3 rows (2 spacings) take 4 bulbs, not
+    the 10-11 that stretched it into a long blue band. It never reaches past `canton_edge`
+    (the fraction of the bottom row from its left end). Stars sit on bulbs ringed by blue on
+    every side (a star touching a stripe reads as a white bar), inside the field before its
+    edge, never two side by side, so they read as separate points. Chosen by lattice place,
+    so a dead bulb shifts nothing."""
+    if canton_rows <= 0:
+        return {}
+    crow = hc.peak_rows - canton_rows
+    ex = hc.rows[0].x0 + canton_edge * (hc.rows[0].x1 - hc.rows[0].x0)
+    n = sum(1 for rw in hc.rows if rw.r >= crow)
+    per_row = max(3, int(round(CANTON_RATIO * n * hc.aspect)))
+    blue = set()
+    for rw in hc.rows:
+        if rw.r < crow:
+            continue
+        for c in rw.cells:
+            if c.x <= min(ex, rw.x0 + per_row - 1) + 1e-6:
+                blue.add(c.key)
+    stars: set = set()
+    # inside the field first (most neighbours), then bottom-left first
+    for key in sorted(blue, key=lambda k: (-len(hc.neighbours(hc._by_key[k])), k[0], k[1])):
+        c = hc._by_key[key]
+        ring = hc.neighbours(c)
+        if all(n.key in blue for n in ring) and not any(n.key in stars for n in ring):
+            stars.add(key)
+    return {hc._by_key[k].i: k in stars for k in blue if hc._by_key[k].i is not None}
 
 
 @frame_effect("flag", "Waving flag", FLAG_PARAMS,
@@ -601,22 +671,13 @@ def flag(t, ctx, P, st):
     D = P["intro"]
     front = (age / D) * (width + 4.0) - 2.0 if D > 0 and age < D else 1e9
     rate, seed = P["twinkle"], P["seed"]
-    # on the Peak's honeycomb (and up the Tip when it is hung): the star field is every
-    # bulb left of a straight cut on the top rows, and the stars sit on a third of the
-    # lattice spread evenly, each ringed by six blue bulbs (offset rows of stars, like the
-    # real flag) instead of every third bulb along each row
+    # on the Peak's honeycomb (and up the Tip when it is hung): the star field is a block in
+    # the top-left corner, against the roof's slope, in TRUE proportions (canton_cells)
     hc = hx.get(layout, idx)
     is_star = {}
     if hc is not None:
-        ex = hc.rows[0].x0 + P["canton_edge"] * (hc.rows[0].x1 - hc.rows[0].x0)
-        crow = hc.peak_rows - P["canton_rows"]
         rows = [[c.i for c in rw.cells if c.i is not None and c.i in hc.allowed] for rw in hc.rows]
-        for rw in hc.rows:
-            for c in rw.cells:
-                if c.i is not None and rw.r >= crow and c.x <= ex + 1e-6:
-                    # a star needs canton blue on every side: one on the canton's right edge
-                    # would touch the white stripe beside it and read as a white bar
-                    is_star[c.i] = (c.q - c.r) % 3 == 1 and c.x + 1 <= ex + 1e-6
+        is_star = canton_cells(hc, P["canton_rows"], P["canton_edge"])
     for r, row in enumerate(rows):
         base = cols[r % len(cols)]
         for k, i in enumerate(row):

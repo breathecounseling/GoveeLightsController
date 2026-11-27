@@ -22,7 +22,7 @@ from goveelights import bulbcheck, shows  # noqa: E402
 from goveelights import controller as C  # noqa: E402
 from goveelights.config import Config  # noqa: E402
 from goveelights.engine import to_device_frames  # noqa: E402
-from goveelights.layout import Layout, Run, dead_bulbs  # noqa: E402
+from goveelights.layout import Layout, Run, dead_bulbs, run_aspect  # noqa: E402
 from goveelights.scene import Scene  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -38,7 +38,8 @@ def layout_with(dead: dict | None = None, path=LAYOUT_FILE) -> Layout:
     devs = data["devices"]
     runs = [Run(mac=m, name=d["name"], count=d["pixel_count"], reverse=d.get("reversed", False),
                 hidden=set(d.get("hidden", [])), geometry=d.get("geometry", []),
-                dead=set((dead or {}).get(d["name"], ()))) for m, d in devs.items()]
+                dead=set((dead or {}).get(d["name"], ())),
+                aspect=run_aspect(d)) for m, d in devs.items()]
     return Layout(sorted(runs, key=lambda r: devs[r.mac].get("order", 0)), data.get("zones"))
 
 

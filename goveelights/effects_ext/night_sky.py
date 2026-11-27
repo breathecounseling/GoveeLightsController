@@ -540,8 +540,7 @@ def _gw_geometry(layout, idx: list[int]) -> dict:
             dots.add(b)
         k += 1
     # On the Peak's honeycomb the zigzag is not wrapping paper but a picture of the
-    # present: a box (lid one row wider) tied with a bold ribbon, and a big two-loop bow
-    # above it, all on dark so it reads as a present from the street. The outline and
+    # present: a box tied with a ribbon each way and a two-loop bow above it, all on dark so it reads as a present from the street. The outline and
     # the porch keep the paper and the ribbon running down to the porch as before.
     hc = hx.get(layout, idx) if zig else None
     dark, su = set(), {}
@@ -554,10 +553,12 @@ def _gw_geometry(layout, idx: list[int]) -> dict:
         gaps = set()
         dots -= live
         zset = live
-        box_hw = {0: 6.0, 1: 6.5, 2: 6.0, 3: 6.5}
-        loops = {4: {-4, -3, -2, 2, 3, 4}, 5: {-3.5, -2.5, 2.5, 3.5}, 6: {-3, -2, 2, 3}}
-        knots = {4: {0}, 5: {-0.5, 0.5}}
-        bgaps = {4: {-1, 1}, 5: {-1.5, 1.5}, 6: {-1, 0, 1}}
+        # TRUE proportions: a row is only hc.aspect (about 0.66) of a bulb spacing tall, so
+        # the box is about as many bulbs wide as rows tall times 1.1-1.7, not the 13-14 that
+        # made a long flat parcel: 4-5 bulbs by 4 rows on the Peak (6 by 6 with the Tip),
+        # tied with a one-bulb ribbon each way and a two-loop bow on top
+        box_hw, loops, knots, bgaps, band, bow_r0 = _gw_present(hc.has_tip)
+        top = max(box_hw)
         for cl in hc.cells:
             i = cl.i
             if i is None or i not in live:
@@ -567,15 +568,15 @@ def _gw_geometry(layout, idx: list[int]) -> dict:
                 su[i] = (cl.d - r) / 2.0                     # along the lattice's 60-degree lines
                 if (cl.q - r) % 3 == 0:
                     dots.add(i)
-                if abs(x) <= 1.0:
+                if abs(x) <= 0.5:
                     vcov[i] = 1.0
-                    vrank[i] = (3 - r, 3) if r >= 1 else (0, 1)
-                if r == 1:
+                    vrank[i] = (top - r, top) if r >= 1 else (0, 1)
+                if r == band:
                     hcov[i] = 1.0
             elif x in knots.get(r, ()):
                 bow[i] = 0.0
             elif x in loops.get(r, ()):
-                bow[i] = max(0.6, math.hypot(x, (r - 4.5) * 0.87))
+                bow[i] = max(0.6, math.hypot(x, (r - bow_r0) * hc.aspect))
             elif x in bgaps.get(r, ()):
                 gaps.add(i)
             else:
@@ -589,6 +590,17 @@ def _gw_geometry(layout, idx: list[int]) -> dict:
            "dist": {i: math.hypot(px[i].x - ax, (px[i].y - yc) * 1.6) for i in idx}}
     c[key] = out
     return out
+
+
+def _gw_present(tip: bool):
+    """The present on the Peak's honeycomb: (box half-width per row, bow loops, knot and
+    dark gaps per row as sets of columns, the ribbon band's row, the bow's centre row).
+    Rows count from the bottom; columns from the centre (whole on even rows, halves on odd)."""
+    if tip:                                  # 9 rows: a box 6 rows tall, the bow in the Tip
+        return ({0: 2.0, 1: 2.5, 2: 2.0, 3: 2.5, 4: 2.0, 5: 2.5},
+                {6: {-2, -1, 1, 2}, 7: {-1.5, 1.5}}, {6: {0}}, {6: {-3, 3}, 7: {-0.5, 0.5}}, 3, 6.5)
+    return ({0: 2.0, 1: 1.5, 2: 2.0, 3: 1.5},
+            {4: {-1, 1}, 5: {-1.5, 1.5}}, {4: {0}}, {4: {-2, 2}, 5: {-0.5, 0.5}}, 1, 4.5)
 
 
 def _gw_timeline(clock: float, P: dict, st: dict) -> tuple[str, float]:

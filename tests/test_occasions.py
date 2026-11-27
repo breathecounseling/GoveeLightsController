@@ -22,6 +22,8 @@ OCCASIONS = {
 }
 BUDGET_MS = 8.0
 FLOATER_SCREENS = {"valentines-hearts", "easter-pastels", "halloween-haunted"}
+# pictures drawn on a black field on purpose (the field would wash out their dark details)
+PICTURE_ON_BLACK = {"halloween-pumpkin"}
 
 
 def load(pid):
@@ -106,8 +108,14 @@ class EveryPresetTests(unittest.TestCase):
                 # street), so on average the Peak is driven less than the rooflines; it must
                 # still glow (field and sprites) and not drop out beside them.
                 limit = 2.5 if pid in FLOATER_SCREENS else 1.6
+                floor = 0.22
+                if pid in PICTURE_ON_BLACK:
+                    # Round 15 review: a true-size picture on a black field (the jack-o-lantern,
+                    # whose dark eye holes need the contrast) lights a small part of the Peak;
+                    # it still must not drop out beside the rooflines
+                    limit, floor = 4.2, 0.16
                 self.assertLessEqual(hi / lo, limit, f"{pid}: runs unbalanced {lvl}")
-                self.assertGreater(lvl["Peak"], 0.22, f"{pid}: the Peak is too dark")
+                self.assertGreater(lvl["Peak"], floor, f"{pid}: the Peak is too dark")
 
 
 class MasterPaletteTests(unittest.TestCase):
@@ -279,7 +287,8 @@ class PictureTests(unittest.TestCase):
         L = house()
         cols = run(Scene.from_dict(load("halloween-pumpkin")), L, 3)
         F = O.field(L, L.indices("Peak"))
-        eyes = F["rows"][4]                                  # second row from the top: the eyes
+        eyes = F["rows"][3]                                  # third row from the top: the eyes
+        # (round 15: the pumpkin is drawn round, in true proportions, below a stem row)
         v = [cols[i] for i in eyes]
         # Round 13: the face is carved, dark eye holes (an ember glow) in a bright orange
         # pumpkin, which reads from the street where yellow-on-orange smudged
