@@ -2244,7 +2244,7 @@ class Controller:
 
     def frame_hex(self) -> str:
         return "".join(f"{int(c[0] * 255 + .5):02x}{int(c[1] * 255 + .5):02x}{int(c[2] * 255 + .5):02x}"
-                       for c in self.engine.last_colors)
+                       for c in getattr(self.engine, "preview_colors", None) or self.engine.last_colors)
 
     def shutdown(self):
         self._stop.set()

@@ -56,6 +56,25 @@ def to_device_frames(layout: Layout, colors: list[Color], gamma: float = 1.0,
     return frames
 
 
+def calibrated_preview(layout: Layout, colors: list[Color]) -> list[Color]:
+    """The colours with each run's calibration (brightness, gain, far-end fade, run gamma)
+    applied as the boxes get them, but still linear (no global gamma), for the preview.
+    The same list when no run is calibrated."""
+    mult, rgam = calibrate.pixel_gains(layout)
+    if mult is None and rgam is None:
+        return colors
+    out = []
+    for k, c in enumerate(colors):
+        m = mult[k] if mult is not None else None
+        if m:
+            c = (min(1.0, max(0.0, c[0] * m[0])), min(1.0, max(0.0, c[1] * m[1])), min(1.0, max(0.0, c[2] * m[2])))
+        rg = rgam[k] if rgam is not None else None
+        if rg is not None:
+            c = tuple(min(1.0, max(0.0, v)) ** rg for v in c)
+        out.append(c)
+    return out
+
+
 def _px(frame, k: int):
     """One bulb of a physical frame (ints) as a 0..1 colour, for the preview."""
     if not frame or not 0 <= k < len(frame):
@@ -102,7 +121,8 @@ class Engine:
         # which would make the t handed to effects step unevenly at 20-60 fps.
         self.t0 = time.perf_counter()
         self._wall0, self._pc0 = time.time(), self.t0
-        self.last_colors: list[Color] = []
+        self.last_colors: list[Color] = []      # what was rendered (before each run's calibration)
+        self.preview_colors: list[Color] = []   # the same with each run's calibration: the phone's preview
         self.stats = {"frames": 0, "render_ms": 0.0, "late": 0}
         self._run = False
         self._thread: threading.Thread | None = None
@@ -235,7 +255,7 @@ class Engine:
             return False
         if self.blackout:                         # Blackout wins over the check too
             frames = {mac: [(0, 0, 0)] * len(fr) for mac, fr in frames.items()}
-        self.last_colors = [_px(frames.get(p.mac), p.local) for p in self.layout.pixels]
+        self.last_colors = self.preview_colors = [_px(frames.get(p.mac), p.local) for p in self.layout.pixels]
         if self.live or self.takeover_live:
             for mac, frame in frames.items():
                 self.output.send_frame(mac, frame)
@@ -255,6 +275,7 @@ class Engine:
             b = self.brightness * self.dim
             cols = [(c[0] * b, c[1] * b, c[2] * b) for c in cols]
         self.last_colors = cols
+        self.preview_colors = calibrated_preview(self.layout, cols)
         if self.live:
             for mac, frame in to_device_frames(self.layout, cols, self.gamma,
                                                self._dither_buf if self.dither else None).items():

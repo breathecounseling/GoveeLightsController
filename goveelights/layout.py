@@ -23,7 +23,7 @@ from . import calibrate
 
 
 class Pixel:
-    __slots__ = ("i", "n", "u", "run", "mac", "local", "ri", "rn", "ru",
+    __slots__ = ("i", "n", "u", "run", "mac", "local", "ri", "rn", "ru", "si",
                  "x", "y", "sx", "sy", "spanx", "spany", "nx", "ny", "rny", "rnx")
 
     def __repr__(self):
@@ -177,12 +177,17 @@ class Layout:
                     k += 1
                     step = min(0.5, wide / max(1, r.count - 1)) if wide > 0 else 0.5   # no wider than the house
                     pos_all[r.mac] = [(bx + i * step, by - 3.0 * k) for i in range(r.count)]
+        si = 0      # the bulb's place in the strip as if no bulb were marked dead (a stable seed)
         for r in runs:
             order = range(r.count - 1, -1, -1) if r.reverse else range(r.count)
-            vis = [k for k in order if k not in r.hidden and k not in r.dead]
+            shown = [k for k in order if k not in r.hidden]
+            stable = {k: si + j for j, k in enumerate(shown)}
+            si += len(shown)
+            vis = [k for k in shown if k not in r.dead]
             for ri, local in enumerate(vis):
                 p = Pixel()
                 p.run, p.mac, p.local, p.ri, p.rn = r.name, r.mac, local, ri, len(vis)
+                p.si = stable[local]
                 p.ru = ri / max(1, len(vis) - 1)
                 p.x, p.y = pos_all[r.mac][local]
                 r.pixels.append(p)
@@ -197,6 +202,10 @@ class Layout:
         # a dead bulb still marks the house's outline: the frame (and so every 2D effect's
         # scale) is the same as with that bulb working
         gone = {r.mac: self._dead_pos(r, pos_all[r.mac]) for r in runs if r.dead}
+        # per run (mac): {physical index: (x, y)} of its dead bulbs, so a picture drawn on a
+        # run can keep its outline round them
+        self.dead_at = {r.mac: {k: pos_all[r.mac][k] for k in sorted(r.dead) if 0 <= k < r.count
+                                and k not in r.hidden} for r in runs if r.dead}
         for r in runs:
             if r.mac in gone and (r.geometry or not shaped):
                 xs += [x for x, _ in gone[r.mac]]

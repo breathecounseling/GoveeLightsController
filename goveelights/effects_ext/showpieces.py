@@ -90,6 +90,29 @@ def _sig(ctx) -> tuple:
 
 
 # ====================================================================== the canvas
+def dead_in(layout, group: list[int]) -> list[tuple[float, float]]:
+    """Where the dead bulbs are that belong with a group of one run's bulbs: those of its
+    run next to the group (or next to such a dead bulb), so a picture keeps its outline and
+    scale round them. Empty when nothing is marked dead."""
+    dead_at = getattr(layout, "dead_at", None)
+    if not dead_at or not group:
+        return []
+    px = layout.pixels
+    dead = dead_at.get(px[group[0]].mac)
+    if not dead:
+        return []
+    locs = {px[i].local for i in group}
+    out, grew = {}, True
+    while grew:
+        grew = False
+        for k, xy in dead.items():
+            if k not in out and (k - 1 in locs or k + 1 in locs):
+                out[k] = xy
+                locs.add(k)
+                grew = True
+    return [out[k] for k in sorted(out)]
+
+
 def canvas(layout, idx: list[int]) -> dict:
     """The zigzag in a target as a triangle: per bulb (u, v) with u -1..1 across and
     v 0..1 up, plus the bulbs that are not part of it ("rest"). With no zigzag in the
@@ -112,8 +135,9 @@ def canvas(layout, idx: list[int]) -> dict:
     zset = set(zig)
     uv = {}
     if zig:
-        xs = [px[i].x for i in zig]
-        ys = [px[i].y for i in zig]
+        gone = dead_in(layout, zig)             # dead bulbs still mark the picture's outline
+        xs = [px[i].x for i in zig] + [x for x, _ in gone]
+        ys = [px[i].y for i in zig] + [y for _, y in gone]
         cx, hw = (min(xs) + max(xs)) / 2, max(0.5, (max(xs) - min(xs)) / 2)
         y0, H = min(ys), max(0.5, max(ys) - min(ys))
         for i in zig:
@@ -121,12 +145,15 @@ def canvas(layout, idx: list[int]) -> dict:
         apex = (cx, max(ys))
         # how high the triangle's tip would be (in canvas heights): a zigzag is usually a
         # trapezoid (its top row is still several bulbs wide), so |u| + v / k <= 1
-        k = max([v / (1 - abs(u)) for u, v in uv.values() if abs(u) < 0.9] or [1.0])
+        gone = [(x, y, (x - cx) / hw, (y - y0) / H) for x, y in gone]
+        allv = list(uv.values()) + [(u, v) for _, _, u, v in gone]
+        k = max([v / (1 - abs(u)) for u, v in allv if abs(u) < 0.9] or [1.0])
         k = max(1.0, min(4.0, k))
     else:
-        apex, y0, H, k = (0.0, 0.0), 0.0, 1.0, 1.0
+        apex, y0, H, k, gone = (0.0, 0.0), 0.0, 1.0, 1.0, []
     out = {"zig": zig, "uv": uv, "rest": [i for i in idx if i not in zset], "apex": apex, "k": k,
-           "y0": y0, "H": H}
+           "y0": y0, "H": H, "gone": gone,      # gone: (x, y, u, v) of the zigzag's dead bulbs
+           "si": {i: px[i].si for i in idx}}   # per bulb its stable seed (Pixel.si)
     c[key] = out
     return out
 
@@ -225,7 +252,7 @@ def fan(t, ctx, P, st):
         if style == "sunset":
             after = _sunset_phase(age, P)[1]
         for i in cv["rest"]:
-            w = 0.8 + 0.2 * wobble(i, clock, 0.25, seed)
+            w = 0.8 + 0.2 * wobble(cv["si"][i], clock, 0.25, seed)
             if style == "sunset":                    # the outline carries on the sky around the zigzag
                 f = (px[i].y - cv["y0"]) / cv["H"]
                 frame[i] = _scale(_sky(max(0.0, f), after), min(1.0, gv * 1.4) * w)
@@ -256,7 +283,7 @@ def _turkey(frame, cv, polar, P, clock, age, opened, cols, nf, lvl, seed):
             frame[i] = _scale((1.0, 0.72, 0.42), lvl)
             continue
         if bx * bx + by * by <= 1.0 or (abs(u) < 0.08 and v < 0.6):
-            sh = 0.75 + 0.25 * wobble(i, clock, 0.4, seed)
+            sh = 0.75 + 0.25 * wobble(cv["si"][i], clock, 0.4, seed)
             frame[i] = _scale(body, lvl * sh)
             continue
         if hd <= 2.2:                                          # a dark ring sets the head off the fan
@@ -276,7 +303,7 @@ def _turkey(frame, cv, polar, P, clock, age, opened, cols, nf, lvl, seed):
         elif r > 0.88:                                         # the pale tip with its glint
             c = lerp(c, tip, 0.75)
             if grate > 0:
-                g = glint(i, clock, grate, 0.04, 0.35, seed, 1)[0]
+                g = glint(cv["si"][i], clock, grate, 0.04, 0.35, seed, 1)[0]
                 c = lerp(c, (1.0, 0.95, 0.8), g * 0.8)
         v_ = lvl * (0.22 + 0.78 * sep)
         d = r - rip                                            # a shimmer runs out along the feathers

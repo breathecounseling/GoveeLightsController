@@ -144,8 +144,9 @@ class CalibrationMaths(unittest.TestCase):
         f = to_device_frames(self.L, self.white)[self.r.mac]
         lit = sorted(p.local for p in self.r.pixels)
         first, last = lit[0], lit[-1]
-        self.assertEqual(f[first][0], int(255 * (1 - 0.2 * (1 - first / (self.r.count - 1))) + 0.5))
-        self.assertEqual(f[last][0], int(255 * (1 - 0.2 * (1 - last / (self.r.count - 1))) + 0.5))
+        far = max(k for k in range(self.r.count) if k not in self.r.hidden)     # hidden tail bulbs don't count
+        self.assertEqual(f[first][0], int(255 * (1 - 0.2 * (1 - first / far)) + 0.5))
+        self.assertEqual(f[last][0], int(255 * (1 - 0.2 * (1 - last / far)) + 0.5))
         vals = [f[i][0] for i in lit]
         self.assertEqual(vals, sorted(vals))                  # brighter towards the far end, never darker
 
