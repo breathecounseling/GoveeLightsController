@@ -168,6 +168,9 @@ class BulbCheck:
                 raise ValueError("that run has no bulbs to check")
         else:
             name = "all runs"
+        if self.st is None and self.ctl.match_state:
+            with self.ctl.lock:                   # a colour test ends first: it would release the boxes under the walk
+                self.ctl._end_match()
         with self.lock:
             fresh = self.st is None
             now = self.clock()

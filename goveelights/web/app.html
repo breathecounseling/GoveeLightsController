@@ -525,7 +525,7 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
     <div class="mtbar" id="mtBar"></div>
     <p class="help" id="mtNote"></p>
     <div id="mtRuns"></div>
-    <div class="row wrap mtend"><button id="mtStop" class="grow" onclick="matchStop()">Stop the test</button><button class="grow" onclick="matchResetAll()">Reset all runs</button></div>
+    <div class="row wrap mtend"><button id="mtStop" class="grow" onclick="matchStop(true)">Stop the test</button><button class="grow" onclick="matchResetAll()">Reset all runs</button></div>
   </div>
   <div class="card">
     <h2><span class="sp">Palettes</span><button class="sm" onclick="editPalette(null)">+ New</button></h2>
@@ -702,7 +702,7 @@ function tabTo(t){
   if (t === 'shows') loadTonight();
   if (t === 'holo') loadHolo();
   if (t === 'more'){ loadFourth(); loadBulbs() }
-  else if (MT.on) matchStop();                       // leaving More ends the colour test
+  else if (MT.mine) matchStop();                     // leaving More ends the colour test this phone started
 }
 document.querySelectorAll('#nav button').forEach(b => b.onclick = () => tabTo(b.dataset.t));
 function openSheet(title, body){ $('sheetTitle').textContent = title; const sb=$('sheetBody'); sb.innerHTML=''; if (typeof body === 'string') sb.innerHTML = body; else sb.appendChild(body); $('sheet').scrollTop=0; $('sheet').classList.add('on'); $('scrim').classList.add('on') }
@@ -2254,7 +2254,9 @@ async function bcStop(){
 function bcOpen(){
   const el = h('<div class="bcw" id="bcWalk"></div>');
   openSheet('Bulb check', el);
-  bcDraw();
+  if (!BC && ST && ST.bulb_check) BC = ST.bulb_check;     // a second phone that never opened More: the status poll knows
+  if (BC) bcDraw();
+  else { el.innerHTML = '<p class="help">Loading…</p>'; loadBulbs().then(r => { if (r) bcDraw() }) }
   clearInterval(bcTimer);
   bcTimer = setInterval(async () => {
     if (!document.getElementById('bcWalk') || !$('sheet').classList.contains('on')){ clearInterval(bcTimer); return }
@@ -2330,7 +2332,8 @@ function frBox(b){
   if (b.realtime === undefined && !b.in_show && /^0\//.test((b.last_check || {}).status || '')) b.realtime = false;  // its last check
   const what = b.in_show ? `In the show: ${b.pixel_count} bulbs${loc ? ' · ' + esc(loc.label) : ''}${b.joined ? ' · part of ' + esc(b.joined) : ''}${b.cloud ? ' · <b class="warn">slow, Govee cloud</b>' : ''}`
     : 'Not in the show yet' + (b.ip ? ' · ' + esc(b.ip) : ' · no address yet');
-  const el = h(`<div class="frb">
+  const L = FR.last[b.mac]; if (L && L.realtime !== undefined) b.realtime = L.realtime;      // answered here earlier
+  const el = h(`<div class="frb" data-mac="${esc(b.mac)}">
     <div class="row"><b class="grow">${esc(b.name)}</b><span class="dim">${esc(b.sku)}${b.wifi_fw ? ' · Wi-Fi fw ' + esc(b.wifi_fw) : ''}</span></div>
     <p class="help">${what}</p>
     <div class="fr-out"></div>
@@ -2339,8 +2342,9 @@ function frBox(b){
       <button class="grow" data-a="add">${b.in_show ? 'Change' : 'Add it to the show'}</button>
       ${b.in_show ? '<button class="grow" data-a="blink">Blink it</button><button class="bad grow" data-a="remove">Take it out</button>' : ''}
     </div></div>`);
-  const out = el.querySelector('.fr-out'), q = a => el.querySelector(`[data-a=${a}]`);
-  q('check').onclick = () => frCheck(b, out, q('check'));
+  const q = a => el.querySelector(`[data-a=${a}]`);
+  q('check').onclick = () => frCheck(b);
+  frPaint(el, b);
   q('add').onclick = () => frAdd(b);
   if (b.in_show){
     q('blink').onclick = async () => { const r = await post('run/blink', {mac: b.mac}); if (r) toast(r.message) };
@@ -2349,24 +2353,36 @@ function frBox(b){
   }
   return el;
 }
-async function frCheck(b, out, btn){
-  btn.disabled = true; const t = btn.textContent; btn.textContent = 'Checking… (about 8 s)';
-  out.innerHTML = '<p class="help">Scanning the network and asking it for its status…</p>';
-  const r = await post('fourth/check', {mac: b.mac});
-  btn.disabled = false; btn.textContent = t;
-  if (!r){ out.innerHTML = ''; return }
-  b.realtime = r.status ? undefined : false;          // ignores commands: the Add sheet offers the cloud first
-  const mark = ok => ok === true ? '<b class="ok">✓</b>' : ok === false ? '<b class="bad">✗</b>' : '<b class="dim">?</b>';
+/* The check's answer is kept per box (FR), not in the element it started from: coming back
+   to More rebuilds the list, and the reply still lands, with its Yes / No buttons. */
+const FR = {busy: {}, last: {}};
+const frEl = mac => [...document.querySelectorAll('#frBoxes .frb')].find(e => e.dataset.mac === mac);
+function frPaint(el, b){
+  const out = el.querySelector('.fr-out'), btn = el.querySelector('[data-a=check]'), L = FR.last[b.mac];
+  if (FR.busy[b.mac]){ btn.disabled = true; btn.textContent = 'Checking… (about 8 s)';
+    out.innerHTML = '<p class="help">Scanning the network and asking it for its status…</p>'; return }
+  btn.disabled = false; btn.textContent = 'Is it answering now?';
+  if (!L){ out.innerHTML = ''; return }
+  const r = L.r, mark = ok => ok === true ? '<b class="ok">✓</b>' : ok === false ? '<b class="bad">✗</b>' : '<b class="dim">?</b>';
   out.innerHTML = `<ul class="frs">${r.steps.map(s => `<li>${mark(s.ok)} <b>${esc(s.step)}</b>: ${esc(s.say)}</li>`).join('')}</ul>
-    <p class="frv">${esc(r.verdict)}</p>
-    ${r.status ? `<div class="row"><button class="pri grow" data-y="1">Yes, it turned green</button><button class="grow" data-y="0">No change</button></div>` : ''}`;
+    <p class="frv">${esc(L.say || r.verdict)}</p>
+    ${r.status && !L.answered ? `<div class="row"><button class="pri grow" data-y="1">Yes, it turned green</button><button class="grow" data-y="0">No change</button></div>` : ''}`;
   out.querySelectorAll('[data-y]').forEach(x => x.onclick = async () => {
     const a = await post('fourth/answer', {mac: b.mac, saw: x.dataset.y === '1'});
-    if (a) out.querySelector('.frv').textContent = a.say;
-    out.querySelectorAll('[data-y]').forEach(y => y.remove());
+    L.answered = true; if (a) L.say = a.say;
+    L.realtime = b.realtime = x.dataset.y === '1';
     post('fourth/release', {mac: b.mac});
-    b.realtime = x.dataset.y === '1';
+    const cur = frEl(b.mac); if (cur) frPaint(cur, b);
   });
+}
+async function frCheck(b){
+  FR.busy[b.mac] = true; delete FR.last[b.mac];
+  let el = frEl(b.mac); if (el) frPaint(el, b);
+  const r = await post('fourth/check', {mac: b.mac}).finally(() => { FR.busy[b.mac] = false });
+  if (r){ FR.last[b.mac] = {r}; b.realtime = r.status ? undefined : false }   // ignores commands: the Add sheet offers the cloud first
+  const cur = (FOURTH && FOURTH.boxes.find(x => x.mac === b.mac)) || b;     // the list may have been rebuilt meanwhile
+  if (cur !== b) cur.realtime = b.realtime;
+  el = frEl(b.mac); if (el) frPaint(el, cur);
 }
 function frAdd(b){
   const f = FOURTH, C = f.cloud || {};
@@ -2491,15 +2507,17 @@ async function matchColor(key){
   MT.pend = key;                                     // stays highlighted while the reply is on its way
   const r = await post('match', {action: MT.on ? 'color' : 'start', color: key}).finally(() => { if (MT.pend === key) MT.pend = null });
   if (!r) { if (waking) $('mtNote').textContent = ''; drawMatch(true); return }
-  MT.on = r.color; MT.t = Date.now(); clearInterval(MT.ping);
+  MT.on = r.color; MT.mine = true; MT.t = Date.now(); clearInterval(MT.ping);
+  if (!$('s-more').classList.contains('on')) return matchStop();   // left More while the reply was on its way
   MT.ping = setInterval(() => post('match', {action:'ping'}).then(x => { if (x && !x.on) matchEnded() }), 30000);
   $('mtNote').textContent = r.blackout ? 'Blackout is on, so the lights stay dark. End the blackout to see the colour.'
     : r.took_lights ? 'The lights were off: they switched on for the test and go off again when you stop.'
     : 'What was playing comes back when you stop (or by itself after 3 minutes).';
   drawMatch(true);
 }
-function matchEnded(){ MT.on = null; clearInterval(MT.ping); MT.ping = null; $('mtNote').textContent = ''; drawMatch(true) }
-function matchStop(){ if (!MT.on) return; post('match', {action:'stop'}); matchEnded() }
+function matchEnded(){ MT.on = null; MT.mine = false; clearInterval(MT.ping); MT.ping = null; $('mtNote').textContent = ''; drawMatch(true) }
+function matchStop(tapped){ if (!(MT.mine || (tapped && MT.on))) return;   // Stop tapped: any phone; leaving: only the one that started it
+  post('match', {action:'stop'}); matchEnded() }
 async function matchCal(body){
   const r = await post('calibrate', body); if (!r) return;
   MT.cal = r.cal; drawMatch(true);
@@ -2509,13 +2527,15 @@ function matchResetAll(){ if (confirm('Put every run back to how it came?')) mat
 function drawMatch(force){
   const box = $('mtRuns'); if (!box || !ST.runs) return;
   if (!force && ST.match === null && MT.on && Date.now() - (MT.t || 0) > 5000) matchEnded();   // ended on the server (a show began, timed out)
-  if (ST.match && !MT.on) MT.on = ST.match.color;                      // opened on a second phone
+  if (ST.match && !MT.on && $('s-more').classList.contains('on')) MT.on = ST.match.color;   // opened on a second phone (only shown: never ended from here unless this phone taps a colour)
   if (!force) ST.runs.forEach(r => { if (r.cal) MT.cal[r.mac] = r.cal });
   const shown = MT.pend || MT.on;
   const sw = MT_SW.find(s => s[0] === (shown || 'warm'));
-  const sig = JSON.stringify([shown, MT.on, ST.runs.map(r => [r.mac, r.name, mtCal(r)])]);
+  const bc = !!ST.bulb_check, BCW = 'The bulb check is using the lights. Tap Done on it first.';
+  const sig = JSON.stringify([shown, MT.on, bc, ST.runs.map(r => [r.mac, r.name, mtCal(r)])]);
   if (box._sig === sig) return;
-  $('mtSw').innerHTML = MT_SW.map(([k,n,c]) => `<button data-k="${k}" class="${shown===k?'on':''}" onclick="matchColor('${k}')"><i style="background:${c}"></i>${n}</button>`).join('');
+  if (bc) $('mtNote').textContent = BCW; else if ($('mtNote').textContent === BCW) $('mtNote').textContent = '';
+  $('mtSw').innerHTML = MT_SW.map(([k,n,c]) => `<button data-k="${k}" class="${shown===k?'on':''}"${bc ? ' disabled' : ''} onclick="matchColor('${k}')"><i style="background:${c}"></i>${n}</button>`).join('');
   $('mtBar').innerHTML = ST.runs.map(r => `<span style="background:${mtShade(sw[2], mtCal(r))};color:${mtInk(sw[2], mtCal(r))}">${esc(r.name)}</span>`).join('');
   $('mtStop').style.display = MT.on ? '' : 'none';
   /* mid-drag: just the colours. A rebuild would replace the slider under the finger (iPhones
@@ -2563,7 +2583,7 @@ function drawMatch(force){
 }
 ['pointerup','pointercancel','touchend','touchcancel'].forEach(ev => window.addEventListener(ev, () =>   // a finger lifted anywhere ends a drag
   document.querySelectorAll('#mtRuns input').forEach(i => { if (i._drag) { i._drag = false; setTimeout(() => drawMatch(), 400) } }), true));
-window.addEventListener('pagehide', () => { if (!MT.on) return; MT.on = null;     // leaving the app ends the test
+window.addEventListener('pagehide', () => { if (!MT.mine) return; MT.on = null; MT.mine = false;     // leaving the app ends the test this phone started
   fetch('/api/match', {method:'POST', keepalive:true, headers:{'Content-Type':'application/json','X-Requested-With':'lights'}, body:'{"action":"stop"}'}).catch(()=>{}) });
 
 // ------------------------------------------------------------- security
