@@ -33,6 +33,7 @@ from .. import geometry as geo
 from ..color import BLACK, hash01, lerp, noise2
 from ..effects import Param, frame_effect
 from ..sparkle import glint
+from . import hexcanvas as hx
 
 TAU = 2 * math.pi
 WHITE = (1.0, 1.0, 1.0)
@@ -538,8 +539,51 @@ def _gw_geometry(layout, idx: list[int]) -> dict:
         if k % 3 == 1:
             dots.add(b)
         k += 1
+    # On the Peak's honeycomb the zigzag is not wrapping paper but a picture of the
+    # present: a box (lid one row wider) tied with a bold ribbon, and a big two-loop bow
+    # above it, all on dark so it reads as a present from the street. The outline and
+    # the porch keep the paper and the ribbon running down to the porch as before.
+    hc = hx.get(layout, idx) if zig else None
+    dark, su = set(), {}
+    if hc is not None:
+        live = set(hc.live())
+        for d_ in (vcov, hcov, vrank):
+            for i in live:
+                d_.pop(i, None)
+        bow = {i: d for i, d in bow.items() if i not in live and i in cset}
+        gaps = set()
+        dots -= live
+        zset = live
+        box_hw = {0: 6.0, 1: 6.5, 2: 6.0, 3: 6.5}
+        loops = {4: {-4, -3, -2, 2, 3, 4}, 5: {-3.5, -2.5, 2.5, 3.5}, 6: {-3, -2, 2, 3}}
+        knots = {4: {0}, 5: {-0.5, 0.5}}
+        bgaps = {4: {-1, 1}, 5: {-1.5, 1.5}, 6: {-1, 0, 1}}
+        for cl in hc.cells:
+            i = cl.i
+            if i is None or i not in live:
+                continue
+            r, x = cl.r, cl.x
+            if r in box_hw and abs(x) <= box_hw[r] + 1e-6:
+                su[i] = (cl.d - r) / 2.0                     # along the lattice's 60-degree lines
+                if (cl.q - r) % 3 == 0:
+                    dots.add(i)
+                if abs(x) <= 1.0:
+                    vcov[i] = 1.0
+                    vrank[i] = (3 - r, 3) if r >= 1 else (0, 1)
+                if r == 1:
+                    hcov[i] = 1.0
+            elif x in knots.get(r, ()):
+                bow[i] = 0.0
+            elif x in loops.get(r, ()):
+                bow[i] = max(0.6, math.hypot(x, (r - 4.5) * 0.87))
+            elif x in bgaps.get(r, ()):
+                gaps.add(i)
+            else:
+                dark.add(i)
+        bow_r = max(bow.values(), default=0.0) or 1.0
+        dark |= gaps
     out = {"zig": zset, "crown": crown, "gaps": gaps, "ax": ax, "ay": ay, "yc": yc, "bow": bow, "bow_r": bow_r,
-           "vcov": vcov, "hcov": hcov, "vrank": vrank, "dots": dots,
+           "vcov": vcov, "hcov": hcov, "vrank": vrank, "dots": dots, "dark": dark, "su": su,
            "xl": min(xs), "xr": max(xs),
            "pos": {i: (px[i].x, px[i].y) for i in idx},
            "dist": {i: math.hypot(px[i].x - ax, (px[i].y - yc) * 1.6) for i in idx}}
@@ -646,13 +690,14 @@ def gift_wrap(t, ctx, P, st):
         span = g["xr"] - g["xl"] + 14.0
         sh_pos = g["xl"] - 7.0 + cyc * span
     zig, dots, dist, pos = g["zig"], g["dots"], g["dist"], g["pos"]
+    dark, su = g["dark"], g["su"]
     flick = int(clock * 16)
     ring = burst_t * 10.0 if burst_t >= 0 else -1.0
     settle = 1.0 - _smooth((age - 3.6) / 1.3) if phase == "unwrap" else 1.0
     for i in idx:
         x, y = pos[i]
         if pat == "stripes":
-            q = ((x + y * 1.1) / sw) % 1.0
+            q = ((su[i] if i in su else x + y * 1.1) / sw) % 1.0
             m = 1.0 - _smooth((abs(q - 0.5) - 0.2) / 0.16 + 0.5)         # soft-edged stripe
         elif pat == "dots":
             m = 1.0 if i in dots else 0.0
@@ -661,7 +706,7 @@ def gift_wrap(t, ctx, P, st):
         m *= depth
         c = (paper[0] + (patc[0] - paper[0]) * m, paper[1] + (patc[1] - paper[1]) * m,
              paper[2] + (patc[2] - paper[2]) * m)
-        v = lv * (paper_zig if i in zig else paper_on)
+        v = 0.0 if i in dark else lv * (paper_zig if i in zig else paper_on)
         if burst_t >= 0 and i in zig:
             dd = dist[i]
             v *= 1.0 - (1 - GW_PAPER_FLOOR) * _smooth((ring - dd) / 1.2 + 0.5)   # the ring eats the paper...
@@ -766,7 +811,10 @@ def _ad_doors(layout, idx: list[int]) -> dict:
             if door:
                 doors.append(door)
 
-    if zig:
+    hc = hx.get(layout, idx) if zig else None
+    if hc is not None:
+        doors = _ad_hex_doors(hc)
+    elif zig:
         tot = sum(len(r) for r in zig)
         want = min(24, sum(max(1, len(r) // 2) for r in zig))
         exact = [len(r) * want / tot for r in zig]
@@ -786,21 +834,68 @@ def _ad_doors(layout, idx: list[int]) -> dict:
         if k:
             cut(seq, k)
     zset = {i for r in zig for i in r}
-    dset = {i for d in doors for i in d}
     crown = _crown(layout, idx, zig) if zig else []
-    crown = [i for i in crown if i not in zset]
+    ring: list[list[int]] = []
+    if hc is not None:
+        zset = set(hc.live())                  # the Tip's bulbs too, when it is hung
+        if hc.has_tip:                         # the Tip's apex is the calendar's star
+            crown = [c.i for c in hc.apex_cells if c.i is not None and c.i in hc.allowed]
+            cs = set(crown)
+            doors = [d for d in doors if not cs & set(d)]
+        doors = doors[:24]
+        if len(doors) < 24 and crown:          # the last door is the star on the apex
+            doors.append(list(crown))
+            crown = []
+        dset0 = {i for d in doors for i in d}
+        for d in doors:                        # the dark bulbs round each door (today's halo)
+            near = {n.i for i in d if hc.of(i) is not None for n in hc.neighbours(hc.of(i))
+                    if n.i is not None and n.i in hc.allowed and n.i not in dset0}
+            ring.append(sorted(near))
+    dset = {i for d in doors for i in d}
+    cset0 = set(crown)
+    crown = [i for i in crown if i not in zset or (hc is not None and i in cset0 and i not in dset)]
     cset = set(crown)
     frame_b = [i for i in idx if i not in zset and i not in dset and i not in cset]
-    gaps = [i for i in zset if i not in dset]
+    gaps = [i for i in zset if i not in dset and i not in cset]
     if crown:
         ax = sum(px[i].x for i in crown) / len(crown)
         ay = sum(px[i].y for i in crown) / len(crown)
         halo = {i: math.hypot(px[i].x - ax, px[i].y - ay) for i in frame_b}
     else:
         halo = {}
-    out = {"doors": doors, "crown": crown, "frame": frame_b, "gaps": gaps, "halo": halo}
+    out = {"doors": doors, "crown": crown, "frame": frame_b, "gaps": gaps, "halo": halo, "ring": ring}
     c[key] = out
     return out
+
+
+def _ad_hex_doors(hc) -> list[list[int]]:
+    """Doors on the Peak's honeycomb: 2-bulb bricks with at least one dark bulb all round
+    each (3 between doors along a row, the next row's doors sitting over those gaps), so
+    every door reads on its own from the street; where a brick is cut by a row's end its
+    one bulb is still a door. The pattern is chosen to fit the most whole doors, then the
+    most doors, then to sit most evenly about the centre. Bottom row first, left to right.
+    A dead bulb keeps its place (its door just has one bulb lit), so nothing shifts."""
+    best = None
+    for ph in range(10):
+        doors, bal, whole = [], 0.0, 0
+        for rw in hc.rows:
+            first = rw.cells[0]
+            if (first.d - 2 - ph - 5 * rw.r) % 10 == 0:          # a brick cut by the row's start
+                doors.append((first,))
+                bal += first.x
+            for c in rw.cells:
+                if (c.d - ph - 5 * rw.r) % 10:
+                    continue
+                c2 = hc.cell(rw.r, (c.d + 2) / 2)
+                doors.append((c, c2) if c2 is not None else (c,))
+                whole += c2 is not None
+                bal += c.x + (c2.x if c2 is not None else 0.0)
+        score = (whole, len(doors), -round(abs(bal), 6))
+        if doors and (best is None or score > best[0]):
+            best = (score, doors)
+    if best is None:
+        return []
+    return [[c.i for c in d if c.i is not None and c.i in hc.allowed] for d in best[1]]
 
 
 def advent_day(P: dict, today=None) -> int:
@@ -928,8 +1023,21 @@ def advent(t, ctx, P, st):
             for i in door:
                 w = cl * (0.9 + 0.1 * math.sin(clock * 0.5 + i * 1.7))
                 frame[i] = (cc[0] * w, cc[1] * w, cc[2] * w)
-    # the frame (outline, porch...) and the star on top
     fc, fl_ = P["frame_color"], P["frame_level"]
+    ring = g.get("ring")
+    if ring:
+        # on the honeycomb: the bulbs between the doors are the calendar's frame, kept low
+        # so every door stands apart, and today's door is ringed by a glowing frame
+        gw = fl_ * 0.22
+        for i in g["gaps"]:
+            frame[i] = (fc[0] * gw, fc[1] * gw, fc[2] * gw)
+        if 1 <= today_k <= nd and not (intro and pop < 0):
+            kt = order[today_k - 1]
+            if kt < len(ring):
+                rv = 0.25 + 0.55 * pulse
+                for i in ring[kt]:
+                    frame[i] = lerp(frame[i], (tc[0] * rv, tc[1] * rv, tc[2] * rv), 0.85)
+    # the frame (outline, porch...) and the star on top
     sc = P["star_color"]
     halo = g["halo"]
     for i in g["frame"]:

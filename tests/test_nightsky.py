@@ -258,8 +258,11 @@ class GiftWrapTests(unittest.TestCase):
         self.assertTrue(rib)
         for i in rib:                                                  # gold ribbon: red + green
             self.assertGreater(cols[i][1], 0.3)
-        paper = [i for i in idx if i not in g["hcov"] and i not in g["vcov"] and i not in g["bow"]]
+        # (round 13: on the Peak's honeycomb the present is drawn on dark, g["dark"])
+        paper = [i for i in idx if i not in g["hcov"] and i not in g["vcov"] and i not in g["bow"]
+                 and i not in g["dark"]]
         self.assertTrue(all(cols[i][0] > 0.5 and cols[i][2] < 0.2 for i in paper))   # red paper
+        self.assertTrue(all(max(cols[i]) < 0.05 for i in g["dark"]))
         for i in g["crown"]:
             self.assertGreater(min(cols[i][:2]), 0.5)                  # bright bow
         # the vertical ribbon reaches the porch
@@ -308,9 +311,9 @@ class GiftWrapTests(unittest.TestCase):
         right = [i for i in top if i in g["bow"] and L.pixels[i].x > ax]
         self.assertGreaterEqual(len(left), 2)
         self.assertGreaterEqual(len(right), 2)
-        self.assertEqual(len(g["gaps"]), 2)                            # knot and loops read apart
+        self.assertEqual(len(g["gaps"]), 4)                            # knot and loops read apart
         for i in g["gaps"]:
-            self.assertLess(cols[i][1], 0.2)                           # paper, not gold
+            self.assertLess(max(cols[i]), 0.05)                        # dark between them
         for i in left + right:
             self.assertGreater(cols[i][1], 0.6)                        # bright gold loops
         knot = g["crown"][0]
@@ -321,18 +324,20 @@ class GiftWrapTests(unittest.TestCase):
         cols, _ = run("gift_wrap", L, idx, {"tie": 0, "shimmer": 0, "sheen": 0}, frames=5)
         g = ns._gw_geometry(L, idx)
         zig = ns._zigzag(L, idx)
-        for r in (0, 3, 4):                                            # rows outside the band
+        for r in (0, 2, 3):                                            # the box's rows outside the band
             n = sum(1 for i in zig[r] if g["vcov"].get(i, 0) > 0.9)
-            self.assertTrue(3 <= n <= 5, (r, n))                       # a ribbon 3-5 bulbs wide
+            self.assertTrue(2 <= n <= 3, (r, n))                       # a ribbon 2-3 bulbs wide, centred
         paper = [i for i in idx if i in g["zig"] and i not in g["vcov"] and i not in g["hcov"]
-                 and i not in g["bow"] and i not in g["gaps"]]
+                 and i not in g["bow"] and i not in g["dark"]]
+        self.assertGreater(len(paper), 30)
         rib = [i for i in g["vcov"] if g["vcov"][i] > 0.9]
         self.assertGreater(min(cols[i][1] for i in rib), max(cols[i][1] for i in paper) + 0.4)
 
     def test_unwrap_never_leaves_the_zigzag_dark(self):
         L, idx = self.L, self.idx
         P = EFFECTS["gift_wrap"].resolve({"tie": 7, "unwrap_every": 20, "shimmer": 0, "sheen": 0})
-        zig = sorted(ns._gw_geometry(L, idx)["zig"])
+        g = ns._gw_geometry(L, idx)
+        zig = sorted(i for i in g["zig"] if i not in g["dark"])         # the present (round 13)
         st = {}
         for k in range(int(45 / 0.05)):
             cols = step("gift_wrap", L, idx, P, st, k * 0.05, 0.05 if k else 0.0)
@@ -358,9 +363,11 @@ class GiftWrapTests(unittest.TestCase):
     def test_palettes_differ(self):
         L, idx = self.L, self.idx
         seen = set()
+        g = ns._gw_geometry(L, idx)
+        box = next(i for i in L.indices("Peak") if i not in g["dark"] and i not in g["vcov"])
         for pal in ns.GW_PALETTES:
             cols, _ = run("gift_wrap", L, idx, {"tie": 0, "palette": pal}, frames=3)
-            seen.add(tuple(round(v, 2) for v in cols[L.indices("Peak")[0]]))
+            seen.add(tuple(round(v, 2) for v in cols[box]))
         self.assertEqual(len(seen), len(ns.GW_PALETTES))
 
 
@@ -375,10 +382,15 @@ class AdventTests(unittest.TestCase):
         peak = set(self.L.indices("Peak"))
         allb = [i for d in g["doors"] for i in d]
         self.assertEqual(len(allb), len(set(allb)))
-        self.assertTrue(set(allb) <= peak)
-        self.assertTrue(all(2 <= len(d) <= 4 for d in g["doors"]))
+        # Round 13, on the honeycomb: 23 doors on the Peak, 2-bulb bricks ringed by dark
+        # bulbs (a brick cut by a row's end keeps its one bulb), and the 24th is the star
+        # on the gable apex
+        self.assertTrue(set(allb[:-2]) <= peak)
+        self.assertTrue(all(1 <= len(d) <= 2 for d in g["doors"]))
+        self.assertGreaterEqual(sum(len(d) == 2 for d in g["doors"]), 21)
         self.assertTrue(g["gaps"])
-        self.assertEqual(sorted(g["crown"]), [42, 43])
+        self.assertEqual(sorted(g["doors"][-1]), [42, 43])
+        self.assertEqual(g["crown"], [])
 
     def test_eaves_fallback(self):
         idx = self.L.indices("Eaves")

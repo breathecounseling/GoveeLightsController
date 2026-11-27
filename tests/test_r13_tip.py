@@ -226,7 +226,7 @@ class _FixedDT(_dt.datetime):
 # The others change for a reason: the Peak's heights now reach the apex, the tree's star and
 # the pictures' crown move up, or the strip is 12 bulbs longer (effects that run along it).
 TIP_GOLDEN = {
-    "advent-calendar": "65027b5347400bd8", "apex-ripples": "880eff34785c59c9", "ball-drop-at-midnight": "8a22628a34bcd00e",
+    "advent-calendar": "ce04fd20c5c18fd1", "apex-ripples": "880eff34785c59c9", "ball-drop-at-midnight": "8a22628a34bcd00e",
     "ball-drop-preview-loop": "1a9163b0c12dfd22", "breathing-comets": "a3a8bef3c3e3ac6a", "broncos-game-day": "909e7e3613cb8481",
     "candy-cane": "5e2363004f4e511d", "champagne-fizz": "4859f951a5cf63c6", "christmas-tree": "480aa0a9e8ba32db",
     "christmas-twinkle": "c9e9b8b992164b14", "comets": "c7cf23e55a210d3b", "diamond-glitter": "d7d587adcdf79946",

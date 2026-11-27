@@ -300,11 +300,11 @@ FROZEN = 1796940000.0
 # before the open-source changes (40 frames at t = k/10, clock frozen at FROZEN and the
 # date at 2026-12-10, TZ America/Denver, the house location published to the dusk sky).
 GOLDEN = {
-    "advent-calendar": "72e71ceca625d939", "apex-ripples": "45c811f2ec4b9762", "ball-drop-at-midnight": "b35d50bf09ab7fdb",
+    "advent-calendar": "07995c84a9e9205c", "apex-ripples": "45c811f2ec4b9762", "ball-drop-at-midnight": "b35d50bf09ab7fdb",
     "ball-drop-preview-loop": "e2029bc03a39544b", "breathing-comets": "55c866657d25dcaf", "broncos-game-day": "4464c19356fec30b",
     "candy-cane": "12065aab5f091df5", "champagne-fizz": "5c0539e4fdac60a4", "christmas-tree": "6b6361a2ba0a8fcd",
     "christmas-twinkle": "be037db674f1bdc7", "comets": "dc5e84a72ec270f5", "diamond-glitter": "def4c8ac75428c33",
-    "dusk-demo": "8092ba8f36d0972a", "dusk-to-night": "71ac91fec4beeaf4", "easter-pastels": "e908d0cd21767783",
+    "dusk-demo": "8092ba8f36d0972a", "dusk-to-night": "71ac91fec4beeaf4", "easter-pastels": "9e87da358f989d2a",
     "ember-falls": "f3986d59d17a3ebf", "falling-waves": "1f955cb3b44aaeba", "festive-glitter": "d4c0b3aba48408a7",
     "fill-the-peak": "e39100c20bb25c8b", "fireworks": "83aa641b1b7982aa", "gift-wrap": "0d97a53998f902d4",
     "glitter-ball": "d1379fd3e4f61c4d", "golden-shimmer": "866c978f5f241539", "golden-tree": "cbe12e013d0af857",

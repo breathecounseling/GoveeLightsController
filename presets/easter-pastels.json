@@ -7,7 +7,7 @@
   "layers": [
     {
       "effect": "gradient",
-      "opacity": 1.0,
+      "opacity": 0.7,
       "params": {
         "colors": [
           "#ff40a0",
@@ -38,8 +38,8 @@
         "every": 1.0,
         "pop": 0.6,
         "pop_color": "#fff0ff",
-        "background": "#9850ff",
-        "glow": 0.6,
+        "background": "#5028c0",
+        "glow": 0.3,
         "outline": 0.9,
         "sway": 0.3,
         "flicker": 0,
