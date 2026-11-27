@@ -1113,6 +1113,8 @@ class Controller:
                 raise ValueError("Diagnostics is using the lights. Close it first.")
             if self.map_state:
                 raise ValueError("Camera mapping is using the lights. Finish it first.")
+            if self.bulbcheck.active:                  # its takeover owns the boxes (and would hide the colour)
+                raise ValueError("The bulb check is using the lights. Tap Done first.")
             if st is None and (self.interrupt or {}).get("show"):
                 raise ValueError("A show is playing. Try again when it ends.")
             key = color if color in calibrate.SWATCHES else (st or {}).get("color", "warm")
