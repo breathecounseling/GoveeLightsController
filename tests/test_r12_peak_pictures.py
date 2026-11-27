@@ -18,7 +18,7 @@ from goveelights import calendar_builtin as cal  # noqa: E402
 from goveelights import schedule as sched  # noqa: E402
 from goveelights import shows_builtin  # noqa: E402
 from goveelights.effects import EFFECTS  # noqa: E402
-from goveelights.effects_ext import peak_pictures  # noqa: E402
+from goveelights.effects_ext import hexcanvas, peak_pictures  # noqa: E402
 from goveelights.scene import Scene  # noqa: E402
 
 from test_r10_showpieces import EXAMPLE, HOUSE, digest, layout, render  # noqa: E402
@@ -88,8 +88,15 @@ class PeakPicturePresets(unittest.TestCase):
                     for cols in a:
                         self.assertEqual(len(cols), L.n)
                         self.assertTrue(all(0.0 <= c <= 1.0 for px in cols for c in px))
-                    lit = sum(1 for px in a[-1] if max(px) > 0.02)
-                    self.assertGreater(lit, L.n * 0.8, "the whole house takes part")
+                    # the whole house takes part: every bulb off the Peak gets the trim,
+                    # while the picture keeps dark space round it on the Peak
+                    hc = hexcanvas.get(L, list(range(L.n)))
+                    screen = set(hc.live())
+                    off = [i for i in range(L.n) if i not in screen]
+                    lit = sum(1 for i in off if max(a[-1][i]) > 0.02)
+                    self.assertGreater(lit, len(off) * 0.95, "the whole house takes part")
+                    dark = sum(1 for i in screen if max(a[-1][i]) < 0.05)
+                    self.assertGreater(dark, len(screen) * 0.25, "dark space round the picture")
                     if four:                         # a fourth run gets the trim by itself
                         self.assertGreater(sum(1 for i in four if max(a[-1][i]) > 0.02), 90)
 
