@@ -17,62 +17,24 @@
         "colors": [
           "#ff5000"
         ],
-        "background": "#5a00d0",
+        "background": "#4800a8",
         "density": 0.14,
         "duration": 1.6,
         "seed": 31
       }
     },
     {
-      "effect": "solid",
+      "effect": "picture",
       "target": "Peak",
       "params": {
-        "color": "#ffd020"
-      }
-    },
-    {
-      "effect": "fire",
-      "target": "Peak",
-      "blend": "add",
-      "opacity": 0.45,
-      "params": {
+        "image": "jack-o-lantern",
         "colors": [
-          "#ff6000",
-          "#ffb000",
-          "#ffe070"
+          "#ff4000",
+          "#4a1000",
+          "#20c000",
+          "#c02400"
         ],
-        "intensity": 1.3,
-        "scale": 3,
-        "speed": 3.5,
-        "seed": 9
-      }
-    },
-    {
-      "effect": "picture",
-      "target": "Peak",
-      "blend": "mask",
-      "params": {
-        "image": "jack-o-lantern",
-        "colors": [
-          "#000000",
-          "#ffffff",
-          "#000000",
-          "#000000"
-        ]
-      }
-    },
-    {
-      "effect": "picture",
-      "target": "Peak",
-      "blend": "add",
-      "params": {
-        "image": "jack-o-lantern",
-        "colors": [
-          "#ff3000",
-          "#000000",
-          "#30c000",
-          "#e02000"
-        ]
+        "background": "#000000"
       }
     },
     {

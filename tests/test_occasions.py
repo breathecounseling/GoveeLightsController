@@ -21,6 +21,7 @@ OCCASIONS = {
     "summer-evening": "Summer",
 }
 BUDGET_MS = 8.0
+FLOATER_SCREENS = {"valentines-hearts", "easter-pastels", "halloween-haunted"}
 
 
 def load(pid):
@@ -100,7 +101,13 @@ class EveryPresetTests(unittest.TestCase):
                 # near-dark zigzag (floaters glow 0.18) measured 1.7-2.2 and must fail.
                 lvl = {r.name: drive[r.name] / (frames * len(r.pixels)) for r in L.runs}
                 hi, lo = max(lvl.values()), min(lvl.values())
-                self.assertLessEqual(hi / lo, 1.6, f"{pid}: runs unbalanced {lvl}")
+                # Round 13: the floaters are bold sprites over a DIM field on the Peak (the
+                # owner asked for pictures with dark space round them, readable from the
+                # street), so on average the Peak is driven less than the rooflines; it must
+                # still glow (field and sprites) and not drop out beside them.
+                limit = 2.5 if pid in FLOATER_SCREENS else 1.6
+                self.assertLessEqual(hi / lo, limit, f"{pid}: runs unbalanced {lvl}")
+                self.assertGreater(lvl["Peak"], 0.22, f"{pid}: the Peak is too dark")
 
 
 class MasterPaletteTests(unittest.TestCase):
@@ -274,8 +281,12 @@ class PictureTests(unittest.TestCase):
         F = O.field(L, L.indices("Peak"))
         eyes = F["rows"][4]                                  # second row from the top: the eyes
         v = [cols[i] for i in eyes]
-        self.assertTrue(any(c[1] > 0.45 for c in v))         # candle-yellow eyes ...
-        self.assertTrue(any(c[1] < 0.35 and c[0] > 0.6 for c in v))   # ... in an orange pumpkin
+        # Round 13: the face is carved, dark eye holes (an ember glow) in a bright orange
+        # pumpkin, which reads from the street where yellow-on-orange smudged
+        orange = [k for k, c in enumerate(v) if c[0] > 0.6 and c[1] < 0.35]
+        self.assertTrue(orange)
+        holes = [k for k, c in enumerate(v) if max(c) < 0.35 and orange[0] < k < orange[-1]]
+        self.assertEqual(len(holes), 2)                       # two eyes inside the pumpkin
 
 
 if __name__ == "__main__":

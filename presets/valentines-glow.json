@@ -7,7 +7,7 @@
   "layers": [
     {
       "effect": "gradient",
-      "opacity": 0.85,
+      "opacity": 0.55,
       "params": {
         "colors": [
           "#ff0030",
@@ -43,7 +43,7 @@
         "colors": [
           "#ff0020"
         ],
-        "background": "#4a10c0",
+        "background": "#240058",
         "width": 0.95,
         "beat": 1.0,
         "period": 1.1

@@ -26,6 +26,7 @@ from .. import geometry
 from ..color import BLACK, hash01, noise2
 from ..effects import Param, frame_effect, travel
 from ..sparkle import glint
+from . import hexcanvas as hx
 
 MAX_DT = 0.6           # only a real stall is capped (Scene caps raw dt at 0.5; master speed scales it)
 MAX_SPRITES = 6
@@ -64,6 +65,85 @@ SPRITES: dict[str, list[str]] = {
     ],
 }
 SHAPES = list(SPRITES)
+
+# The same sprites drawn for the Peak as it hangs: a honeycomb, each row offset by half a
+# bulb (hexcanvas.Sprite format: one line per row, one character per HALF bulb). Bold and
+# solid so they read from the street: hearts with two round lobes and a clear notch and a
+# proper point, solid ghosts with two dark eye holes and a ragged hem, striped eggs.
+# The bitmaps above stay for targets without a zigzag.
+HEX_SPRITES: dict[str, str] = {
+    "heart": """
+ 1 1 . 1 1
+1 1 1 1 1 1
+ 1 1 1 1 1
+  1 1 1 1
+     1
+""",
+    "ghost": """
+    1 1 1
+   1 2 1 2 1
+  1 1 1 1 1 1
+ 1 1 1 1 1 1 1
+1 . 1 . 1 . 1
+""",
+    "egg": """
+ 1 1
+2 2 2
+ 1 1
+  1
+""",
+    "big egg": """
+  1 1
+ 2 2 2
+1 1 1 1
+ 2 2 2
+  1 1
+""",
+}
+_HEX_CACHE: dict = {}
+
+
+def _hex_sprite(shape: str):
+    sp = _HEX_CACHE.get(shape)
+    if sp is None:
+        sp = _HEX_CACHE[shape] = hx.Sprite(HEX_SPRITES[shape], {"1": "1", "2": "2"})
+    return sp
+
+
+def _glide(f: float) -> float:
+    """Rest on whole bulbs and glide quickly between them (so 1-bulb details stay crisp)."""
+    return _smooth((f - 0.375) / 0.25)
+
+
+def _hex_stamp(hc, sp, bottom: float, x: float, acc: dict, k: float = 1.0):
+    """Add a sprite's coverage {bulb: [cover of '1', cover of '2']} with its bottom line at
+    the (fractional) row `bottom` and its middle at column x, cross-fading between the
+    lattice places either side so it moves smoothly."""
+    r0 = math.floor(bottom)
+    fr = _glide(bottom - r0)
+    for dr, wr in ((0, 1 - fr), (1, fr)):
+        if wr <= 0.001:
+            continue
+        row = r0 + dr
+        # doubled-column offset of the sprite's left edge; valid ones share a parity
+        tgt = 2 * x - (sp.width - 1) / 2
+        par = (row + hc.p0 + sp.parity) % 2
+        lo = math.floor(tgt)
+        if (lo + par) % 2:
+            lo -= 1
+        fc = _glide((tgt - lo) / 2 + 0.13)        # half way (a row where it cannot centre): snap right
+        for off, wc in ((lo, 1 - fc), (lo + 2, fc)):
+            w = wr * wc * k
+            if w <= 0.001:
+                continue
+            for kk, j, ch in sp.cells:
+                if ch == ".":
+                    continue
+                c = hc.cell(row + j, (kk + off) / 2)
+                if c is None or c.i is None or c.i not in hc.allowed:
+                    continue
+                a = acc.setdefault(c.i, [0.0, 0.0])
+                a[0 if ch == "1" else 1] += w
 
 
 def _smooth(x: float) -> float:
@@ -120,6 +200,10 @@ def field(layout, idx: list[int]) -> dict:
     gaps = sorted(px[b].x - px[a].x for r in rows for a, b in zip(r, r[1:]) if px[b].x - px[a].x > 0.05)
     cp = gaps[len(gaps) // 2] if gaps else 1.0
     spans = [(px[r[0]].x, px[r[-1]].x) for r in rows]
+    hc = hx.get(layout, idx)
+    if hc is not None and hc.peak_rows == len(rows):
+        # the rows' ends from the lattice, which keeps a dead bulb's place: nothing shifts
+        spans = [(rw.cells[0].pos[0], rw.cells[-1].pos[0]) for rw in hc.rows[:len(rows)]]
     row_y = [sum(px[i].y for i in r) / len(r) for r in rows]
     cx = (spans[0][0] + spans[0][1]) / 2 if spans else 0.0
     left = min((s[0] for s in spans), default=0.0)
@@ -223,7 +307,7 @@ FLOATER_PARAMS = [
 def _spawn(F: dict, P: dict, st: dict, rng: random.Random, clock: float):
     sprites = st["sprites"]
     bmp = SPRITES[P["shape"]]
-    h, w = len(bmp), len(bmp[0])
+    h, w = max(len(bmp), _hex_sprite(P["shape"]).height), len(bmp[0])
     n = F["n"]
     ncol = len(P["colors"]) or 1
     k = st.get("ci", rng.randrange(ncol))
@@ -351,12 +435,37 @@ def floaters(t, ctx, P, st):
         c2 = cols[(s["col"] + 1) % len(cols)] if P["shape"] in ("egg", "big egg") else detail
         drawn.append((x, top, a, white, c1, c2))
 
+    # on the Peak's honeycomb: lattice sprites, stamped where they are (cross-faded between
+    # neighbouring places so they glide)
+    hc = hx.get(layout, idx)
+    stamps = None
+    if hc is not None:
+        hsp = _hex_sprite(P["shape"])
+        stamps = []
+        for (x, top, a, white, c1, c2) in drawn:
+            acc: dict = {}
+            _hex_stamp(hc, hsp, top - (hsp.height - 1), (x - cx) / cp, acc)
+            stamps.append(acc)
     for r_i, row in enumerate(F["rows"]):
         for i in row:
             p = px[i]
             v = gl * (0.8 + 0.2 * noise2(clock * 0.4, i * 0.7, seed))
             c = (bg[0] * v, bg[1] * v, bg[2] * v)
-            for (x, top, a, white, c1, c2) in drawn:
+            for si, (x, top, a, white, c1, c2) in enumerate(drawn):
+                if stamps is not None:
+                    a1, a2 = stamps[si].get(i, (0.0, 0.0))
+                    if a1 <= 0 and a2 <= 0:
+                        continue
+                    a1, a2 = min(1.0, a1), min(1.0, a2)
+                    sh = 0.9 + 0.1 * math.sin(clock * 3.1 + col_in.get(i, 0) * 0.9)
+                    k1, k2 = a1 * a * lvl * sh, a2 * a * lvl
+                    cover = min(1.0, (a1 + a2) * a)
+                    col = (c1[0] * k1 + c2[0] * k2, c1[1] * k1 + c2[1] * k2, c1[2] * k1 + c2[2] * k2)
+                    if white > 0:
+                        col = (col[0] + (1 - col[0]) * white * a1 * 0.8, col[1] + (1 - col[1]) * white * a1 * 0.8,
+                               col[2] + (1 - col[2]) * white * a1 * 0.8)
+                    c = (c[0] * (1 - cover) + col[0], c[1] * (1 - cover) + col[1], c[2] * (1 - cover) + col[2])
+                    continue
                 vrow = top - r_i                       # sprite row under this bulb (0 = its top)
                 if vrow < -1 or vrow > h:
                     continue
@@ -489,10 +598,46 @@ def flag(t, ctx, P, st):
     D = P["intro"]
     front = (age / D) * (width + 4.0) - 2.0 if D > 0 and age < D else 1e9
     rate, seed = P["twinkle"], P["seed"]
+    # on the Peak's honeycomb (and up the Tip when it is hung): the star field is every
+    # bulb left of a straight cut on the top rows, and the stars sit on a third of the
+    # lattice spread evenly, each ringed by six blue bulbs (offset rows of stars, like the
+    # real flag) instead of every third bulb along each row
+    hc = hx.get(layout, idx)
+    is_star = {}
+    if hc is not None:
+        ex = hc.rows[0].x0 + P["canton_edge"] * (hc.rows[0].x1 - hc.rows[0].x0)
+        crow = hc.peak_rows - P["canton_rows"]
+        rows = [[c.i for c in rw.cells if c.i is not None and c.i in hc.allowed] for rw in hc.rows]
+        for rw in hc.rows:
+            for c in rw.cells:
+                if c.i is not None and rw.r >= crow and c.x <= ex + 1e-6:
+                    is_star[c.i] = (c.q - c.r) % 3 == 1
     for r, row in enumerate(rows):
         base = cols[r % len(cols)]
         for k, i in enumerate(row):
             p = px[i]
+            if hc is not None:
+                xr = p.x - left
+                ph = (xr - tr + r * 0.6) / lam * 2 * math.pi
+                crest = 0.5 + 0.5 * math.cos(ph)
+                amp = depth * min(1.0, 0.35 + xr / 6.0)
+                v = lvl * (1 - amp * (1 - crest))
+                if i in is_star:
+                    if is_star[i]:
+                        g = glint(i, clock, rate, 0.04, 0.35, seed, 1)[0] if rate > 0 else 0.0
+                        s = 0.85 + 0.15 * g
+                        c = (star[0] * s * v, star[1] * s * v, star[2] * s * v)
+                    else:
+                        c = (can[0] * v, can[1] * v, can[2] * v)
+                else:
+                    c = (base[0] * v, base[1] * v, base[2] * v)
+                sheen = 0.14 * crest ** 6 * depth
+                c = (c[0] + (1 - c[0]) * sheen, c[1] + (1 - c[1]) * sheen, c[2] + (1 - c[2]) * sheen)
+                if front < 1e8:
+                    f = _smooth((front - xr) / 2.0)
+                    c = (c[0] * f, c[1] * f, c[2] * f)
+                out[i] = _clamp(c)
+                continue
             xr = p.x - left
             # the ripple: a crest rolling across, a little diagonal like cloth
             ph = (xr - tr + r * 0.6) / lam * 2 * math.pi

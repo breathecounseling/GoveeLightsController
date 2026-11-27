@@ -668,28 +668,61 @@ def _lubdub(u: float) -> float:
     return max(a, b)
 
 
-@effect("picture", "Picture", [
+@frame_effect("picture", "Picture", [
     Param("image", "choice", "tree", options=list(PICTURES)),
     Param("colors", "colors", [], help="leave empty for the picture's own colours"),
-    Param("background", "color", "#000000"),
-    Param("width", "number", 1.0, "Width", 0.4, 1.5, 0.05),
+    Param("background", "color", "#000000", help="the bulbs round the picture; dark reads best"),
+    Param("width", "number", 1.0, "Width", 0.4, 1.5, 0.05,
+          help="off the zigzag only: on the Peak the picture is drawn bulb for bulb"),
     Param("pulse", "number", 0.0, "Pulse", 0, 1, 0.05),
     Param("period", "number", 2.0, "Pulse speed (s)", 0.3, 10, 0.1),
     Param("beat", "number", 0.0, "Heartbeat", 0, 1, 0.05,
-          help="the picture swells and shrinks from its centre, lub-dub, once per pulse period"),
-], "A small picture (tree, star, heart, pumpkin…) drawn on the zigzag. Target the Peak.")
-def picture(t, p, P):
-    w = P["width"]
-    if P["beat"] > 0:
-        w *= 1.0 - P["beat"] * 0.3 * (1.0 - _lubdub((t / P["period"]) % 1.0))
-    ch = pic_sample(PICTURES[P["image"]], p.rnx, p.rny, w)
-    if ch == ".":
-        return P["background"]
+          help="the picture beats, lub-dub, once per pulse period: it flares and a glow swells round it"),
+], "A small picture (tree, star, heart, pumpkin…) drawn bulb for bulb on the Peak's honeycomb "
+   "(rows offset by half a bulb), with the Tip when it is hung. Target the Peak.")
+def picture(t, ctx, P, st):
+    from .effects_ext import hexcanvas as hx         # lazy: effects_ext imports this module
+    from .pictures import HEX_PICTURES
+    L, px = ctx.layout, ctx.layout.pixels
+    frame = [BLACK] * len(px)
+    idx = [i for i in ctx.idx if 0 <= i < len(px)]
     cols = P["colors"] or [hex_to_rgb(h) for h in PICTURE_COLORS.get(P["image"], ["#ffffff"])]
-    c = cols[(int(ch) - 1) % len(cols)]
-    if P["pulse"] > 0:
-        c = scale(c, 1 - P["pulse"] * (0.5 - 0.5 * math.cos(2 * math.pi * t / P["period"])))
-    return c
+    bg = P["background"]
+    pv = 1 - P["pulse"] * (0.5 - 0.5 * math.cos(2 * math.pi * t / P["period"])) if P["pulse"] > 0 else 1.0
+    beat = _lubdub((t / P["period"]) % 1.0) * P["beat"] if P["beat"] > 0 else 0.0
+    hc = hx.get(L, idx) if idx else None
+    if hc is None:                                    # no zigzag: the square bitmap, stretched
+        w = P["width"] * (1.0 - 0.3 * P["beat"] + 0.3 * beat)
+        for i in idx:
+            ch = pic_sample(PICTURES[P["image"]], px[i].rnx, px[i].rny, w)
+            frame[i] = bg if ch == "." else scale(cols[(int(ch) - 1) % len(cols)], pv)
+        return frame
+    key = ("hexpic", P["image"], id(hc))
+    sp = st.get(key)
+    if sp is None:
+        pic = HEX_PICTURES[P["image"]]
+        sp = st[key] = hx.Sprite(pic["tip"] if hc.has_tip and "tip" in pic else pic["peak"],
+                                 {ch: ch for ch in "1234"})
+        st[key + ("cells",)] = hc.sprite_cells(sp, 0, 0.0)
+    for i in idx:
+        frame[i] = bg
+    lit = set()
+    v = pv * ((1 - 0.2 * P["beat"]) + 0.2 * beat if P["beat"] > 0 else 1.0)
+    for c, ch in st[key + ("cells",)]:
+        if ch == "." or c.i is None or c.i not in hc.allowed:
+            continue
+        lit.add(c.key)
+        frame[c.i] = scale(cols[(int(ch) - 1) % len(cols)], v)
+    if beat > 0.02:                                   # the glow round it swells on each beat
+        c0 = cols[0]
+        g = (bg[0] + (c0[0] - bg[0]) * 0.45 * beat, bg[1] + (c0[1] - bg[1]) * 0.45 * beat,
+             bg[2] + (c0[2] - bg[2]) * 0.45 * beat)
+        for c, ch in st[key + ("cells",)]:
+            if c.key in lit:
+                for n in hc.neighbours(c):
+                    if n.key not in lit and n.i is not None and n.i in hc.allowed:
+                        frame[n.i] = g
+    return frame
 
 
 @frame_effect("countdown", "Countdown", [
