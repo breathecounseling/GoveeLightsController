@@ -177,11 +177,21 @@ class Pictures(unittest.TestCase):
             self.assertLess(worst, 0.1, d)
 
     def test_candle_white_is_warm_and_never_too_dark(self):
+        """Every candle bulb round the house is warm and never too dark; on the zigzag the
+        candles burn in the dark (a picture, not a wash), every lit bulb still warm."""
         fr = render(preset("gratitude-candlelight"), self.L, 100)
         for cols in fr[::10]:
-            for r, g, b in cols:
+            for i, (r, g, b) in enumerate(cols):
+                if i in self.peak:
+                    if max(r, g, b) > 0.02:
+                        self.assertTrue(r >= g >= b, (r, g, b))
+                    continue
                 self.assertGreater(r, 0.25)
                 self.assertTrue(r >= g >= b, (r, g, b))
+            lit = [i for i in self.peak if max(cols[i]) > 0.3]
+            dark = [i for i in self.peak if max(cols[i]) < 0.02]
+            self.assertTrue(15 <= len(lit) <= 50, len(lit))
+            self.assertGreater(len(dark), len(self.peak) // 2, "dark space round the candles")
 
     def test_falling_star_crosses_the_runs(self):
         L = self.L

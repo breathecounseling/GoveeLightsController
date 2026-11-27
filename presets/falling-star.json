@@ -17,7 +17,7 @@
     },
     {
       "effect": "twinkle",
-      "target": "Zigzag top half",
+      "target": "Eaves",
       "blend": "lighten",
       "params": {
         "colors": [
