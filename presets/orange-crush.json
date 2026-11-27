@@ -15,6 +15,7 @@
     },
     {
       "effect": "sparkle",
+      "target": "Eaves",
       "blend": "add",
       "opacity": 0.6,
       "params": {"rate": 6, "decay": 0.12}

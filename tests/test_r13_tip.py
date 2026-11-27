@@ -238,7 +238,7 @@ TIP_GOLDEN = {
     "peak-snowman": "0b952f7cfac724b9", "peak-star": "c80130be2ce740c5", "peak-wreath": "3920c3023db02a6b",
     "plasma-party": "e5de57956ccac482", "porch-fireworks": "f96ba105277205aa", "rainbow-roofline": "98041943a35979a5",
     "roller-coaster": "e41e629d412706fb", "santas-sleigh": "dd17a10bf7c33cba", "scanner-trails": "e332fd04aedcc631",
-    "sequin-wave": "d54313ad9d577eef", "sleigh-grand-tour": "ff7e307a1307939c", "snow-piling-up": "f661b8653667bbc4",
+    "sequin-wave": "d54313ad9d577eef", "sleigh-grand-tour": "f9150ffd5ea89da4", "snow-piling-up": "f661b8653667bbc4",
     "snowy-evening": "ba2267fdd9303da1", "sparkler-tree": "da39360aeb78c8f5", "spooky-tree": "de9d525253b8a714",
     "spring-garden": "dafde51e69ffae29", "st-patricks": "7bbd6fdd892eb173", "starry-night": "5aeffa5a346fc93e",
     "starry-night-sleigh": "64c07353762dfa83", "summer-evening": "304103320ea1ff8b", "summer-fireflies": "c12c960aadfe9c5b",

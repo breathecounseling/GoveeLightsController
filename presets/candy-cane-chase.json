@@ -10,11 +10,12 @@
     {
       "effect": "fan",
       "target": "Peak",
-      "params": {"style": "sunburst", "colors": ["#ff0000"], "ray2": "#ffd8c8", "hub": "#ff1010",
+      "params": {"style": "sunburst", "colors": ["#ff0000"], "ray2": "#ffd8c8", "hub": "#ffffff",
                  "feathers": 6, "speed": 1.2, "intro": 2, "level": 0.95, "glow_level": 0}
     },
     {
       "effect": "sparkle",
+      "target": "Eaves",
       "blend": "add",
       "opacity": 0.5,
       "params": {"rate": 4, "decay": 0.15}

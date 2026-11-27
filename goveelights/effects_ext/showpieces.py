@@ -18,6 +18,13 @@ and paths that cross from one run to the next.
                   gently (no flicker), with a soft swell of light that flows out from the
                   gable apex every so often: a quiet moment of thanks.
 
+On a zigzag drawn as a honeycomb (hexcanvas: offset rows, the house's Peak and Tip) the
+pictures are drawn for that lattice: a turkey sprite in front of feathers parted by dark
+lines of bulbs, a sun disc with a dark ring and bold rays, sunburst wedges reaching the
+edge with dark lines between, the falling star as a bold streak down a 60-degree line
+over black, the sleigh and a crescent moon, three candles in the dark. Elsewhere (and
+round the zigzag) the free-form drawing is unchanged.
+
 All are @frame_effect generators: memory lives in the layer's state dict, randomness is
 hashed or comes from a random.Random kept there (deterministic for a seed and a frame
 sequence), lists are bounded, and a stalled or reversed clock is handled.
@@ -36,6 +43,7 @@ from .. import geometry as geo
 from ..color import BLACK, hash01, lerp, noise2
 from ..effects import Param, frame_effect
 from ..sparkle import envelope, glint, wobble
+from . import hexcanvas as hx
 
 TAU = 2 * math.pi
 WARM = (1.0, 0.6, 0.24)
@@ -207,7 +215,8 @@ def _polar(u: float, v: float, k: float = 1.0) -> tuple[float, float]:
           help="the fan opens (turkey and sunburst) or the sun starts high (sunset) when the scene starts"),
     Param("sink", "number", 50, "Sunset takes (s)", 5, 600, 1, help="sunset: from high in the sky to gone"),
     Param("speed", "number", 0.6, "Ripple / turn speed", 0, 4, 0.05,
-          help="turkey: how often a shimmer runs out along the feathers; sunburst: how fast the rays turn"),
+          help="turkey: how often a shimmer runs out along the feathers; sunburst: how fast the rays "
+               "turn (on the Peak's honeycomb: how fast a glow sweeps round the fixed rays)"),
     Param("glints", "number", 0.25, "Tip glints per second", 0, 2, 0.01),
     Param("ray2", "color", "#b02800", "Sunburst: between the rays",
           help="the colour of every other ray (white with red rays makes a peppermint swirl)"),
@@ -242,8 +251,18 @@ def fan(t, ctx, P, st):
         polar = st["polar"] = {i: _polar(u, v, cv["k"]) for i, (u, v) in cv["uv"].items()}
         st["polar_key"] = id(cv)
 
-    if style == "turkey":
+    hc = hx.get(L, idx)
+    fade = 1.0
+    if hc is not None and style == "sunset":
+        age, fade = _sunset_loop(age, P)              # on the Peak the sun sets again and again
+    if hc is not None and style == "turkey":
+        _turkey_hex(frame, hc, st, P, clock, age, opened, cols, nf, lvl, seed)
+    elif style == "turkey":
         _turkey(frame, cv, polar, P, clock, age, opened, cols, nf, lvl, seed)
+    elif hc is not None and style == "sunset":
+        _sunset_hex(frame, hc, st, P, clock, age, lvl * fade, seed)
+    elif hc is not None:
+        _sunburst_hex(frame, hc, st, P, clock, opened, cols, nf, lvl, seed)
     elif style == "sunset":
         _sunset(frame, cv, polar, P, clock, age, lvl, seed)
     else:
@@ -255,11 +274,12 @@ def fan(t, ctx, P, st):
         px = L.pixels
         if style == "sunset":
             after = _sunset_phase(age, P)[1]
-        for i in cv["rest"]:
+        rest = cv["rest"] if hc is None else [i for i in idx if hc.of(i) is None]
+        for i in rest:
             w = 0.8 + 0.2 * wobble(cv["si"][i], clock, 0.25, seed)
             if style == "sunset":                    # the outline carries on the sky around the zigzag
                 f = (px[i].y - cv["y0"]) / cv["H"]
-                frame[i] = _scale(_sky(max(0.0, f), after), min(1.0, gv * 1.4) * w)
+                frame[i] = _scale(_sky(max(0.0, f), after), min(1.0, gv * 1.4) * w * (0.5 + 0.5 * fade))
                 continue
             d = math.hypot(px[i].x - ax, px[i].y - ay)
             v = gv * w * (1.0 + 0.6 * max(0.0, 1 - d / 8))
@@ -335,6 +355,30 @@ def _sunset_phase(age: float, P) -> tuple[float, float]:
     return sun_v, _smooth((age - sink * 0.75) / (sink * 0.4))  # the afterglow takes over
 
 
+SUNSET_FADE, SUNSET_GAP = 3.0, 1.5
+
+
+def _sunset_loop(age: float, P) -> tuple[float, float]:
+    """The honeycomb sunset repeats: once the sun is down and the afterglow has had a moment
+    the picture fades to dark, then the sun comes back high in the sky. Returns the age into
+    the current sunset and a brightness fade (1 = full)."""
+    sink = max(1.0, P["sink"])
+    end = sink * 1.05
+    cyc = end + SUNSET_FADE + SUNSET_GAP
+    a = age % cyc
+    if a < end:
+        fade = 1.0
+    elif a < end + SUNSET_FADE:
+        fade = 1.0 - _smooth((a - end) / SUNSET_FADE)
+    else:
+        fade = 0.0
+    if age >= cyc and a < 2.0:                       # every later sunset fades in
+        fade = min(fade, _smooth(a / 2.0))
+    if a >= end:
+        a = end                                      # hold the last picture while it fades
+    return a, fade
+
+
 def _sunset(frame, cv, polar, P, clock, age, lvl, seed):
     sun_v, after = _sunset_phase(age, P)
     for i, (u, v) in cv["uv"].items():
@@ -374,6 +418,264 @@ def _sunburst(frame, cv, polar, P, clock, opened, cols, nf, lvl, seed):
         frame[i] = _scale(c, lvl * (0.8 + 0.2 * _smooth(e / 0.35)) * (1.05 - 0.25 * r))
 
 
+# ====================================================================== honeycomb pictures
+# On the house the zigzag is a triangle of OFFSET rows (every bulb midway between two of
+# the row below): a honeycomb screen about 27 bulbs wide and 6 rows tall (9 with the Tip).
+# The pictures below are drawn for that lattice (hexcanvas): bold strokes, straight
+# 60-degree lines, a few colours, dark space round every shape. Without a zigzag in the
+# target the older free-form drawing is used.
+
+def _ckey(c) -> int:
+    """A per-cell seed that never moves (dead bulbs keep their cells)."""
+    return (c.r + 1) * 4099 + c.d + 2048
+
+
+def _ray(hc, px: float, py: float, ang: float, r0: float = 0.0) -> set:
+    """The cells (keys) of a ray one bulb wide from (px, py) at `ang` degrees (0 right, 90
+    up), beyond r0 columns from its start: per row the nearest cell for a steep ray (so a
+    60-degree ray is a straight line of touching bulbs, a vertical one zig-zags), every
+    cell within half a bulb of a shallow one."""
+    rh = hc.row_h
+    a = math.radians(ang)
+    ca, sa = math.cos(a), math.sin(a)
+    out = set()
+    if abs(sa) > 0.75:
+        for rw in hc.rows:
+            dy = (rw.r - py) * rh
+            if dy * sa <= 0:
+                continue
+            tt = dy / sa
+            if tt < r0:
+                continue
+            x = px + tt * ca
+            c = min(rw.cells, key=lambda c: (abs(c.x - x), -c.d))
+            if abs(c.x - x) <= 0.75:
+                out.add(c.key)
+    else:
+        for c in hc.cells:
+            dx, dy = c.x - px, (c.y - py) * rh
+            if dx * ca + dy * sa > r0 and abs(-dx * sa + dy * ca) <= 0.5 + 1e-6:
+                out.add(c.key)
+    return out
+
+
+def _angle(c, px, py, rh) -> float:
+    """A cell's direction from (px, py), 0..180 degrees (0 right, 90 up)."""
+    return math.degrees(math.atan2(max(0.0, (c.y - py) * rh), c.x - px))
+
+
+def _rim_angles(hc, pv, n: int) -> list[float]:
+    """Directions from pv (degrees, right to left) that cut the screen's two sloping sides
+    into n equal lengths: on a wide, low triangle every feather or ray then reaches the
+    edge with the same width instead of the side ones lying flat."""
+    (x0, y0), (x1, _), (xa, ya) = hc.triangle(0.5)
+    rh = hc.row_h
+    out = []
+    for k in range(1, n):
+        f = 2.0 * k / n                                 # 0..2: up the right side, down the left
+        if f <= 1:
+            px, py = x1 + (xa - x1) * f, y0 + (ya - y0) * f
+        else:
+            px, py = xa + (x0 - xa) * (f - 1), ya + (y0 - ya) * (f - 1)
+        out.append(math.degrees(math.atan2((py - pv[1]) * rh, px - pv[0])))
+    return out
+
+
+def _rim(hc) -> set:
+    """The screen's edge: each row's end bulbs and the top row."""
+    out = set()
+    for rw in hc.rows:
+        cs = rw.cells if rw.r == hc.top else [rw.cells[0], rw.cells[-1]]
+        out.update(c.key for c in cs)
+    return out
+
+
+def _hex_put(frame, hc, c, col):
+    if c.i is not None and c.i in hc.allowed:
+        frame[c.i] = col
+
+
+def _art(text: str) -> hx.Sprite:
+    """A lattice drawing whose letters name parts (coloured from the effect's params)."""
+    return hx.Sprite(text, {ch: (1.0, 1.0, 1.0) for ch in set(text) if ch not in " .\n"})
+
+
+# the turkey in front of its fan; '.' is the dark ring that sets it off the feathers
+TURKEY = _art("""
+       . H .
+      . H H .
+     . . H . .
+  . B B W B B .
+ . B B B W B B .
+. B B B B B B B .
+""")
+TURKEY_TALL = _art("""
+        . . .
+       . H H .
+      . H H H .
+     . . W H . .
+  . . B W B B . .
+ . B B B W B B B .
+. B B B B B B B B .
+ . B B B B B B B .
+""")
+BIRD_PARTS = {".": "halo", "B": "body", "H": "head", "W": "wattle"}
+
+
+def _turkey_plan(hc, nf: int) -> dict:
+    """Where everything goes, once per screen: per cell key one of ("f", feather k),
+    ("gap",), ("tip", k), ("body",), ("head",), ("wattle",), ("beak",), ("halo",)."""
+    s = hc.peak_rows / 6.0
+    rh = hc.row_h
+    pv = (0.0, -2.0 * s)                         # the feathers fan out from the bird
+    gaps = set()
+    bounds = _rim_angles(hc, pv, nf)
+    for a in bounds:
+        gaps |= _ray(hc, pv[0], pv[1], a, 1.0)
+    rim = _rim(hc)
+    # the bird in front, drawn on the lattice (bottom line on the bottom row): a round
+    # chestnut body, a pale head on top with the red wattle hanging down the chest, and a
+    # ring of dark round it so it stands off the feathers
+    bird = {}
+    for c, ch in hc.sprite_cells(TURKEY_TALL if hc.top >= 7 else TURKEY, 0, 0.0):
+        bird[c.key] = ch
+    plan = {}
+    for c in hc.cells:
+        b = bird.get(c.key)
+        if b is not None:
+            plan[c.key] = (BIRD_PARTS[b],)
+        elif c.key in gaps:
+            plan[c.key] = ("gap",)
+        else:
+            a = _angle(c, pv[0], pv[1], rh)
+            k = sum(1 for b in bounds if a > b)
+            plan[c.key] = ("tip" if c.key in rim else "f", k, a)
+    return plan
+
+
+def _turkey_hex(frame, hc, st, P, clock, age, opened, cols, nf, lvl, seed):
+    key = ("turkey", id(hc), nf)
+    if st.get("plan_key") != key:
+        st["plan_key"], st["plan"] = key, _turkey_plan(hc, nf)
+    plan = st["plan"]
+    tip, body, wattle = P["tip"], P["body"], P["wattle"]
+    grate = P["glints"]
+    ripple_every = 1.0 / P["speed"] if P["speed"] > 0 else 0.0
+    rip = (age % ripple_every) / ripple_every * 1.6 - 0.3 if ripple_every else -9.0
+    far = max(1.0, max(rw.half_width for rw in hc.rows))
+    for c in hc.cells:
+        if c.i is None or c.i not in hc.allowed:
+            continue
+        p = plan[c.key]
+        kind = p[0]
+        if kind in ("gap", "halo"):
+            frame[c.i] = BLACK
+        elif kind == "body":
+            sh = 0.85 + 0.15 * wobble(_ckey(c), clock, 0.4, seed)
+            frame[c.i] = _scale(body, lvl * sh)
+        elif kind == "head":
+            frame[c.i] = _scale((1.0, 0.72, 0.42), lvl)
+        elif kind == "wattle":
+            frame[c.i] = _scale(wattle, lvl)
+        else:
+            k, a = p[1], p[2]
+            spread = abs(a - 90.0) / 90.0                  # 0 straight up, 1 flat
+            if spread > opened * 1.02:
+                frame[c.i] = BLACK
+                continue
+            col = cols[min(k, nf - 1 - k) % len(cols)]   # mirrored: the tail is symmetric
+            v = lvl
+            r = math.hypot(c.x, (c.y + 1.2) * hc.row_h) / far
+            d = r - rip                                    # a shimmer runs out along the feathers
+            if -0.25 < d < 0.25:
+                v *= 1.0 + 0.3 * (1 - abs(d) / 0.25)
+            if kind == "tip":
+                col = lerp(col, tip, 0.7)
+                if grate > 0:
+                    g = glint(_ckey(c), clock, grate, 0.04, 0.35, seed, 1)[0]
+                    col = lerp(col, (1.0, 0.95, 0.8), g * 0.8)
+            frame[c.i] = _scale(col, min(1.0, v))
+
+
+def _sunset_hex(frame, hc, st, P, clock, age, lvl, seed):
+    """A gold disc with an orange rim on a dim sky, a ring of dark round it and five bold
+    rays on the lattice; it sinks below the bottom row and the rays and sky fade on."""
+    sun_v, after = _sunset_phase(age, P)
+    s = hc.peak_rows / 6.0
+    rh = hc.row_h
+    R = 3.2 * s                                        # columns
+    hi, lo = 0.5 * s, -(R / rh) - 0.6
+    cy = lo + (hi - lo) * (sun_v + 0.5)                # sun_v runs 0.5 .. -0.5: on the horizon, then gone
+    disc = hx.Circle(0.0, cy, R)
+    rays = []
+    for a in (25, 57, 90, 123, 155):
+        ca, sa = math.cos(math.radians(a)), math.sin(math.radians(a)) / rh
+        r0, r1 = R + 1.6, R + 30.0
+        rays.append(hx.Line([(ca * r0, cy + sa * r0), (ca * r1, cy + sa * r1)], 1.1))
+    ray_sh = hx.Union(*rays)
+    top = max(1, hc.top)
+    glow = 1.0 - after                                 # the rays go with the light
+    for c in hc.cells:
+        if c.i is None or c.i not in hc.allowed:
+            continue
+        f = c.y / top
+        sky = _scale(_sky(f * 1.1, after), 0.22 - 0.06 * f)          # dim: the sun is the picture
+        d = disc.sd(c.x, c.y, rh)                        # < 0 inside the sun
+        # everything blends by distance from the disc's edge, so the sinking sun glides
+        ring = _smooth((d - 0.5) / 1.1)                  # a ring of dark sets the disc off
+        col = _scale(sky, 0.6 * ring + 0.4 * _smooth((d - 1.6) / 0.6))
+        k = hx.coverage(ray_sh.sd(c.x, c.y, rh), 0.3) * glow * _smooth((d - 1.0) / 1.0)
+        if k > 0:
+            sh = 0.85 + 0.15 * wobble(_ckey(c), clock, 0.3, seed)
+            col = lerp(col, _scale((1.0, 0.55, 0.05), sh), k)
+        if d < 0.5:
+            core = lerp((1.0, 0.8, 0.3), (1.0, 0.42, 0.0), _smooth((d + 1.3) / 1.0))
+            col = lerp(col, core, hx.coverage(d, 0.5))
+        frame[c.i] = _scale(col, lvl)
+
+
+def _sunburst_hex(frame, hc, st, P, clock, opened, cols, nf, lvl, seed):
+    """Wedges of two colours from a hub at the bottom middle, each reaching the edge with
+    the same width, a dark line of bulbs between them; a glow sweeps round them."""
+    key = ("sunburst", id(hc), nf)
+    if st.get("plan_key") != key:
+        s = hc.peak_rows / 6.0
+        rh = hc.row_h
+        pv = (0.0, -1.0 * s)
+        bounds = _rim_angles(hc, pv, nf)
+        gaps = set()
+        for a in bounds:
+            gaps |= _ray(hc, pv[0], pv[1], a, 1.0)
+        hub = hx.Circle(0.0, -0.4 * s, 2.5 * s)
+        ring = hx.Circle(0.0, -0.4 * s, 2.5 * s + 1.0)
+        plan = {}
+        for c in hc.cells:
+            if hub.sd(c.x, c.y, rh) < 0:
+                plan[c.key] = ("hub", 0, 90.0)
+            elif ring.sd(c.x, c.y, rh) < 0 or c.key in gaps:
+                plan[c.key] = ("gap", 0, 90.0)
+            else:
+                a = _angle(c, pv[0], pv[1], rh)
+                plan[c.key] = ("ray", sum(1 for b in bounds if a > b), a)
+        st["plan_key"], st["plan"] = key, plan
+    plan = st["plan"]
+    sweep = (clock * P["speed"] * 0.12) % 1.0 * (nf + 2) - 1.0   # the glow's wedge, round and round
+    for c in hc.cells:
+        if c.i is None or c.i not in hc.allowed:
+            continue
+        kind, k, a = plan[c.key]
+        if kind == "hub":
+            frame[c.i] = _scale(P["hub"], lvl)
+            continue
+        if kind == "gap" or abs(a - 90.0) / 90.0 > opened * 1.02:
+            frame[c.i] = BLACK
+            continue
+        col = cols[(k // 2) % len(cols)] if k % 2 == 0 else P["ray2"]
+        dk = abs(k - sweep)
+        v = 0.8 + 0.2 * max(0.0, 1.0 - dk / 1.5)
+        frame[c.i] = _scale(col, lvl * v)
+
+
 # ====================================================================== falling star
 FS_MAX_SPARKS = 160
 
@@ -404,8 +706,6 @@ def falling_star(t, ctx, P, st):
     if not idx:
         return frame
     sky = P["background"]
-    for i in idx:
-        frame[i] = sky
     if st.get("key") != _sig(ctx):
         st["key"] = _sig(ctx)
         st["allowed"] = set(idx)
@@ -422,15 +722,37 @@ def falling_star(t, ctx, P, st):
         lo = min(px[i].y for i in ground)
         st["floor"] = sorted((i for i in ground if px[i].y <= lo + 1.5), key=lambda i: px[i].x)
         st["stars"], st["sparks"], st["fall"], st["burst"] = [], [], None, None
-    allowed = st["allowed"]
+        # the zigzag is a honeycomb screen: there the star is drawn on the lattice, a bold
+        # streak down a straight 60-degree line over black
+        hc = hx.get(L, idx)
+        if hc is not None and len(hc.live()) < 12:
+            hc = None
+        st["hc"] = hc
+        st["peak"] = set(hc.live()) if hc else set()
+        st["off"] = st["allowed"] - st["peak"]
+    allowed, off, peak, hc = st["allowed"], st["off"], st["peak"], st["hc"]
+    for i in idx:
+        frame[i] = BLACK if i in peak else sky
     clock = ctx.clock
     seed = P["seed"]
+    if hc is not None and P["stars"] > 0:
+        # a few calm, dim stars on the Peak so the centrepiece is never just black between
+        # falls: single bulbs, well apart, breathing gently (the streak still stands out)
+        skey = (id(hc), seed, P["stars"])
+        if st.get("calm_key") != skey:
+            st["calm_key"], st["calm"] = skey, _calm_stars(hc, seed, min(1.0, P["stars"]))
+        for k, c in enumerate(st["calm"]):
+            if c.i is not None and c.i in hc.allowed:
+                w = 0.15 + 0.1 * (0.5 + 0.5 * math.sin(clock * 0.7 + k * 2.39))
+                frame[c.i] = _scale((0.8, 0.88, 1.0), w)
     if st.get("seed") != seed or "rng" not in st:
         st["seed"], st["rng"] = seed, random.Random(seed * 4421 + 17)
     rng = st["rng"]
     if P["stars"] > 0:
         rate = 0.05 * P["stars"]
         for i in idx:
+            if i in peak:
+                continue
             g, _ = glint(i, clock, rate, 0.6, 0.9, seed, 1)
             if g > 0.02:
                 _add(frame, i, (0.75, 0.85, 1.0), 0.4 * g)
@@ -452,28 +774,57 @@ def falling_star(t, ctx, P, st):
         cand = [i for i in floor if (px[i].x - ax) * side < 0 and abs(px[i].x - ax) < hw * 2.5 + 6] or floor
         e = cand[rng.randrange(len(cand))]
         ex, ey = px[e].x, px[e].y
-        # enter above, on the other side, aimed through (near) the middle of the zigzag
-        mx, my = ax + (rng.random() - 0.5) * hw * 0.5, ay + (rng.random() - 0.5) * 0.6
-        sy = st["top"]
-        f = (sy - my) / max(0.5, my - ey)
-        sx = mx + (mx - ex) * f
-        st["fall"] = {"t": 0.0, "p": [(sx, sy), (mx, my), (ex, ey)], "land": e}
+        diag = _fs_diagonal(hc, side, rng) if hc is not None else None
+        if diag:
+            # down the honeycomb: in above the top of the zigzag on the same line, down
+            # the 60-degree diagonal, then out across the roofline to the landing
+            (x1, y1), (x2, y2) = diag[0].pos, diag[-1].pos
+            dl = max(1e-6, math.hypot(x1 - x2, y1 - y2))
+            up = max(2.0, st["top"] - y1 + 1.0)
+            sx, sy = x1 + (x1 - x2) / dl * up, y1 + (y1 - y2) / dl * up
+            st["fall"] = {"t": 0.0, "p": [(sx, sy), (x1, y1), (x2, y2), (ex, ey)], "land": e,
+                          "diag": [c.key for c in diag], "dir": "sw" if side > 0 else "se"}
+        else:
+            # enter above, on the other side, aimed through (near) the middle of the zigzag
+            mx, my = ax + (rng.random() - 0.5) * hw * 0.5, ay + (rng.random() - 0.5) * 0.6
+            sy = st["top"]
+            f = (sy - my) / max(0.5, my - ey)
+            sx = mx + (mx - ex) * f
+            st["fall"] = {"t": 0.0, "p": [(sx, sy), (mx, my), (ex, ey)], "land": e}
     dt = _dt(ctx)
     fl = st["fall"]
     head = None
     if fl is not None:
-        (x0, y0), (x1, y1), (x2, y2) = fl["p"]
-        seg = math.hypot(x1 - x0, y1 - y0) + math.hypot(x2 - x1, y2 - y1)
-        fl["t"] += dt * P["speed"] / max(1.0, seg)
+        pts = fl["p"]
+        lin = "diag" in fl
+        if lin:
+            cum = [0.0]
+            for (ax_, ay_), (bx_, by_) in zip(pts, pts[1:]):
+                cum.append(cum[-1] + math.hypot(bx_ - ax_, by_ - ay_))
+            seg = max(1e-6, cum[-1])
+        else:
+            (x0, y0), (x1, y1), (x2, y2) = pts
+            seg = math.hypot(x1 - x0, y1 - y0) + math.hypot(x2 - x1, y2 - y1)
+        slow = 1.0
+        if lin and cum[1] <= fl["t"] * seg < cum[2]:
+            slow = 0.6                               # down the zigzag a little slower: it reads as a streak
+        fl["t"] += dt * P["speed"] * slow / max(1.0, seg)
         tail = P["tail"] / max(1.0, seg)
 
         def at(q):
             q = min(1.0, max(0.0, q))
+            if lin:
+                s = q * seg
+                for k in range(len(pts) - 1):
+                    if s <= cum[k + 1] or k == len(pts) - 2:
+                        f = (s - cum[k]) / max(1e-9, cum[k + 1] - cum[k])
+                        (ax_, ay_), (bx_, by_) = pts[k], pts[k + 1]
+                        return (ax_ + (bx_ - ax_) * f, ay_ + (by_ - ay_) * f)
             a, b = (1 - q) ** 2, 2 * q * (1 - q)
             return (a * x0 + b * x1 + q * q * x2, a * y0 + b * y1 + q * q * y2)
 
         q = fl["t"]
-        hc, tc = P["head"], P["tail_color"]
+        hc_, tc = P["head"], P["tail_color"]
         steps = max(4, int(P["tail"] * 2.5))
         glow = [BLACK] * n                           # the tail, brightest sample per bulb...
         for s in range(steps, -1, -1):
@@ -483,13 +834,15 @@ def falling_star(t, ctx, P, st):
                 continue
             x, y = at(qq)
             w = (1 - u) ** 1.3
-            c = lerp(hc, tc, min(1.0, u * 1.4))
+            c = lerp(hc_, tc, min(1.0, u * 1.4))
             geo.splat(glow, L, x, y, _scale(c, w * (1.0 if s == 0 else 0.85)), 1.3 if s == 0 else 1.1,
-                      allowed, mode="max")
+                      off, mode="max")
         for i in idx:                                # ...over the sky
             g = glow[i]
             if g[0] or g[1] or g[2]:
                 _over(frame, i, g)
+        if lin:
+            _fs_streak(frame, hc, fl, q * seg, cum[1], cum[2], P)
         if q <= 1:
             head = at(q)
             # shed sparks on the bulbs it passes
@@ -500,14 +853,15 @@ def falling_star(t, ctx, P, st):
                     break
                 x, y = at(q - rng.random() * tail * 0.7)
                 hit = geo.nearest(L, x, y, 1.2)
-                if hit is not None and hit in allowed:
+                if hit is not None and hit in off:
                     st["sparks"].append([hit, 0.0, 0.6 + 0.9 * rng.random(), rng.randrange(1 << 20)])
-        if q - tail > 1:
+        if q - tail > 1 and (not lin or _fs_streak_done(fl, q * seg, cum[1], cum[2], P)):
             st["fall"] = None
         if q >= 1 and not fl.get("landed"):
             fl["landed"] = True
             if P["burst"] > 0:
-                st["burst"] = {"x": x2, "y": y2, "age": 0.0}
+                ex_, ey_ = pts[-1]
+                st["burst"] = {"x": ex_, "y": ey_, "age": 0.0}
     for s in st["sparks"]:
         s[1] += dt
     st["sparks"] = [s for s in st["sparks"] if s[1] < s[2]]
@@ -534,8 +888,89 @@ def falling_star(t, ctx, P, st):
                 _over(frame, i, bc[int(hash01(i, seed, 9) * len(bc)) % len(bc)], fade * g)
     if head is not None:
         # a white-hot core in the star's own colour (white added onto an orange tail is pink)
-        geo.splat(frame, L, head[0], head[1], lerp(P["head"], (1.0, 1.0, 1.0), 0.4), 0.9, allowed, mode="max")
+        geo.splat(frame, L, head[0], head[1], lerp(P["head"], (1.0, 1.0, 1.0), 0.4), 0.9, off, mode="max")
     return _clamp(frame, idx)
+
+
+def _hex_dist(a, b) -> int:
+    """Steps between two cells on the honeycomb (doubled columns)."""
+    dr, dd = abs(a.r - b.r), abs(a.d - b.d)
+    return dr + max(0, (dd - dr) // 2)
+
+
+def _calm_stars(hc, seed: int, amount: float) -> list:
+    """Cells for the calm star field: about one in fourteen (fewer for a small amount), at least three
+    steps apart, chosen from every cell (dead ones too) so a dead bulb shifts nothing."""
+    rng = random.Random(seed * 7919 + 101)
+    cells = sorted(hc.cells, key=lambda c: c.key)
+    rng.shuffle(cells)
+    want = max(1, int(round(len(cells) / 14 * (0.6 + 0.4 * amount))))
+    out = []
+    for c in cells:
+        if len(out) >= want:
+            break
+        if all(_hex_dist(c, o) >= 3 for o in out):
+            out.append(c)
+    return out
+
+
+def _fs_diagonal(hc, side: int, rng) -> list:
+    """A straight 60-degree line of cells from the top row to the bottom row, leaning the
+    way the star falls (from the right going down-left when side > 0)."""
+    top = hc.top
+    dirn = "sw" if side > 0 else "se"
+    best = []
+    starts = sorted(hc.rows[top].cells, key=lambda c: -c.x * side)
+    if len(starts) > 2:                       # vary where it enters, never on the far half
+        starts = starts[:max(1, len(starts) // 2)]
+        rng.shuffle(starts)
+    for c in starts:
+        line = hc.walk(top, c.x, dirn, top)
+        if len(line) > len(best):
+            best = line
+        if len(line) == top + 1:
+            break
+    return best if len(best) >= 3 else []
+
+
+def _fs_len(P) -> float:
+    """How many cells of the streak glow behind the head on the zigzag."""
+    return max(2.0, P["tail"] * 0.4)
+
+
+def _fs_streak_done(fl, s: float, sa: float, sb: float, P) -> bool:
+    nd = len(fl["diag"])
+    h = (s - sa) / max(1e-6, sb - sa) * (nd - 1)
+    return h - (nd - 1) > _fs_len(P) + 1
+
+
+def _fs_streak(frame, hc, fl, s: float, sa: float, sb: float, P):
+    """The star on the honeycomb: a head two bulbs wide running down the diagonal, the
+    streak behind it fading from the star's colour into the tail colour."""
+    keys = fl["diag"]
+    nd = len(keys)
+    h = (s - sa) / max(1e-6, sb - sa) * (nd - 1)     # the head, in cells down the line
+    T = _fs_len(P)
+    side = "e" if fl["dir"] == "sw" else "w"
+    dd = hx.DIRECTIONS[side][0]
+    hot = lerp(P["head"], (1.0, 1.0, 1.0), 0.4)
+    for j, (r, d) in enumerate(keys):
+        bk = h - j                                     # cells behind the head (< 0: ahead)
+        if bk <= -1 or bk >= T:
+            continue
+        if bk < 0:
+            w, col = 1 + bk, hot                       # the leading edge glides in
+        elif bk < 1:
+            w, col = 1.0, lerp(hot, P["head"], bk)
+        else:
+            u = (bk - 1) / max(1e-6, T - 1)
+            w, col = (1 - u) ** 1.3, lerp(P["head"], P["tail_color"], min(1.0, u * 1.4))
+        for dk in (0, dd):
+            c = hc.cell(r, (d + dk) / 2)
+            if c is None or c.i is None or c.i not in hc.allowed:
+                continue
+            a = frame[c.i]
+            frame[c.i] = (max(a[0], col[0] * w), max(a[1], col[1] * w), max(a[2], col[2] * w))
 
 
 # ====================================================================== sleigh tour
@@ -648,6 +1083,82 @@ def _range(frame, route, total, u0, u1, col, gain, allowed, L):
                 geo.splat(frame, L, x, y, _scale(col, gain * min(1.0, hi - lo)), 1.2, allowed)
 
 
+# Santa's sleigh and the moon, drawn for the honeycomb (facing right; mirrored to fly left):
+# S sleigh, G gold runner, W Santa, g the reins, D a reindeer, N Rudolph's nose
+SLEIGH = _art("""
+S   W   S       D         D N
+ S S S S g g D D   g g D D
+G G G G G
+""")
+MOON = _art("""
+ M M
+M
+ M M
+""")
+
+
+def _mirror(sp: hx.Sprite) -> hx.Sprite:
+    w = sp.width
+    lines = {}
+    for k, j, ch in sp.cells:
+        lines.setdefault(j, {})[w - 1 - k] = ch
+    text = "\n".join("".join(lines.get(j, {}).get(k, " ") for k in range(w)).rstrip() or "."
+                     for j in range(sp.height - 1, -1, -1))
+    return _art(text)
+
+
+SLEIGH_LEFT = _mirror(SLEIGH)
+
+
+def _sleigh_peak(frame, hc, st, P, route, total, U, clock, seed, flying: bool):
+    """The Peak during the tour: a night sky with a crescent moon, and the sleigh flying
+    across it, Rudolph first, while the tour is on the top roofline (where it is along
+    that roofline is where it is across the Peak)."""
+    top = hc.top
+    moon_row = max(0, min(3, top - 2))
+    xm = -max(1.5, hc.rows[min(top, moon_row + 1)].half_width * 0.5)
+    pal = {"M": (1.0, 0.86, 0.5)}
+    for c, ch in hc.sprite_cells(MOON, moon_row, xm):
+        _hex_put(frame, hc, c, _scale(pal["M"], 0.75))
+    if P["stars"] > 0:                                   # a few calm stars round the moon
+        rate = 0.03 * P["stars"]
+        for c in hc.cells:
+            if c.i is None or c.i not in hc.allowed or c.r < 2 or max(frame[c.i]) > 0.02:
+                continue
+            g, _ = glint(_ckey(c), clock, rate, 0.8, 1.2, seed, 1)
+            if g > 0.02:
+                frame[c.i] = _scale((0.75, 0.85, 1.0), 0.45 * g)
+    if not flying or not route:
+        return
+    kind, pth, s = _where(route, total, U)
+    first = route[0][1][0]
+    if kind != "path" or pth is not first:
+        return
+    _, s0, s1 = route[0][1]
+    if abs(s1 - s0) < 1e-6:
+        return
+    right = first.point(s1)[0] >= first.point(s0)[0]      # the way it flies along the whole leg
+    f = min(1.0, max(0.0, (s - s0) / (s1 - s0)))
+    sp = SLEIGH if right else SLEIGH_LEFT
+    span = hc.rows[0].half_width + sp.width / 2 + 1.0
+    front = -span + 2 * span * f if right else span - 2 * span * f
+    centre = front - (sp.width / 4) if right else front + (sp.width / 4)
+    pal = {"S": P["sleigh_color"], "G": P["trim_color"], "W": (1.0, 0.92, 0.82),
+           "g": _scale(P["trim_color"], 0.35), "D": _scale(P["deer_color"], 0.8),
+           "N": _scale(P["nose_color"], 0.85 + 0.15 * math.sin(clock * 8.0))}
+    # between two lattice places: both, cross-faded, so it glides instead of hopping
+    base = math.floor(centre)
+    w = centre - base
+    for col, k in ((base, 1 - w), (base + 1, w)):
+        if k <= 0.01:
+            continue
+        for c, ch in hc.sprite_cells(sp, 0, col):
+            if c.i is None or c.i not in hc.allowed:
+                continue
+            a, b = frame[c.i], pal[ch]
+            frame[c.i] = (max(a[0], b[0] * k), max(a[1], b[1] * k), max(a[2], b[2] * k))
+
+
 @frame_effect("sleigh_tour", "Santa's sleigh: grand tour", [
     Param("speed", "number", 12, "Flying speed (bulbs/s)", 3, 40, 0.5),
     Param("pause", "number", 1.5, "Pause between laps (s)", 0, 60, 0.5,
@@ -680,16 +1191,22 @@ def sleigh_tour(t, ctx, P, st):
     if not idx:
         return frame
     sky = P["background"]
-    for i in idx:
-        frame[i] = sky
     if st.get("key") != _sig(ctx):
         st["key"] = _sig(ctx)
         st["allowed"] = set(idx)
+        # the zigzag (if the target has it) is a honeycomb screen: a night sky with the
+        # moon, and the sleigh drawn on it as it flies the top roofline
+        hc = hx.get(L, idx)
+        st["hc"] = hc if hc is not None and len(hc.live()) >= 12 else None
+        st["peak"] = set(st["hc"].live()) if st["hc"] else set()
+        st["off"] = st["allowed"] - st["peak"]
         st["route"] = _route(L, idx)
         st["total"] = st["route"][-1][3] if st["route"] else 0.0
         st["u"], st["wait"] = 0.0, 0.0
         st["sparks"], st["dust"] = [], []
-    allowed = st["allowed"]
+    allowed, peak, hc = st["off"], st["peak"], st["hc"]
+    for i in idx:
+        frame[i] = BLACK if i in peak else sky
     clock = ctx.clock
     seed = P["seed"]
     if st.get("seed") != seed or "rng" not in st:
@@ -698,11 +1215,15 @@ def sleigh_tour(t, ctx, P, st):
     if P["stars"] > 0:
         rate = 0.05 * P["stars"]
         for i in idx:
+            if i in peak:
+                continue
             g, _ = glint(i, clock, rate, 0.6, 0.9, seed, 1)
             if g > 0.02:
                 _add(frame, i, (0.75, 0.85, 1.0), 0.38 * g)
     route, total = st["route"], st["total"]
     if not route or total <= 0:
+        if hc is not None:
+            _sleigh_peak(frame, hc, st, P, route, total, 0.0, clock, seed, False)
         return _clamp(frame, idx)
     nd = int(P["reindeer"])
     gap = 2.0
@@ -767,6 +1288,9 @@ def sleigh_tour(t, ctx, P, st):
         u = p[4] / p[5]
         b = 0.75 * (1 - u) ** 1.2 * (0.5 + 0.5 * hash01(p[7], tw))
         geo.splat(frame, L, p[0], p[1], _scale(p[6], b), 1.0, allowed, mode="max")
+    if hc is not None:
+        _sleigh_peak(frame, hc, st, P, route, total, st["u"], clock, seed,
+                     st["wait"] <= 0 and (P["pause"] <= 0 or st["u"] <= total))
     if st["wait"] > 0:
         return _clamp(frame, idx)
     U = st["u"]
@@ -821,6 +1345,84 @@ def sleigh_tour(t, ctx, P, st):
 
 
 # ====================================================================== candlelight
+# candles for the honeycomb: W wax, C the flame's bright heart, F its orange edge, L / R
+# its tip, which leans slowly from one to the other (a waver, never a flicker)
+CANDLE = _art("""
+   L R
+  F C F
+   C C
+W W W W W
+ W W W W
+W W W W W
+""")
+CANDLE_TALL = _art("""
+   L R
+  F C F
+   C C
+W W W W W
+ W W W W
+W W W W W
+ W W W W
+W W W W W
+""")
+CANDLE_SMALL = _art("""
+ L R
+  C
+ W W
+W W W
+""")
+
+
+def _candle_plan(hc) -> dict:
+    """Per cell key: (part, candle) for the three candles, or ("glow", -) round a flame."""
+    plan = {}
+    side = round(hc.rows[0].half_width * 0.55)
+    big = CANDLE_TALL if hc.top >= 7 else CANDLE
+    for k, (sp, col) in enumerate(((big, 0.0), (CANDLE_SMALL, -side), (CANDLE_SMALL, side))):
+        for c, ch in hc.sprite_cells(sp, 0, col):
+            plan[c.key] = (ch, k)
+    flames = [c for c in hc.cells if plan.get(c.key, ("W",))[0] != "W"]
+    for c in flames:
+        for nb in hc.neighbours(c):
+            if nb.key not in plan:
+                plan[nb.key] = ("glow", plan[c.key][1])
+    return plan
+
+
+def _candles_hex(frame, hc, st, P, clock, seed, swell):
+    """The Peak as three candles in the dark: a tall one in the middle, a short one each
+    side, their flames breathing and leaning gently."""
+    key = ("candles", id(hc))
+    if st.get("candle_key") != key:
+        st["candle_key"], st["candle_plan"] = key, _candle_plan(hc)
+    plan = st["candle_plan"]
+    lv, wv = P["level"], P["waver"]
+    wax, deep = P["color"], P["color2"]
+    for c in hc.cells:
+        if c.i is None or c.i not in hc.allowed:
+            continue
+        part, k = plan.get(c.key, (None, 0))
+        lean = _smooth(wobble(k + 7, clock, 0.22, seed + 5) * 1.6 - 0.3)   # 0 left .. 1 right
+        breath = 1 - wv * 0.5 * wobble(k + 3, clock, 0.5, seed + 2)
+        if part is None:
+            col = BLACK
+        elif part == "W":
+            col = _scale(lerp(wax, (1.0, 0.8, 0.58), 0.55), min(1.0, lv * 0.95) * (0.92 + 0.08 * wobble(_ckey(c), clock, 0.3, seed)))
+        elif part == "C":
+            col = _scale((1.0, 0.8, 0.34), min(1.0, 0.75 + 0.35 * lv) * breath)
+        elif part == "F":
+            col = _scale(deep, min(1.0, 0.6 + 0.4 * lv) * breath)
+        elif part in ("L", "R"):
+            w = (1 - lean) if part == "L" else lean
+            col = _scale(lerp(deep, (1.0, 0.62, 0.2), 0.4), (0.25 + 0.75 * w) * breath)
+        else:
+            col = _scale(deep, 0.13 * breath)
+        e = swell.get(c.i, 0.0)
+        if e > 0 and part is not None:
+            col = lerp(col, _scale(P["swell_color"], min(1.0, lv * 1.3)), e * 0.5)
+        frame[c.i] = col
+
+
 @frame_effect("candlelight", "Candlelight", [
     Param("color", "color", "#ff9a3c", "Candle colour", help="a warm white made from red, some green, a little blue"),
     Param("color2", "color", "#ff6a10", "Deeper flame", help="the flames lean towards this as they waver"),
@@ -834,7 +1436,8 @@ def sleigh_tour(t, ctx, P, st):
     Param("seed", "int", 9, "Seed", 0, 9999, 1),
 ], "Every bulb a candle: a warm white built from RGB that breathes and wavers gently, each at its "
    "own pace, with a lantern glow at the gable apex and, every so often, a soft swell of golden "
-   "light that flows out from the apex across the whole house. A quiet, grateful moment.",
+   "light that flows out from the apex across the whole house. On the zigzag, three candles burn "
+   "in the dark, their flames leaning gently. A quiet, grateful moment.",
    group="Ambient")
 def candlelight(t, ctx, P, st):
     L = ctx.layout
@@ -852,6 +1455,11 @@ def candlelight(t, ctx, P, st):
         st["star"] = set(star)
         st["dist"] = {i: math.hypot(px[i].x - sx, px[i].y - sy) for i in idx}
         st["far"] = max(st["dist"].values()) if st["dist"] else 1.0
+        # the zigzag (if the target has it) shows candles in the dark; every other bulb
+        # keeps its candle glow
+        hc = hx.get(L, idx)
+        st["hc"] = hc if hc is not None and len(hc.live()) >= 12 else None
+        st["peak"] = set(st["hc"].live()) if st["hc"] else set()
     clock = ctx.clock
     c1, c2, lv, wv, seed = P["color"], P["color2"], P["level"], P["waver"], P["seed"]
     E = P["swell_every"]
@@ -860,6 +1468,7 @@ def candlelight(t, ctx, P, st):
         ph = clock % E
         front = ph * 22.0 - 3.0                       # bulbs/s outwards from the apex
     sw, star, dist = P["swell_color"], st["star"], st["dist"]
+    peak, swell = st["peak"], {}
     for i in idx:
         w = wobble(i, clock, 0.35, seed)
         w2 = wobble(i, clock, 0.9, seed + 1)
@@ -872,8 +1481,12 @@ def candlelight(t, ctx, P, st):
                 e = (1 - abs(d + 2) / 4) if d > -6 else 0.0
                 e = max(0.0, e) * (1 - min(1.0, dist[i] / (st["far"] + 1)) * 0.5)
                 c = lerp(c, _scale(sw, min(1.0, lv * 1.3)), _smooth(e) * 0.7)
+                if i in peak:
+                    swell[i] = _smooth(e)
         if i in star:
             g = 0.85 + 0.15 * math.sin(clock * TAU / 4.0)
             c = _scale(P["star"], g)
         frame[i] = c
+    if st["hc"] is not None:
+        _candles_hex(frame, st["hc"], st, P, clock, seed, swell)
     return _clamp(frame, idx)

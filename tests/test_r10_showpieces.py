@@ -160,11 +160,15 @@ class Pictures(unittest.TestCase):
         fr = render(d, self.L, 600)
         cv = showpieces.canvas(self.L, self.L.indices("Peak"))
         hot = lambda cols: [v for i, (u, v) in cv["uv"].items() if min(cols[i][0], cols[i][1]) > 0.6]  # noqa: E731
-        early, late = hot(fr[20]), hot(fr[-1])
+        # on the Peak's honeycomb the sunset repeats (sink * 1.05, a fade, a short dark gap):
+        # look at the end of the first one, then check the sun is back
+        end = int(20 * 1.05 * 20)
+        early, late = hot(fr[20]), hot(fr[end])
         self.assertTrue(early)
         self.assertGreater(sum(early) / len(early), sum(late) / len(late) if late else -1)
         top = [i for i, (u, v) in cv["uv"].items() if v > 0.9]
-        self.assertTrue(all(fr[-1][i][2] > fr[-1][i][1] for i in top), "violet at the top of the sky")
+        self.assertTrue(all(fr[end][i][2] > fr[end][i][1] for i in top), "violet at the top of the sky")
+        self.assertTrue(hot(fr[-1]), "the sun comes back")
 
     def test_smooth_enough_for_real_bulbs(self):
         """Ambient looks change gently from frame to frame at 20 fps (no flicker)."""
@@ -177,11 +181,21 @@ class Pictures(unittest.TestCase):
             self.assertLess(worst, 0.1, d)
 
     def test_candle_white_is_warm_and_never_too_dark(self):
+        """Every candle bulb round the house is warm and never too dark; on the zigzag the
+        candles burn in the dark (a picture, not a wash), every lit bulb still warm."""
         fr = render(preset("gratitude-candlelight"), self.L, 100)
         for cols in fr[::10]:
-            for r, g, b in cols:
+            for i, (r, g, b) in enumerate(cols):
+                if i in self.peak:
+                    if max(r, g, b) > 0.02:
+                        self.assertTrue(r >= g >= b, (r, g, b))
+                    continue
                 self.assertGreater(r, 0.25)
                 self.assertTrue(r >= g >= b, (r, g, b))
+            lit = [i for i in self.peak if max(cols[i]) > 0.3]
+            dark = [i for i in self.peak if max(cols[i]) < 0.02]
+            self.assertTrue(15 <= len(lit) <= 50, len(lit))
+            self.assertGreater(len(dark), len(self.peak) // 2, "dark space round the candles")
 
     def test_falling_star_crosses_the_runs(self):
         L = self.L
