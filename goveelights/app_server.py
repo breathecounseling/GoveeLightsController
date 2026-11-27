@@ -160,6 +160,114 @@ _FILE_TYPES = {".gif": "image/gif", ".mp4": "video/mp4", ".zip": "application/zi
                ".json": "application/json", ".rgb": "application/octet-stream"}
 
 
+
+def _guide_inline(text: str) -> str:
+    """Escape one line of Markdown, then turn `code`, **bold**, *italic* and links into tags.
+    Links to a heading in the guide stay links; links to other files just name the file."""
+    import html
+    import re
+    parts = re.split(r"(`[^`]*`)", text)
+    out = []
+    for part in parts:
+        if len(part) >= 2 and part.startswith("`") and part.endswith("`"):
+            out.append("<code>" + html.escape(part[1:-1]) + "</code>")
+            continue
+        t = html.escape(part, quote=False)
+        t = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", t)
+        t = re.sub(r"(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])", r"<i>\1</i>", t)
+
+        def link(m):
+            label, href = m.group(1), m.group(2)
+            if re.fullmatch(r"#[a-z0-9-]+", href):
+                return f'<a href="{href}">{label}</a>'
+            return f"{label} ({href})"
+        t = re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)", link, t)
+        out.append(t)
+    return "".join(out)
+
+
+def _guide_slug(title: str) -> str:
+    """GitHub's heading anchors: lower case, punctuation dropped, spaces to hyphens."""
+    import re
+    return re.sub(r"[^a-z0-9 -]", "", title.lower()).replace(" ", "-")
+
+
+def render_guide(md: str) -> str:
+    """A small Markdown subset to HTML for the /guide/remote page (headings, paragraphs whose
+    hard line breaks are joined, bullet and numbered lists, code blocks, and the comparison
+    table shown as one card per row so it fits a phone). Everything is escaped first."""
+    import html
+    import re
+    out: list = []
+    para: list = []        # [indent, css class, prefix, lines]
+    lines = md.splitlines()
+    i = 0
+
+    def flush():
+        if para:
+            indent, cls, prefix, words = para
+            style = f' style="margin-left:{indent * 0.45:.2f}em"' if indent else ""
+            out.append(f'<p{cls}{style}>{prefix}{_guide_inline(" ".join(words))}</p>')
+            para.clear()
+
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        indent = len(line) - len(line.lstrip(" "))
+        if not stripped:
+            flush()
+        elif stripped.startswith("```"):
+            flush()
+            code = []
+            i += 1
+            while i < len(lines) and not lines[i].strip().startswith("```"):
+                code.append(lines[i][indent:] if lines[i][:indent].strip() == "" else lines[i])
+                i += 1
+            style = f' style="margin-left:{indent * 0.45:.2f}em"' if indent else ""
+            out.append(f"<pre{style}><code>" + html.escape("\n".join(code)) + "</code></pre>")
+        elif m := re.match(r"(#{1,4})\s+(.*)", stripped):
+            flush()
+            n = len(m.group(1))
+            out.append(f'<h{n} id="{_guide_slug(m.group(2))}">{_guide_inline(m.group(2))}</h{n}>')
+        elif re.fullmatch(r"-{3,}", stripped):
+            flush()
+            out.append("<hr>")
+        elif stripped.startswith("|"):
+            flush()
+            rows = []
+            while i < len(lines) and lines[i].strip().startswith("|"):
+                cells = [c.strip() for c in lines[i].strip().strip("|").split("|")]
+                if not all(re.fullmatch(r":?-+:?", c) for c in cells if c):
+                    rows.append(cells)
+                i += 1
+            i -= 1
+            head, body = (rows[0], rows[1:]) if rows else ([], [])
+            for row in body:
+                bits = []
+                for k, c in enumerate(row):
+                    label = head[k] if k < len(head) else ""
+                    if not c:
+                        continue
+                    if not label:                          # the row's name column
+                        bits.append(f"<p><b>{_guide_inline(c.strip('*'))}</b></p>")
+                    else:
+                        sep = " " if label.endswith("?") else ": "
+                        bits.append(f"<p>{_guide_inline(label)}{sep}{_guide_inline(c)}</p>")
+                out.append('<div class="card">' + "".join(bits) + "</div>")
+        elif m := re.match(r"([*-]|\d+\.)\s+(.*)", stripped):
+            flush()
+            mark = m.group(1)
+            prefix = "&bull;&nbsp; " if mark in "*-" else f"{mark}&nbsp; "
+            para.extend([indent, ' class="li"', prefix, [m.group(2)]])
+        elif para:
+            para[3].append(stripped)
+        else:
+            para.extend([indent if indent >= 2 else 0, "", "", [stripped]])
+        i += 1
+    flush()
+    return "\n".join(out)
+
+
 def make_handler(ctl: Controller, on_quit, auth: Auth):
     studio_box: list = []
     studio_lock = threading.Lock()
@@ -387,18 +495,24 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
 
         @staticmethod
         def _guide_page() -> bytes:
-            """The remote-access guide as a plain, escaped page (no markdown renderer needed)."""
-            import html
+            """The remote-access guide (REMOTE.md) as a phone-friendly page."""
             try:
-                text = REMOTE_GUIDE.read_text(encoding="utf-8")
+                body = render_guide(REMOTE_GUIDE.read_text(encoding="utf-8"))
             except OSError:
-                text = "The guide is the file REMOTE.md in the project folder."
+                body = ("<p>This page shows the guide <code>REMOTE.md</code>, which comes in the app's project "
+                        "folder (the git checkout or the download from GitHub). It isn't included when the app "
+                        "is installed with pip: open <code>REMOTE.md</code> from the project folder instead.</p>")
             return ("<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
-                    "<meta name=theme-color content='#0b0e13'><title>Use it away from home</title>"
-                    "<body style='margin:0;background:#0b0e13;color:#e8edf3;font:15px/1.5 system-ui,sans-serif;padding:16px'>"
-                    "<p><a href='/' style='color:#60a5fa'>&larr; Back to the app</a></p>"
-                    "<pre style='white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.5 ui-monospace,Menlo,Consolas,monospace'>"
-                    + html.escape(text) + "</pre></body></html>").encode()
+                    "<meta name=theme-color content='#0b0e13'><title>Use it away from home</title><style>"
+                    "body{margin:0;background:#0b0e13;color:#e8edf3;font:15px/1.5 system-ui,sans-serif;padding:16px;"
+                    "max-width:46em;overflow-wrap:anywhere}a{color:#60a5fa}h1{font-size:1.4em}h2{font-size:1.2em;margin-top:1.6em}"
+                    "h3{font-size:1.05em;margin-top:1.3em}code{font:0.92em ui-monospace,Menlo,Consolas,monospace;"
+                    "background:#1a2030;padding:0 3px;border-radius:3px}pre{background:#1a2030;padding:8px;border-radius:6px;"
+                    "white-space:pre-wrap;overflow-wrap:anywhere}pre code{padding:0;background:none}"
+                    "p.li{margin:4px 0;padding-left:1.2em;text-indent:-1.2em}.card{border:1px solid #2a3245;border-radius:8px;"
+                    "padding:8px 10px;margin:8px 0}.card p{margin:2px 0}hr{border:0;border-top:1px solid #2a3245;margin:24px 0}"
+                    "</style><body><p><a href='/'>&larr; Back to the app</a></p>"
+                    + body + "</body></html>").encode()
 
         def _send_file(self, p: Path):
             """A finished clip, as a download (streamed: a PNG zip can be tens of MB)."""

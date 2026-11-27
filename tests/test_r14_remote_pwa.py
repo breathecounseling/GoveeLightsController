@@ -215,6 +215,65 @@ class Files(unittest.TestCase):
             self.assertIn(s, g)
 
 
+class GuidePage(unittest.TestCase):
+    """/guide/remote reads well on a phone: wrapped lines joined, the table as cards, no raw Markdown."""
+
+    def test_rendered(self):
+        h = app_server.render_guide((ROOT / "REMOTE.md").read_text(encoding="utf-8"))
+        self.assertIn("<h1", h)
+        self.assertIn('id="install-it-like-an-app"', h)                    # the guide's own anchor links work
+        self.assertIn('href="#install-it-like-an-app"', h)
+        self.assertIn("the lights get their colours", h)                    # a hard-wrapped line, joined
+        self.assertIn("&lt;secret&gt;", h)                                  # escaped, not markup
+        self.assertIn("<code>cloudflared.exe service install", h)          # code blocks stay as code
+        for raw in ("**", "|---", "| **A**", "```", "\n## "):
+            self.assertNotIn(raw, h, raw)
+        self.assertIn("Always-on box at home + Cloudflare Tunnel", h)
+        self.assertNotIn("<script", h)
+
+    def test_escapes_and_inline(self):
+        h = app_server.render_guide("# T\n\nA *b* and **c** `<x>` [d](#e) [f](docs/F.md) <img src=x>\nmore\n\n* one\n  two\n")
+        self.assertIn("<i>b</i>", h)
+        self.assertIn("<b>c</b>", h)
+        self.assertIn("<code>&lt;x&gt;</code>", h)
+        self.assertIn('<a href="#e">d</a>', h)
+        self.assertIn("f (docs/F.md)", h)                                   # other files: named, not linked
+        self.assertIn("&lt;img src=x&gt; more", h)
+        self.assertIn("one two", h)
+        self.assertNotIn("<img", h)
+
+    def test_missing_guide_says_where_it_is(self):
+        old = app_server.REMOTE_GUIDE
+        app_server.REMOTE_GUIDE = Path("/nonexistent/REMOTE.md")
+        try:
+            b = app_server.make_handler(types.SimpleNamespace(), lambda: None, None)._guide_page().decode()
+        finally:
+            app_server.REMOTE_GUIDE = old
+        self.assertIn("REMOTE.md", b)
+        self.assertIn("pip", b)
+
+
+class SetPasswordConfig(unittest.TestCase):
+    """`set-password` writes govee_auth.json next to the --config file, before or after the command."""
+
+    def run_cli(self, argv):
+        from unittest import mock
+        from goveelights import cli
+        env = {k: v for k, v in os.environ.items() if k != "GOVEE_AUTH"}
+        with mock.patch.dict(os.environ, env, clear=True), \
+                mock.patch("getpass.getpass", return_value="correct horse battery"), \
+                mock.patch("builtins.print"):
+            self.assertEqual(cli.main(argv), 0)
+
+    def test_config_before_and_after(self):
+        for form in (lambda c: ["--config", c, "set-password"], lambda c: ["set-password", "--config", c],
+                     lambda c: [f"--config={c}", "set-password"]):
+            with tempfile.TemporaryDirectory() as d:
+                cfg = str(Path(d) / "govee_config.json")
+                self.run_cli(form(cfg))
+                self.assertTrue(Auth(Path(d) / "govee_auth.json").password_set, form(cfg))
+
+
 @unittest.skipUnless(NODE_PATH, "node + Playwright not installed")
 class InstallOnAPhone(unittest.TestCase):
     def test_iphone(self):
@@ -246,6 +305,7 @@ class InstallOnAPhone(unittest.TestCase):
         self.assertLessEqual(o["away"]["scroll"], o["away"]["width"])
         self.assertEqual(o["guide"]["path"], "/guide/remote")
         self.assertIn("Control the lights from anywhere", o["guide"]["text"])
+        self.assertLessEqual(o["guide"]["overflow"], 0, o["guide"])          # fits the phone, no sideways scroll
 
 
 if __name__ == "__main__":

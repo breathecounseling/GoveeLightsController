@@ -50,7 +50,8 @@ const { chromium, devices } = require('playwright');
     await page.click('#awayCard a');
     await page.waitForLoadState('load');
     out.guide = { path: new URL(page.url()).pathname, title: await page.title(),
-                  text: (await page.textContent('pre')).slice(0, 200) };
+                  text: (await page.textContent('h1')).slice(0, 200),
+                  overflow: await page.evaluate(() => document.documentElement.scrollWidth - innerWidth) };
     await page.goto(url + 'login', { waitUntil: 'load' });
     out.login = await links();
     delete out.login.manifest;

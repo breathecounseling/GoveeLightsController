@@ -32,27 +32,40 @@ app's own password is a second lock behind that. Cloudflare's free plan covers a
 
 ### A1. Get the box running the app
 
-* **Raspberry Pi 5 or Pi 4** (2 GB is plenty): follow [docs/RASPBERRY_PI.md](docs/RASPBERRY_PI.md).
-  It ends with the app starting by itself at power-on.
+* **Raspberry Pi 5 or Pi 4** (2 GB is plenty): follow [docs/RASPBERRY_PI.md](docs/RASPBERRY_PI.md)
+  up to the step where the app starts by itself at power-on, then come back here for
+  steps A2–A8.
 * **A used mini PC with Windows** (or an old PC that stays home): install Python and the
   app as in the [README](README.md), then make it start at boot as in
   [docs/SERVICE.md](docs/SERVICE.md) (`python -m goveelights install-service` in an
-  administrator PowerShell). Set *Settings → System → Power → put my device to sleep* to
-  **Never** (the screen may turn off).
+  administrator PowerShell). Stop it from sleeping: on Windows 11, *Settings → System →
+  Power & battery → Screen, sleep & hibernate timeouts → When plugged in, put my device to
+  sleep after* → **Never** (the screen may still turn off).
 
 Either way, plug the box in near the router (a network cable is best, Wi-Fi is fine), then
-check it from your phone on home Wi-Fi: open `http://<the box's address>:8080`. If the
-lights respond, the box is ready. Copy your settings over if you set things up on another
-computer first: `govee_config.json` in the project folder holds them.
+check it from your phone on home Wi-Fi: open `http://<the box's address>:8080`, for example
+`http://lights.local:8080` (the name the Pi guide gives a Pi) or the Windows PC's name
+(`http://DESKTOP-1234:8080`). If neither works, find the box in your router's list of
+connected devices and use the number shown there (`http://192.168.x.x:8080`). If the lights
+respond, the box is ready.
+
+If you set things up on another computer first, copy these from that computer's project
+folder into the box's project folder (any that exist): `govee_config.json`,
+`govee_auth.json`, `govee_cloud.json` and the `user_presets` folder. The Pi guide's step 5
+shows how.
 
 ### A2. Set the app password (required)
 
 Remote requests are refused until a password exists. On home Wi-Fi open the app →
-**More → Security → Set password** (10+ characters), or on the box run:
+**More → Security → Set password** (10+ characters), or run this on the box, in the
+project folder:
 
 ```sh
-python -m goveelights set-password
+python3 -m goveelights set-password
 ```
+
+(On a Raspberry Pi or other Linux box the command is `python3`. On a Windows box type
+`python` instead of `python3`.)
 
 ### A3. Buy a domain on Cloudflare
 
@@ -89,8 +102,8 @@ Turn on auto-renew (it's on by default) so the address doesn't lapse next year.
    cloudflared.exe service install eyJhIjoi...long-token...
    ```
 
-   **Raspberry Pi / Linux box:** pick *Debian* and the box's type (`arm64` for a Pi 4/5
-   running 64-bit Raspberry Pi OS, `64-bit` for a mini PC). Copy the commands it shows into
+   **Raspberry Pi / Linux box:** pick *Debian* and the box's type (*arm64-bit* for a Pi 4/5
+   running 64-bit Raspberry Pi OS, *64-bit* for a mini PC). Copy the commands it shows into
    a terminal on the box. They add Cloudflare's software source and install it, and look
    like this (use the dashboard's version if it differs):
 
@@ -108,6 +121,12 @@ Turn on auto-renew (it's on by default) so the address doesn't lapse next year.
 
    The token is a password for the tunnel: don't share it or post it anywhere.
    `service install` makes `cloudflared` start by itself at every boot.
+
+   **If the tunnel used to run on another computer** (say, your laptop), remove it there:
+   in an administrator PowerShell on that computer run `cloudflared.exe service uninstall`
+   (Linux: `sudo cloudflared service uninstall`). Two connectors on the same tunnel share
+   the visits between them, so while the laptop still runs one, some visits go to the
+   laptop instead of the box. The dashboard's tunnel page lists every connector it sees.
 3. Back in the dashboard the connector shows **Connected** (or *Healthy*) within a minute.
    Click **Next**.
 4. **Public hostname** (newer dashboards: **Published application routes** → *Add*):
@@ -187,7 +206,9 @@ secure (https) page. Tailscale can give the box a secure address:
    tailscale serve --bg 8080
    ```
 
-   It prints an address like `https://raspberrypi.tail1234.ts.net`. Open that on your
+   The first time, it may print a link to turn on *Serve* for your Tailscale network: open
+   that link, approve, then run the same command again. It then prints an address like
+   `https://raspberrypi.tail1234.ts.net`. Open that on your
    phone (Tailscale on). It keeps working after a reboot. `tailscale serve reset` undoes it.
 
 Only your own Tailscale devices can open these addresses, so you can't share the visitor
@@ -210,12 +231,21 @@ stop.
   runs the app. If that computer is the laptop in your bag, there's nothing at home left
   to send the pictures.
 
-**What the lights do when the app goes away** (laptop leaves, goes to sleep, or the app
-quits): they stop moving and hold the last picture, then about **30–45 seconds** later
-the boxes give up on live mode and go back to whatever they were set to in the Govee
-app (their last scene or colour, or off). The schedule in this app (on at sunset, off at
-bedtime, holiday shows) doesn't run until the app is back. If you sometimes have to rely on
-a laptop, set an on/off timer in the Govee app as a backup.
+**What the lights do when the app goes away:**
+
+* **The laptop leaves the house, goes to sleep, or loses Wi-Fi:** the lights freeze on the
+  last picture and stay that way until the app comes back or you take them over in the
+  Govee app. (Tested on these lights: they did not give up on their own within 45 seconds
+  of the pictures stopping.) The schedule in this app (on at sunset, off at bedtime,
+  holiday shows) doesn't run until the app is back, so lights left on stay on.
+* **You quit the app normally** (*Stop*, or Ctrl+C in its window): it hands the lights back
+  to the Govee app right away.
+
+If you sometimes have to rely on a laptop, you can set an on/off timer in the Govee app as
+a backup, but **check it works first**: it hasn't been tested while the lights are frozen in
+live mode. One way to check: open the app's Diagnostics page (`python -m goveelights diag`),
+use the **5 Timeout** tab to stop the pictures, and see whether the Govee timer still
+switches the lights.
 
 That's why setup A puts the app on a small box that never leaves home.
 
@@ -229,6 +259,12 @@ opens full screen, without the browser's address bar.
 * **iPhone / iPad:** open the address in **Safari** → Share button → **Add to Home Screen**.
 * **Android:** open it in **Chrome** → ⋮ menu → **Install app** (or *Add to Home screen*).
 * **Windows / Mac:** in Chrome or Edge, the install icon at the right end of the address bar.
+
+If the home-screen app ever gets stuck on Cloudflare's login page (this can happen on an
+iPhone when the login runs out, because the home-screen app keeps its own sign-in, apart
+from Safari): open the address in Safari, sign in there, then reopen the app. If it is
+still stuck, delete the home-screen app and add it again. A longer *Session duration* in
+step A6 makes this rarer.
 
 Install it from the address you'll use away from home (`https://lights.yourdomain.com` or
 the Tailscale `https://…ts.net` one). An app installed from the home-only address
