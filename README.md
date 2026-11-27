@@ -200,8 +200,11 @@ zones after the presets' names (or adding aliases) makes them look as designed.
 ## Remote access
 
 On home Wi-Fi the app needs no login. To use it away from home, set a password
-(More → Security) and put it behind Cloudflare Tunnel + Access or Tailscale: see
+(More → Security) and put it behind Cloudflare Tunnel + Access or Tailscale, ideally on
+a small always-on box at home (a laptop you take with you can't run the show): see
 [REMOTE.md](REMOTE.md) and [SECURITY.md](SECURITY.md). Never forward a router port to it.
+The page installs like an app (Safari → Share → Add to Home Screen, or Chrome → Install
+app); the icons come from `tools/make_icons.py`.
 
 ## Troubleshooting
 

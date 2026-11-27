@@ -26,4 +26,4 @@ goveelights = "goveelights.cli:main"
 packages = ["goveelights", "goveelights.effects_ext"]
 
 [tool.setuptools.package-data]
-goveelights = ["web/*.html", "web/vendor/*.js"]
+goveelights = ["web/*.html", "web/*.webmanifest", "web/icons/*", "web/vendor/*.js"]

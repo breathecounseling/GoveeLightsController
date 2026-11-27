@@ -263,16 +263,39 @@ COMMANDS_HELP = """commands (python -m goveelights <command> --help for each):
 Options such as --config may come before or after the command."""
 
 
-def _leading_options_then_subcommand(argv) -> bool:
-    """`--config X layout import F`: options first, then one of SUBCOMMANDS."""
+def _first_command(argv):
+    """The first word after any leading options (`--config X layout import F` -> "layout")."""
     k = 0
     while k < len(argv) and argv[k].startswith("-"):
         k += 1 if argv[k] in ("-v", "--verbose") or "=" in argv[k] else 2
-    return k < len(argv) and argv[k] in SUBCOMMANDS
+    return argv[k] if k < len(argv) else None
+
+
+def _leading_options_then_subcommand(argv) -> bool:
+    """`--config X layout import F`: options first, then one of SUBCOMMANDS."""
+    return _first_command(argv) in SUBCOMMANDS
 
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and _first_command(argv) == "set-password":
+        import getpass
+        from pathlib import Path
+        from .auth import Auth
+        from .config import DEFAULT_PATH
+        cfg = DEFAULT_PATH                      # --config before or after the command, as for the others
+        for k, x in enumerate(argv):
+            if x == "--config" and k + 1 < len(argv):
+                cfg = argv[k + 1]
+            elif x.startswith("--config="):
+                cfg = x.split("=", 1)[1]
+        a = Auth(Path(os.environ.get("GOVEE_AUTH", Path(cfg).with_name("govee_auth.json"))))
+        pw = getpass.getpass("New password (10+ characters): ")
+        if pw != getpass.getpass("Again: "):
+            raise SystemExit("Passwords don't match.")
+        a.set_password(pw)
+        print(f"Password set ({a.path}). Remote access is now allowed with this password; all devices were signed out.")
+        return 0
     if not argv or (argv[0].startswith("-") and not _leading_options_then_subcommand(argv)) or argv[0] == "serve":
         from .app_server import main as app_main
         return app_main(argv[1:] if argv and argv[0] == "serve" else argv)
@@ -282,18 +305,6 @@ def main(argv=None):
     if argv[0] == "diag":
         from .diag_server import main as diag_main
         return diag_main(argv[1:])
-    if argv[0] == "set-password":
-        import getpass
-        from pathlib import Path
-        from .auth import Auth
-        from .config import DEFAULT_PATH
-        a = Auth(Path(os.environ.get("GOVEE_AUTH", Path(DEFAULT_PATH).with_name("govee_auth.json"))))
-        pw = getpass.getpass("New password (10+ characters): ")
-        if pw != getpass.getpass("Again: "):
-            raise SystemExit("Passwords don't match.")
-        a.set_password(pw)
-        print(f"Password set ({a.path}). Remote access is now allowed with this password; all devices were signed out.")
-        return 0
     if argv[0] in ("install-service", "uninstall-service"):
         return cmd_service(uninstall=argv[0] == "uninstall-service")
     if argv[0] in ("install-startup", "uninstall-startup"):

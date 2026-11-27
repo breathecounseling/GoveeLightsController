@@ -6,6 +6,14 @@
 <meta name="theme-color" content="#0b0e13">
 <meta name="color-scheme" content="dark">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Lights">
+<meta name="mobile-web-app-capable" content="yes">
+<!-- installable app: the manifest is fetched with the login cookies (crossorigin) so it also
+     works behind Cloudflare Access; no service worker on purpose (see REMOTE.md) -->
+<link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials">
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="icon" href="/icons/icon-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <title>House Lights</title>
 <style>
 :root{color-scheme:dark;--bg:#0b0e13;--p1:#141920;--p2:#1b212b;--p3:#232b37;--line:#2c3542;--text:#e8edf3;--dim:#8d98a7;--acc:#4ade80;--accbg:#1f7a43;--blue:#60a5fa;--mod:#c084fc;--warn:#fbbf24;--bad:#f87171;--r:14px}
@@ -522,6 +530,10 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
     <h2>Security</h2>
     <div id="secStatus" class="help"></div>
     <div id="secForm"></div>
+  </div>
+  <div class="card" id="awayCard">
+    <h2>Use it away from home</h2>
+    <div id="awayStatus" class="help"></div>
   </div>
   <div class="card">
     <h2>Output</h2>
@@ -2770,6 +2782,7 @@ function ctDraw(){
 // ------------------------------------------------------------- security
 async function security(){
   const a = await get('auth').catch(()=>null); if (!a) return;
+  away(a);
   $('secStatus').innerHTML = (a.password_set ? 'A password is set. Remote access is <b>allowed</b> with it.' : 'No password yet: remote access is <b>switched off</b>.')
     + '<br>' + (a.trusted ? 'You are on the home network.' : a.logged_in ? 'You are signed in remotely.' : '')
     + (a.sessions ? ` Signed-in devices: ${a.sessions}.` : '');
@@ -2779,13 +2792,31 @@ async function security(){
     <button class="pri" id="pwSet" style="width:100%">${a.password_set?'Change password':'Set password'}</button>
     <label class="row" style="margin-top:12px"><input type="checkbox" id="lanOk" ${a.lan_without_login?'checked':''}> <span>No login needed on home Wi-Fi</span></label>
     <div class="row" style="margin-top:10px">${a.sessions?'<button class="sm" id="revoke">Sign out all devices</button>':''}${a.logged_in?'<button class="sm" id="logout">Sign out</button>':''}</div>
-    <p class="help">To reach this page from anywhere at your own subdomain, see REMOTE.md in the project folder (Cloudflare Tunnel + Access).</p></div>`);
+    </div>`);
   f.querySelector('#pwSet').onclick = async () => { const r = await post('auth/password', {current: f.querySelector('#pwCur')?.value || '', new: f.querySelector('#pwNew').value});
     if (r) { toast('Password saved'); security() } };
   f.querySelector('#lanOk').onchange = e => post('auth/lan', {on: e.target.checked}).then(security);
   const rv = f.querySelector('#revoke'); if (rv) rv.onclick = () => post('auth/revoke').then(() => { toast('All devices signed out'); security() });
   const lo = f.querySelector('#logout'); if (lo) lo.onclick = () => post('logout').then(() => location.href = '/login');
   $('secForm').innerHTML = ''; $('secForm').appendChild(f);
+}
+const AWAY = {           // how this phone reached the app (auth.access_mode on the server)
+  this_pc: 'You are on the computer that runs the lights.',
+  home: 'You are on <b>home Wi-Fi</b>. This address only works at home.',
+  tunnel: 'You came in <b>through your Cloudflare tunnel</b> (your own web address). It works from anywhere.',
+  tailscale: 'You came in <b>through Tailscale</b>. It works anywhere your phone has Tailscale switched on.',
+  proxy: 'You came in through a proxy.',
+  internet: 'You came in <b>straight from the internet</b> (an open router port). A tunnel is safer: see the guide.'};
+function away(a){
+  const box = $('awayStatus'); if (!box) return;
+  const https = location.protocol === 'https:';
+  const app = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  box.innerHTML = (AWAY[a && a.access] || '') + '<br>'
+    + (https ? 'This page is secure (https), so <b>Listen</b> (the microphone) works.' : window.isSecureContext ? '<b>Listen</b> (the microphone) works on this computer.'
+              : 'This page is plain http, so <b>Listen</b> (the microphone) can’t work here. Your tunnel or Tailscale https address fixes that.')
+    + '<br>' + (app ? 'Opened as an installed app.'
+                    : 'Make it an app: iPhone Safari → Share → <b>Add to Home Screen</b>. Android Chrome → ⋮ → <b>Install app</b>.')
+    + '<br><a href="/guide/remote" style="display:inline-block;padding:10px 0">Guide: control the lights from anywhere</a>';
 }
 
 // ------------------------------------------------------------- first-run setup

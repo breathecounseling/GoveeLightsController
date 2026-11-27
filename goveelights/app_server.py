@@ -40,6 +40,22 @@ CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 
        "img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 PUBLIC = {"/login", "/api/login", "/api/auth"}
 
+# The installable-app files (manifest + icons): served to anyone, with no login, because they
+# hold nothing private (a name, two colours and a picture of a house) and the phone fetches
+# them on its own, sometimes without the session cookie. They are cached for a while; the
+# pages and every /api reply stay no-store, so an installed app never shows a stale screen.
+STATIC = {
+    "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json", 3600),
+    "/icons/icon.svg": ("icons/icon.svg", "image/svg+xml", 604800),
+    "/icons/icon-192.png": ("icons/icon-192.png", "image/png", 604800),
+    "/icons/icon-512.png": ("icons/icon-512.png", "image/png", 604800),
+    "/icons/apple-touch-icon.png": ("icons/apple-touch-icon.png", "image/png", 604800),
+    "/apple-touch-icon.png": ("icons/apple-touch-icon.png", "image/png", 604800),   # iOS asks here too
+    "/apple-touch-icon-precomposed.png": ("icons/apple-touch-icon.png", "image/png", 604800),
+    "/favicon.ico": ("icons/icon-192.png", "image/png", 604800),        # browsers ask without a link
+}
+REMOTE_GUIDE = Path(__file__).resolve().parent.parent / "REMOTE.md"
+
 
 def _check_hm(v, what: str):
     if not isinstance(v, str):
@@ -144,6 +160,114 @@ _FILE_TYPES = {".gif": "image/gif", ".mp4": "video/mp4", ".zip": "application/zi
                ".json": "application/json", ".rgb": "application/octet-stream"}
 
 
+
+def _guide_inline(text: str) -> str:
+    """Escape one line of Markdown, then turn `code`, **bold**, *italic* and links into tags.
+    Links to a heading in the guide stay links; links to other files just name the file."""
+    import html
+    import re
+    parts = re.split(r"(`[^`]*`)", text)
+    out = []
+    for part in parts:
+        if len(part) >= 2 and part.startswith("`") and part.endswith("`"):
+            out.append("<code>" + html.escape(part[1:-1]) + "</code>")
+            continue
+        t = html.escape(part, quote=False)
+        t = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", t)
+        t = re.sub(r"(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])", r"<i>\1</i>", t)
+
+        def link(m):
+            label, href = m.group(1), m.group(2)
+            if re.fullmatch(r"#[a-z0-9-]+", href):
+                return f'<a href="{href}">{label}</a>'
+            return f"{label} ({href})"
+        t = re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)", link, t)
+        out.append(t)
+    return "".join(out)
+
+
+def _guide_slug(title: str) -> str:
+    """GitHub's heading anchors: lower case, punctuation dropped, spaces to hyphens."""
+    import re
+    return re.sub(r"[^a-z0-9 -]", "", title.lower()).replace(" ", "-")
+
+
+def render_guide(md: str) -> str:
+    """A small Markdown subset to HTML for the /guide/remote page (headings, paragraphs whose
+    hard line breaks are joined, bullet and numbered lists, code blocks, and the comparison
+    table shown as one card per row so it fits a phone). Everything is escaped first."""
+    import html
+    import re
+    out: list = []
+    para: list = []        # [indent, css class, prefix, lines]
+    lines = md.splitlines()
+    i = 0
+
+    def flush():
+        if para:
+            indent, cls, prefix, words = para
+            style = f' style="margin-left:{indent * 0.45:.2f}em"' if indent else ""
+            out.append(f'<p{cls}{style}>{prefix}{_guide_inline(" ".join(words))}</p>')
+            para.clear()
+
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        indent = len(line) - len(line.lstrip(" "))
+        if not stripped:
+            flush()
+        elif stripped.startswith("```"):
+            flush()
+            code = []
+            i += 1
+            while i < len(lines) and not lines[i].strip().startswith("```"):
+                code.append(lines[i][indent:] if lines[i][:indent].strip() == "" else lines[i])
+                i += 1
+            style = f' style="margin-left:{indent * 0.45:.2f}em"' if indent else ""
+            out.append(f"<pre{style}><code>" + html.escape("\n".join(code)) + "</code></pre>")
+        elif m := re.match(r"(#{1,4})\s+(.*)", stripped):
+            flush()
+            n = len(m.group(1))
+            out.append(f'<h{n} id="{_guide_slug(m.group(2))}">{_guide_inline(m.group(2))}</h{n}>')
+        elif re.fullmatch(r"-{3,}", stripped):
+            flush()
+            out.append("<hr>")
+        elif stripped.startswith("|"):
+            flush()
+            rows = []
+            while i < len(lines) and lines[i].strip().startswith("|"):
+                cells = [c.strip() for c in lines[i].strip().strip("|").split("|")]
+                if not all(re.fullmatch(r":?-+:?", c) for c in cells if c):
+                    rows.append(cells)
+                i += 1
+            i -= 1
+            head, body = (rows[0], rows[1:]) if rows else ([], [])
+            for row in body:
+                bits = []
+                for k, c in enumerate(row):
+                    label = head[k] if k < len(head) else ""
+                    if not c:
+                        continue
+                    if not label:                          # the row's name column
+                        bits.append(f"<p><b>{_guide_inline(c.strip('*'))}</b></p>")
+                    else:
+                        sep = " " if label.endswith("?") else ": "
+                        bits.append(f"<p>{_guide_inline(label)}{sep}{_guide_inline(c)}</p>")
+                out.append('<div class="card">' + "".join(bits) + "</div>")
+        elif m := re.match(r"([*-]|\d+\.)\s+(.*)", stripped):
+            flush()
+            mark = m.group(1)
+            prefix = "&bull;&nbsp; " if mark in "*-" else f"{mark}&nbsp; "
+            para.extend([indent, ' class="li"', prefix, [m.group(2)]])
+        elif para:
+            para[3].append(stripped)
+        else:
+            para.extend([indent if indent >= 2 else 0, "", "", [stripped]])
+        i += 1
+    flush()
+    return "\n".join(out)
+
+
 def make_handler(ctl: Controller, on_quit, auth: Auth):
     studio_box: list = []
     studio_lock = threading.Lock()
@@ -170,10 +294,10 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
             self.send_header("Referrer-Policy", "no-referrer")
             self.send_header("Content-Security-Policy", CSP)
 
-        def _send(self, code, body: bytes, ctype="application/json", headers=None):
+        def _send(self, code, body: bytes, ctype="application/json", headers=None, cache="no-store"):
             self.send_response(code)
             self.send_header("Content-Type", ctype)
-            self.send_header("Cache-Control", "no-store")
+            self.send_header("Cache-Control", cache)
             self.send_header("Content-Length", str(len(body)))
             self._sec_headers()
             for k, v in (headers or {}).items():
@@ -204,6 +328,9 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                 return self._send(200, (WEB / "visit.html").read_bytes(), "text/html; charset=utf-8")
             if action == "state":
                 return self._json(ctl.visitor_state(auth.rate_key(auth.client_ip(self))))
+            if action == "icon":                      # home-screen picture for the visitor page
+                return self._send(200, (WEB / "icons" / "apple-touch-icon.png").read_bytes(), "image/png",
+                                  cache="public, max-age=604800")
             if action == "frame":                     # the little live view of the house
                 return self._json({"hex": ctl.visitor_frame()})
             if action == "layout":
@@ -265,8 +392,13 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                 except Exception:                                      # noqa: BLE001
                     log.exception("visitor page request failed")      # details stay in the log
                     return self._json({"ok": False, "error": "unavailable"}, 400)
+            if path in STATIC:                        # the app's manifest and icons (no login, see STATIC)
+                name, ctype, age = STATIC[path]
+                return self._send(200, (WEB / name).read_bytes(), ctype, cache=f"public, max-age={age}")
             if not self._guard(path):
                 return
+            if path == "/guide/remote":               # REMOTE.md, readable on the phone (More -> Security)
+                return self._send(200, self._guide_page(), "text/html; charset=utf-8")
             if path == "/static/qrcode.js":
                 return self._send(200, (WEB / "vendor" / "qrcode.js").read_bytes(), "text/javascript")
             if path == "/login":
@@ -363,6 +495,27 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                 log.exception("GET %s failed", path)
                 return self._json({"ok": False, "error": "internal error (see the log)"}, 500)
             self._json({"error": "not found"}, 404)
+
+        @staticmethod
+        def _guide_page() -> bytes:
+            """The remote-access guide (REMOTE.md) as a phone-friendly page."""
+            try:
+                body = render_guide(REMOTE_GUIDE.read_text(encoding="utf-8"))
+            except OSError:
+                body = ("<p>This page shows the guide <code>REMOTE.md</code>, which comes in the app's project "
+                        "folder (the git checkout or the download from GitHub). It isn't included when the app "
+                        "is installed with pip: open <code>REMOTE.md</code> from the project folder instead.</p>")
+            return ("<!doctype html><html lang=en><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
+                    "<meta name=theme-color content='#0b0e13'><title>Use it away from home</title><style>"
+                    "body{margin:0;background:#0b0e13;color:#e8edf3;font:15px/1.5 system-ui,sans-serif;padding:16px;"
+                    "max-width:46em;overflow-wrap:anywhere}a{color:#60a5fa}h1{font-size:1.4em}h2{font-size:1.2em;margin-top:1.6em}"
+                    "h3{font-size:1.05em;margin-top:1.3em}code{font:0.92em ui-monospace,Menlo,Consolas,monospace;"
+                    "background:#1a2030;padding:0 3px;border-radius:3px}pre{background:#1a2030;padding:8px;border-radius:6px;"
+                    "white-space:pre-wrap;overflow-wrap:anywhere}pre code{padding:0;background:none}"
+                    "p.li{margin:4px 0;padding-left:1.2em;text-indent:-1.2em}.card{border:1px solid #2a3245;border-radius:8px;"
+                    "padding:8px 10px;margin:8px 0}.card p{margin:2px 0}hr{border:0;border-top:1px solid #2a3245;margin:24px 0}"
+                    "</style><body><p><a href='/'>&larr; Back to the app</a></p>"
+                    + body + "</body></html>").encode()
 
         def _send_file(self, p: Path):
             """A finished clip, as a download (streamed: a PNG zip can be tens of MB)."""
