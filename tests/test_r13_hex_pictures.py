@@ -122,6 +122,28 @@ class Flag(unittest.TestCase):
                         self.assertTrue(c[2] > 0.6 and c[0] < 0.3, (s.key, n.key, c))
 
 
+    def test_no_star_touches_a_white_stripe(self):
+        """A star on the canton's right edge joined the white stripe beside it as a white
+        bar; every star must have blue (or the edge of the screen) on every side."""
+        for tag, L in layouts():
+            idx = L.indices("Peak")
+            hc = hx.get(L, idx)
+            for P in ({"wave": 0, "twinkle": 0, "intro": 0, "canton_edge": 0.62}, {"intro": 0}):
+                R = EFFECTS["flag"].resolve(P)
+                ex = hc.rows[0].x0 + R["canton_edge"] * (hc.rows[0].x1 - hc.rows[0].x0)
+                crow = hc.peak_rows - R["canton_rows"]
+                st = {}
+                for k in range(0, 200, 5):
+                    cols = call("flag", L, idx, P, st, clock=k * 0.05)
+                    white = {c.i for c in hc.cells if c.i is not None and min(cols[c.i]) > 0.6}
+                    stars = [c for c in hc.cells if c.i in white and c.r >= crow and c.x <= ex + 1e-6]
+                    if "wave" in P:                       # a still flag: the full star field
+                        self.assertGreaterEqual(len(stars), 6)
+                    for c in stars:                      # stripe neighbours count too
+                        ns_ = [n for n in hc.neighbours(c) if n.i is not None]
+                        self.assertFalse([n.key for n in ns_ if n.i in white], (tag, P, c.key))
+
+
 class Advent(unittest.TestCase):
     def test_doors_stand_apart(self):
         for _, L in layouts():
@@ -175,6 +197,72 @@ class GiftWrap(unittest.TestCase):
             self.assertEqual(sorted({len([i for i in rib if hc.of(i).r == r]) for r in range(4)}), [2, 3])
             for i in rib:
                 self.assertGreater(cols[i][1], 0.4)                       # gold ribbon
+
+
+class Pumpkin(unittest.TestCase):
+    def test_face_is_eyes_nose_and_grin_apart(self):
+        """The carved holes (ember glow) must form separate features: two eyes, a nose and
+        the two halves of a toothed grin, none more than 2 rows tall (eyes that ran into the
+        mouth read as two dark gashes)."""
+        for tag, L in layouts():
+            hc = hx.get(L, L.indices("Peak"))
+            sc = Scene.from_dict(preset("halloween-pumpkin"))
+            for k in range(41):
+                cols = sc.render(k * 0.05, L)
+            holes = {c.i for c in hc.cells if c.i is not None and 0.15 < max(cols[c.i]) < 0.4
+                     and cols[c.i][0] >= max(cols[c.i])}
+            groups, seen = [], set()
+            for i in holes:
+                if i in seen:
+                    continue
+                g, todo = [], [i]
+                seen.add(i)
+                while todo:
+                    j = todo.pop()
+                    g.append(j)
+                    for n in hc.neighbours(hc.of(j)):
+                        if n.i in holes and n.i not in seen:
+                            seen.add(n.i)
+                            todo.append(n.i)
+                groups.append(g)
+            self.assertEqual(len(groups), 5, tag)
+            for g in groups:
+                rows = {hc.of(i).r for i in g}
+                self.assertLessEqual(max(rows) - min(rows), 1, (tag, sorted(rows)))
+
+
+class Haunted(unittest.TestCase):
+    def test_ghosts_never_touch(self):
+        """Ghosts drift spaced by the hex sprite's width; with the old square bitmap's
+        width lattice snapping closed the gap and they merged into one white blob."""
+        L = layout_with({}, PATH)
+        hc = hx.get(L, L.indices("Peak"))
+        stamps, real = [], O._hex_stamp
+
+        def spy(hc_, sp, bottom, x, acc, k=1.0):
+            mine = {}
+            real(hc_, sp, bottom, x, mine, k)
+            stamps.append({i for i, a in mine.items() if a[0] + a[1] > 0.5})
+            for i, a in mine.items():
+                b = acc.setdefault(i, [0.0, 0.0])
+                b[0] += a[0]
+                b[1] += a[1]
+        O._hex_stamp = spy
+        try:
+            sc = Scene.from_dict(preset("halloween-haunted"))
+            touching, most = 0, 0
+            for k in range(1200):
+                stamps.clear()
+                sc.render(k * 0.05, L)
+                most = max(most, len(stamps))
+                near = [set().union(*({n.i for n in hc.neighbours(hc.of(i)) if n.i is not None} | {i}
+                                      for i in s)) if s else set() for s in stamps]
+                if any(near[a] & stamps[b] for a in range(len(stamps)) for b in range(a + 1, len(stamps))):
+                    touching += 1
+        finally:
+            O._hex_stamp = real
+        self.assertEqual(touching, 0)
+        self.assertGreaterEqual(most, 3)
 
 
 class Presets(unittest.TestCase):

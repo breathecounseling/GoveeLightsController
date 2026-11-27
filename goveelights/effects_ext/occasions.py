@@ -307,7 +307,10 @@ FLOATER_PARAMS = [
 def _spawn(F: dict, P: dict, st: dict, rng: random.Random, clock: float):
     sprites = st["sprites"]
     bmp = SPRITES[P["shape"]]
-    h, w = max(len(bmp), _hex_sprite(P["shape"]).height), len(bmp[0])
+    # w must be the hex sprite's width in bulb pitches (it is wider than the square bitmap):
+    # with the bitmap's 5 the spacing rule left ~1 bulb of gap and lattice snapping closed it
+    h = max(len(bmp), _hex_sprite(P["shape"]).height)
+    w = max(len(bmp[0]), (_hex_sprite(P["shape"]).width + 1) // 2)
     n = F["n"]
     ncol = len(P["colors"]) or 1
     k = st.get("ci", rng.randrange(ncol))
@@ -611,7 +614,9 @@ def flag(t, ctx, P, st):
         for rw in hc.rows:
             for c in rw.cells:
                 if c.i is not None and rw.r >= crow and c.x <= ex + 1e-6:
-                    is_star[c.i] = (c.q - c.r) % 3 == 1
+                    # a star needs canton blue on every side: one on the canton's right edge
+                    # would touch the white stripe beside it and read as a white bar
+                    is_star[c.i] = (c.q - c.r) % 3 == 1 and c.x + 1 <= ex + 1e-6
     for r, row in enumerate(rows):
         base = cols[r % len(cols)]
         for k, i in enumerate(row):
