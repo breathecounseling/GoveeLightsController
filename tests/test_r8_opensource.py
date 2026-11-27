@@ -316,7 +316,7 @@ GOLDEN = {
     "peak-fire": "452a63d53f9893ec", "plasma-party": "171cb64225791e3d", "porch-fireworks": "ad9a571d6fa334be",
     "rainbow-roofline": "8c62fb6176b74e04", "roller-coaster": "15c050995c56f2b6", "santas-sleigh": "f805c8ec7fbe9e43",
     "scanner-trails": "e3e9d3c9829f1cfa", "sequin-wave": "15d1bd30b8ddacb3", "snow-piling-up": "52652126f5b507d7",
-    "snowy-evening": "333df0b24dd242f7", "sparkler-tree": "1f0c0f1921049fee", "spooky-tree": "1b3869a350046e3f",
+    "snowy-evening": "333df0b24dd242f7", "sparkler-tree": "6f141917efe5c329", "spooky-tree": "1b3869a350046e3f",
     "spring-garden": "0846728047a61b59", "st-patricks": "73dca68fed9217b8", "starry-night": "483540bdeb7b3f4a",
     "starry-night-sleigh": "bd044c94a3adc6e1", "summer-evening": "4575d9be84675000", "summer-fireflies": "92dfe1ab07328710",
     "text-go-broncos": "89ea5df916923cce", "text-happy-new-year": "766614aa409ffc9d", "text-merry-christmas": "9af456bed0e80bca",

@@ -245,7 +245,7 @@ TIP_GOLDEN = {
     "plasma-party": "e5de57956ccac482", "porch-fireworks": "f96ba105277205aa", "rainbow-roofline": "98041943a35979a5",
     "roller-coaster": "e41e629d412706fb", "santas-sleigh": "dd17a10bf7c33cba", "scanner-trails": "e332fd04aedcc631",
     "sequin-wave": "d54313ad9d577eef", "sleigh-grand-tour": "f9150ffd5ea89da4", "snow-piling-up": "f661b8653667bbc4",
-    "snowy-evening": "ba2267fdd9303da1", "sparkler-tree": "60d32103178eec9a", "spooky-tree": "9c5b17296d2ee4db",
+    "snowy-evening": "ba2267fdd9303da1", "sparkler-tree": "2a74b898a3911656", "spooky-tree": "9c5b17296d2ee4db",
     "spring-garden": "dafde51e69ffae29", "st-patricks": "3a70dda848208231", "starry-night": "5aeffa5a346fc93e",
     "starry-night-sleigh": "64c07353762dfa83", "summer-evening": "789df580428842c6", "summer-fireflies": "c12c960aadfe9c5b",
     "text-give-thanks": "f0ac6a9aebce6e72", "text-go-broncos": "91a8b8fb62e73515", "text-happy-new-year": "1862872b5c5bdb24",
