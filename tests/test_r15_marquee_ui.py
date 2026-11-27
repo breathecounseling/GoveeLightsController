@@ -3,7 +3,7 @@ against a real controller driving fake boxes (tools/fake_govee.py --counts 93,10
 Eaves, Peak, Accent and a fourth box not yet in the show). The owner, round 3: "they all
 just flash the letter without a marquee". Words on the Peak in Marquee scrolls on the
 house, Save as preset keeps the mode, the preset's Edit screen has a Single letter /
-Marquee switch at the top, and the built-in "(scrolling)" presets scroll on the house.
+Marquee switch at the top, and the built-in word presets scroll on the house.
 Skipped when node or Playwright is missing, or not on Linux (the fakes bind 127.0.0.N).
 MARQUEE_SHOTS=<dir> saves the card and the editor switch."""
 import json
@@ -85,12 +85,15 @@ class MarqueeInTheBrowser(unittest.TestCase):
         self.assertIn("Stop on each letter (s)", out["edit1"]["labels"])
         self.assertNotIn("Letter time (s)", out["edit1"]["labels"])
         self.assertNotIn("Show it as", out["edit1"]["labels"])           # the switch, not a chip row
-        # every built-in word preset has its scrolling twin, and it scrolls on the house
+        # every built-in word preset scrolls on the house; its one-big-letter twin stays
         ids = {s.split("|")[0]: s.split("|")[1] for s in out["builtin"]}
         for w in ("give-thanks", "go-broncos", "happy-new-year", "merry-christmas", "scoreboard", "touchdown"):
-            self.assertIn(f"text-{w}-scroll", ids)
-        self.assertEqual(ids["text-go-broncos-scroll"], "Go Broncos (scrolling)")
-        self.assertEqual(out["playing"], "Go Broncos (scrolling)")
+            self.assertIn(f"text-{w}", ids)
+            self.assertIn(f"text-{w}-letters", ids)
+            self.assertNotIn(f"text-{w}-scroll", ids)
+        self.assertEqual(ids["text-go-broncos"], "Go Broncos")
+        self.assertEqual(ids["text-go-broncos-letters"], "Go Broncos (big letters)")
+        self.assertEqual(out["playing"], "Go Broncos")
         self.assertGreater(out["builtinFrames"], 10, out)
         self.assertGreater(out["builtinSlides"], 3, out)
         # its editor opens on the words with Marquee on; one tap switches to Single letter
@@ -99,7 +102,7 @@ class MarqueeInTheBrowser(unittest.TestCase):
         self.assertIn("Letter time (s)", out["edit3"]["labels"])
         self.assertNotIn("Marquee speed", out["edit3"]["labels"])
         self.assertEqual(out["draftMode"], ["single"])
-        self.assertTrue(json.loads((ROOT / "presets" / "text-go-broncos-scroll.json").read_text())
+        self.assertTrue(json.loads((ROOT / "presets" / "text-go-broncos.json").read_text())
                         ["layers"][1]["params"]["mode"] == "marquee")             # the file is untouched
 
 

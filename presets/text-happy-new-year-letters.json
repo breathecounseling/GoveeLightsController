@@ -1,5 +1,5 @@
 {
-  "name": "Happy New Year (scrolling)",
+  "name": "Happy New Year (big letters)",
   "tags": [
     "Holiday",
     "Text",
@@ -31,7 +31,7 @@
       "target": "Peak",
       "params": {
         "text": "HAPPY NEW YEAR!",
-        "mode": "marquee",
+        "mode": "single",
         "colors": [
           "#ffc000",
           "#ffffff",
@@ -42,9 +42,7 @@
         "transition": "wipe",
         "pause": 1.6,
         "background": "#000418",
-        "border_color": "#ffb000",
-        "speed": 4.0,
-        "dwell": 0.6
+        "border_color": "#ffb000"
       }
     }
   ]

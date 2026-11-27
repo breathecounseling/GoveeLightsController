@@ -58,14 +58,13 @@ def scene(opts: dict) -> dict:
 
 
 def length(scene_dict: dict) -> float:
-    """Seconds for one pass of the message (about, for the marquee)."""
-    from .effects_ext.peak_text import letter_timeline
+    """Seconds for one pass of the message, as the house plays it."""
+    from .effects_ext.peak_text import letter_timeline, marquee_cycle
     P = scene_dict["layers"][0]["params"]
     text = hexfont.normalise(P.get("text", ""))
     pause = float(P.get("pause", PAUSE))            # the house's end pause, so the phone loops with it
-    if P.get("mode") == "marquee":                  # it stops on each letter (peak_text's dwell)
-        dwell = float(P.get("dwell", DWELL)) * sum(1 for ch in text if ch != " ")
-        return (hexfont.line_width(text) + 16) / float(P.get("speed", 4)) + dwell + pause
+    if P.get("mode") == "marquee":                  # the house's pass, a stop on each letter (dwell)
+        return marquee_cycle(text, float(P.get("speed", 4)), pause, float(P.get("dwell", DWELL)))
     return letter_timeline(text, float(P.get("hold", 0.7)), pause, float(P.get("gap", 0.22)),
                            float(P.get("word_gap", 0.65)))[1]
 

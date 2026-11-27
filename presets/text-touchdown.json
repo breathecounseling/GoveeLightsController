@@ -28,7 +28,7 @@
       "target": "Peak",
       "params": {
         "text": "TOUCHDOWN!",
-        "mode": "single",
+        "mode": "marquee",
         "colors": [
           "#ff4a00",
           "#1a40ff"
@@ -37,7 +37,9 @@
         "hold": 0.6,
         "transition": "flash",
         "pause": 1.2,
-        "border_color": "#1a40ff"
+        "border_color": "#1a40ff",
+        "speed": 4.0,
+        "dwell": 0.6
       }
     },
     {

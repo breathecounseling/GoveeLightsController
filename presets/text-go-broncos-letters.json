@@ -1,5 +1,5 @@
 {
-  "name": "Go Broncos (scrolling)",
+  "name": "Go Broncos (big letters)",
   "tags": [
     "Sports",
     "Text"
@@ -26,7 +26,7 @@
       "target": "Peak",
       "params": {
         "text": "GO BRONCOS!",
-        "mode": "marquee",
+        "mode": "single",
         "colors": [
           "#ff4f00",
           "#1040ff"
@@ -35,9 +35,7 @@
         "hold": 0.7,
         "transition": "fade",
         "pause": 1.6,
-        "border_color": "#1040ff",
-        "speed": 4.0,
-        "dwell": 0.6
+        "border_color": "#1040ff"
       }
     }
   ]

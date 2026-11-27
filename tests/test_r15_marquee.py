@@ -1,5 +1,6 @@
 """Round 15: the marquee on the Peak (owner, round 3: "they all just flash the letter
-without a marquee"). Each word preset has a "(scrolling)" twin; the marquee stops on each
+without a marquee"). Every built-in word preset now scrolls (its one-big-letter version
+stays as a "(big letters)" twin); the marquee stops on each
 letter in the middle of the Peak (dwell) with the letter alone on a dark Peak, then moves
 on. Letters measured in TRUE proportions (rows hexcanvas.aspect bulb spacings apart),
 with and without the Tip, and a dead bulb never shifts a letter."""
@@ -23,8 +24,8 @@ from goveelights.scene import Scene  # noqa: E402
 from test_r10_showpieces import EXAMPLE, HOUSE, layout  # noqa: E402
 
 FPS = 20
-SCROLL = ["text-give-thanks-scroll", "text-go-broncos-scroll", "text-happy-new-year-scroll",
-          "text-merry-christmas-scroll", "text-scoreboard-scroll", "text-touchdown-scroll"]
+SCROLL = ["text-give-thanks", "text-go-broncos", "text-happy-new-year",
+          "text-merry-christmas", "text-scoreboard", "text-touchdown"]
 
 
 def house(tip=False, dead=()):
@@ -89,13 +90,13 @@ class Stops(unittest.TestCase):
 
 
 class ScrollingPresets(unittest.TestCase):
-    def test_every_word_preset_has_a_scrolling_twin_that_moves(self):
+    def test_every_word_preset_scrolls(self):
         L = house()
         lat = hexfont.lattice(L, L.indices("Peak"))
         peak = [i for i, _, _ in lat.cells]
         for pid in SCROLL:
             d = json.loads((ROOT / "presets" / f"{pid}.json").read_text())
-            self.assertTrue(d["name"].endswith(" (scrolling)"), pid)
+            self.assertNotIn("(", d["name"], pid)                 # the plain name is the marquee
             P = [ly for ly in d["layers"] if ly["effect"] == "peak_text"][0]["params"]
             self.assertEqual(P["mode"], "marquee", pid)
             self.assertGreater(P["dwell"], 0.3, pid)          # stops on each letter

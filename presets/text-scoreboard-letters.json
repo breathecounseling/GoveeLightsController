@@ -1,5 +1,5 @@
 {
-  "name": "Scoreboard (scrolling)",
+  "name": "Scoreboard (big letters)",
   "tags": [
     "Sports",
     "Text"
@@ -28,7 +28,7 @@
       "params": {
         "source": "score",
         "text": "GO BRONCOS!",
-        "mode": "marquee",
+        "mode": "single",
         "colors": [
           "#ff5a00",
           "#ffffff"
@@ -39,9 +39,7 @@
         "pause": 1.6,
         "border_color": "#2050ff",
         "score_detail": false,
-        "brightness": 1.0,
-        "speed": 4.0,
-        "dwell": 0.6
+        "brightness": 1.0
       }
     }
   ]

@@ -344,10 +344,25 @@ def _trim(frame, g, P, lit, cur, last, pulse, step, on, done, st, T):
             frame[i] = lerp(frame[i], fcol, strobe)
 
 
+MARQUEE_SPAN = 9.0      # the Peak's top row (the marquee window), bulbs across, on the house
+
+
+def _marquee_steps(width: float, span: float, pause: float, speed: float) -> int:
+    """Steps in one marquee pass: the line across the window and off, then the end pause."""
+    return int(math.ceil(width + span + 4 + pause * speed))
+
+
 def _marquee_period(lat, text, P) -> int:
     lt, rt = lat.width_at(lat.peak_rows - 1)
-    W = hexfont.line_width(text)
-    return int(math.ceil(W + (rt - lt) + 4 + P["pause"] * P["speed"]))
+    return _marquee_steps(hexfont.line_width(text), rt - lt, P["pause"], P["speed"])
+
+
+def marquee_cycle(text: str, speed: float, pause: float, dwell: float, span: float = MARQUEE_SPAN) -> float:
+    """Seconds for one marquee pass of `text` (already normalised) without a lattice to
+    hand, as the phone loops it: the house's own formula with the Peak's window `span`
+    wide and one stop of `dwell` seconds per letter (spaces have none)."""
+    stops = sum(1 for ch in text if ch != " ")
+    return _marquee_steps(hexfont.line_width(text), span, pause, speed) / speed + dwell * stops
 
 
 def _marquee_x(lat, step: int) -> int:

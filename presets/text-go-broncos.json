@@ -26,7 +26,7 @@
       "target": "Peak",
       "params": {
         "text": "GO BRONCOS!",
-        "mode": "single",
+        "mode": "marquee",
         "colors": [
           "#ff4f00",
           "#1040ff"
@@ -35,7 +35,9 @@
         "hold": 0.7,
         "transition": "fade",
         "pause": 1.6,
-        "border_color": "#1040ff"
+        "border_color": "#1040ff",
+        "speed": 4.0,
+        "dwell": 0.6
       }
     }
   ]

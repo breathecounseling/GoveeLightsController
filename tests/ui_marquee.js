@@ -5,7 +5,7 @@
 //      (the engine's frames on /api/stream: the Peak's lit bulbs slide left).
 //   2. Save as preset keeps the mode; its Edit screen shows a Single letter / Marquee
 //      switch at the top with Marquee on, and only the marquee's settings below it.
-//   3. The built-in "Go Broncos (scrolling)" plays as a marquee on the house; flipping the
+//   3. The built-in "Go Broncos" plays as a marquee on the house; flipping the
 //      switch in the editor to Single letter shows the single-letter settings instead.
 // No JS errors, no horizontal scroll, 44 px touch targets.
 // usage: NODE_PATH=$(npm root -g) node tests/ui_marquee.js http://127.0.0.1:PORT/ [shots dir]
@@ -84,16 +84,16 @@ const { chromium } = require('playwright');
     if (shots) { await page.evaluate(() => document.querySelector('#ptMode').scrollIntoView({ block: 'start' })); await page.evaluate(() => scrollBy(0, -260)); await page.waitForTimeout(300); await page.screenshot({ path: shots + '/editor-switch-marquee.png' }).catch(() => {}) }
     out.steps.push('saved');
 
-    // 3. The built-in scrolling preset: on the house, and the switch in its editor
-    out.builtin = await page.evaluate(async () => (await (await fetch('/api/presets')).json()).filter(p => /-scroll$/.test(p.id)).map(p => p.id + '|' + p.name));
+    // 3. The built-in word preset (a marquee): on the house, and the switch in its editor
+    out.builtin = await page.evaluate(async () => (await (await fetch('/api/presets')).json()).filter(p => /^text-/.test(p.id)).map(p => p.id + '|' + p.name));
     await page.evaluate(() => tabTo('play'));                          // leave the editor (it plays its draft)
     await page.waitForTimeout(600);
-    await page.evaluate(() => playPreset('text-go-broncos-scroll'));
-    await page.waitForFunction(async () => { const s = await (await fetch('/api/status')).json(); return s.playing && /scrolling/.test(s.playing.name) }, null, { timeout: 10000, polling: 250 });
+    await page.evaluate(() => playPreset('text-go-broncos'));
+    await page.waitForFunction(async () => { const s = await (await fetch('/api/status')).json(); return s.playing && s.playing.name === 'Go Broncos' }, null, { timeout: 10000, polling: 250 });
     const h2 = await house(6000);
     out.builtinFrames = h2.frames; out.builtinSlides = slides(h2.xs);
     out.playing = await page.evaluate(async () => { const s = await (await fetch('/api/status')).json(); return s.playing && s.playing.name });   // still it, all along
-    await page.evaluate(() => editPreset('text-go-broncos-scroll'));
+    await page.evaluate(() => editPreset('text-go-broncos'));
     await page.waitForFunction(() => { const b = document.querySelector('#ptMode button.on'); return b && b.dataset.v === 'marquee' }, null, { timeout: 8000 });
     // the editor opens on the first layer; pick the text layer (the second)
     out.edit2 = await editor();
