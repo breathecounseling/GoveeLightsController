@@ -31,6 +31,8 @@ import threading
 import time
 from typing import Sequence
 
+from . import calibrate
+
 log = logging.getLogger(__name__)
 
 ORDERS = ("RGB", "RBG", "GRB", "GBR", "BRG", "BGR")
@@ -129,7 +131,9 @@ class ColourTest:
     red / green / blue: every run shows raw byte 0 / 1 / 2 and the owner answers per run;
     compare: every run shows orange and blue stripes, with the saved order ("after") or
     the order from before the test ("before"). Ends like the Bulb check: Done, lights off,
-    stop, picking something, a show starting, diagnostics, mapping, or no tap for IDLE_S."""
+    stop, picking something, a show starting, diagnostics, mapping, or no tap for IDLE_S
+    (the phone also stops it when the page goes away). Refused during a Bulb check (and
+    the Bulb check and Match the runs are refused during it); starting it ends a Match test."""
 
     IDLE_S = 240.0
     MAX_S = 20 * 60.0
@@ -162,6 +166,7 @@ class ColourTest:
         return {"step": st["step"], "answers": {m: dict(a) for m, a in st["answers"].items()},
                 "before": dict(st["before"]), "showing": st.get("showing", "after"),
                 "result": dict(st.get("result") or {}), "problems": dict(st.get("problems") or {}),
+                "nudges": dict(st.get("nudges") or {}),
                 "left": max(0, round(st["touched"] + self.IDLE_S - self.clock()))}
 
     # ------------------------------------------------------------ frames
@@ -196,30 +201,33 @@ class ColourTest:
             raise ValueError("A show is playing. Try again after it ends.")
         if not self._runs():
             raise ValueError("no runs in the show yet")
-        c.bulbcheck.stop("colour test")                    # one test on the lights at a time
+        if c.bulbcheck.active:                             # one test on the lights at a time: neither ends the other
+            raise ValueError("The bulb check is using the lights. Tap Done first.")
         with c.lock:
-            if c.match_state:
+            if c.match_state:                              # Match the runs is an overlay: this ends it
                 c._end_match()
         with self.lock:
             now = self.clock()
             fresh = self.st is None
             if fresh:
-                self.st = {"started": now, "live_before": c.engine.live,
+                borrowed = c._borrowed_lights()            # on only for a forced celebration: they go off again
+                self.st = {"started": now, "live_before": c.engine.live and not borrowed, "borrowed": borrowed,
                            "before": {r.mac: of(c.cfg.devices.get(r.mac)) for r in self._runs()}}
-            self.st.update(step="red", answers={}, result={}, problems={}, showing="after", touched=now)
+            self.st.update(step="red", answers={}, result={}, problems={}, nudges={}, showing="after", touched=now)
             if fresh:
-                self._take()
-            log.info("colour test started")
+                self._take(self.st["borrowed"])
+            log.info("colour order test started")
             return self.view()
 
-    def _take(self):
+    def _take(self, borrowed: bool = False):
         e = self.ctl.engine
-        if not e.live:
-            try:
-                e.output.start(force=True)
-            except TypeError:
-                e.output.start()
-            e.takeover_live = True
+        if not e.live or borrowed:
+            if not e.live:
+                try:
+                    e.output.start(force=True)
+                except TypeError:
+                    e.output.start()
+            e.takeover_live = True                 # the test keeps the boxes when borrowed lights go off
         else:
             e.takeover_live = False
         e.takeover = self.frames
@@ -273,9 +281,12 @@ class ColourTest:
                     set_order(cfg.devices.get(mac) or {}, o)
                 if result:
                     cfg.save()
+            nudges = {}
             for mac, o in result.items():
                 log.info("colour order of %s: %s (was %s)", names.get(mac, mac), o, st["before"].get(mac))
-            st.update(step="compare", result=result, problems=problems, showing="after")
+                if o != st["before"].get(mac) and tuned(cfg.devices.get(mac)):
+                    nudges[mac] = NUDGE_NOTE
+            st.update(step="compare", result=result, problems=problems, nudges=nudges, showing="after")
             return self.view()
 
     def show(self, which: str) -> dict:
@@ -299,13 +310,13 @@ class ColourTest:
                     if mac in cfg.devices:
                         set_order(cfg.devices[mac], o)
                 cfg.save()
-            st.update(result={}, showing="after")
+            st.update(result={}, nudges={}, showing="after")
             return self.view()
 
     def _need(self) -> dict:
         st = self.st
         if not st:
-            raise ValueError("the colour test isn't running (it stops by itself after a few minutes without a tap)")
+            raise ValueError("the colour order test isn't running (it stops by itself after a few minutes without a tap)")
         st["touched"] = self.clock()
         return st
 
@@ -320,7 +331,7 @@ class ColourTest:
                 own, e.takeover_live = e.takeover_live, False
                 if own and not e.live:
                     e.output.stop()
-            log.info("colour test ended (%s)", why)
+            log.info("colour order test ended (%s)", why)
 
     def tick(self, now: float):
         with self.lock:                          # (start() sets the state and the takeover together)
@@ -341,6 +352,17 @@ class ColourTest:
             self.stop("diagnostics or mapping")
         elif e.takeover != self.frames:
             self.stop("something else took the lights")
+
+
+NUDGE_NOTE = ("its colour nudges were set before this fix, so they now act on the other colour: "
+              "check it in Match the runs (or reset that run there)")
+
+
+def tuned(dev: dict | None) -> bool:
+    """The run has Match-the-runs colour nudges (gains that differ between channels): set
+    while its channels were mixed up, they act on another LED once the order changes."""
+    g = calibrate.read(dev or {})["gain"]
+    return max(g) - min(g) > 1e-6
 
 
 def set_order(dev: dict, order) -> str:

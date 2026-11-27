@@ -711,7 +711,7 @@ let ST = {}, EFX = {}, FXD = {}, BLENDS = [], SHAPES = [], PRESETS = [], LAYOUT 
 let draft = null, draftId = null, sel = 0, panel = 'source', filter = 'all', draftLoading = null;
 const hist = {u: [], r: [], last: null};
 
-function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2000) }
+function toast(m, ms){ const t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),ms||2000) }
 function authFail(r){ if (r.status === 401) { location.href = '/login'; return true } return false }
 async function get(p){ const r = await fetch('/api/'+p); if (authFail(r)) throw new Error('login'); if(!r.ok) throw new Error(r.status); return r.json() }
 async function post(p, body={}){
@@ -736,7 +736,7 @@ document.querySelectorAll('#nav button').forEach(b => b.onclick = () => tabTo(b.
 function openSheet(title, body){ $('sheetTitle').textContent = title; const sb=$('sheetBody'); sb.innerHTML=''; if (typeof body === 'string') sb.innerHTML = body; else sb.appendChild(body); $('sheet').scrollTop=0; $('sheet').classList.add('on'); $('scrim').classList.add('on') }
 function closeSheet(){ $('sheet').classList.remove('on'); $('scrim').classList.remove('on') }
 // the sheet's own Done: on the bulb check it means "give the house back", not just "hide this"
-function sheetDone(){ if (document.getElementById('bcWalk') && BC) bcStop(); else closeSheet() }
+function sheetDone(){ if (document.getElementById('bcWalk') && BC) bcStop(); else if (document.getElementById('ctWiz') && CT && CT.test) ctStop(); else closeSheet() }
 function segTo(v){
   document.querySelectorAll('#showSeg button').forEach(x => x.classList.toggle('on', x.dataset.v===v));
   ['lists','shows','sched','live'].forEach(k => $('v-'+k).style.display = v===k ? '' : 'none');
@@ -2676,6 +2676,8 @@ window.addEventListener('pagehide', () => { if (!MT.mine && !MT.starting) return
   if (MT.starting) MT.cancel = true;                 // (and one still starting, should the page come back)
   fetch('/api/match', {method:'POST', keepalive:true, headers:{'Content-Type':'application/json','X-Requested-With':'lights'}, body:'{"action":"stop"}'}).catch(()=>{}) });
 
+window.addEventListener('pagehide', () => { if (!CT || !CT.mine || !CT.test) return; CT.mine = false;   // leaving the app ends the colour order test this phone started
+  fetch('/api/colours/test', {method:'POST', keepalive:true, headers:{'Content-Type':'application/json','X-Requested-With':'lights'}, body:'{"action":"stop"}'}).catch(()=>{}) });
 /* More -> Match the runs -> "Colours look wrong?": the colour order of each run. The test
    lights every run with the first raw colour byte, then the second; what the owner sees on
    each run gives its order (goveelights/colororder.py). The preview always shows the
@@ -2693,15 +2695,15 @@ function drawCtOrders(){
     <small>Colour order: ${ctLab(r.color_order)} (${(r.color_order || 'RGB') === 'RGB' ? 'normal' : 'fixed: ' + ctSay(r.color_order)})</small></div>`).join('');
   box.querySelectorAll('select').forEach(s => s.onchange = async () => {
     const r = await post('colours/order', {mac: s.dataset.mac, order: s.value});
-    if (r) toast(`Colour order ${r.label}: ${r.say}`); refresh() });
+    if (r) toast(`Colour order ${r.label}: ${r.say}` + (r.note ? `. Note: ${r.note}` : ''), r.note ? 6000 : undefined); refresh() });
 }
 async function ctStart(){
   const r = await post('colours/test', {action: 'start'}); if (!r) return;
-  CT = r; ctOpen(); refresh();
+  CT = r; CT.mine = true; ctOpen(); refresh();
 }
 async function ctAct(action, extra = {}){
   const r = await post('colours/test', {action, ...extra});
-  if (r){ CT = r; ctDraw() }
+  if (r){ CT = Object.assign(r, {mine: !!(CT && CT.mine)}); ctDraw() }
   return r;
 }
 async function ctStop(){
@@ -2721,7 +2723,7 @@ function ctOpen(){
 function ctDraw(){
   const el = document.getElementById('ctWiz'); if (!el) return;
   const v = CT && CT.test, runs = (CT && CT.runs) || [];
-  if (!v){ el.innerHTML = `<p class="big">Done</p><p class="help">The colour test has ended and the house is back to what was playing.</p><button class="pri wide" data-a="close">Close</button>`;
+  if (!v){ el.innerHTML = `<p class="big">Done</p><p class="help">The colour order test has ended and the house is back to what was playing.</p><button class="pri wide" data-a="close">Close</button>`;
     el.querySelector('[data-a=close]').onclick = () => closeSheet(); return }
   const names = {red: 'Red', green: 'Green', blue: 'Blue', other: 'Other / off'};
   const left = v.left != null ? `Gives the house back after ${Math.max(1, Math.round(v.left / 60))} min without a tap.` : '';
@@ -2730,7 +2732,7 @@ function ctDraw(){
     const n = {red: 1, green: 2, blue: 3}[v.step];
     body = `<div class="dim">${n < 3 ? `Question ${n} of 2` : 'Check (optional)'}</div>
       <div class="big">${n === 1 ? 'First test colour' : n === 2 ? 'Second test colour' : 'Third test colour'}</div>
-      <p class="help">Every run is showing one plain colour. Look at the house itself (not the phone: the picture here always shows the right colours) and tap what you see on each run.</p>
+      <p class="help">Every run is showing one plain colour. Answer from the house, not the phone: look at each run outside and tap what you see on it.</p>
       ${runs.map(r => { const a = (v.answers[r.mac] || {})[v.step];
         return `<div class="ctq"><div class="q">What colour is ${esc(r.name)}?</div><div class="cta">${Object.keys(names).map(c =>
           `<button data-mac="${esc(r.mac)}" data-saw="${c}" class="${a === c ? 'on' : ''}">${names[c]}</button>`).join('')}</div></div>` }).join('')}
@@ -2738,10 +2740,10 @@ function ctDraw(){
         : n === 2 ? '<button class="wide pri" data-a="finish">Fix it and show me</button><button class="wide" data-a="check">Check with a third colour first</button>'
         : '<button class="wide pri" data-a="finish">Fix it and show me</button>'}`;
   } else {
-    const res = runs.map(r => { const o = v.result[r.mac], was = v.before[r.mac] || 'RGB', bad = v.problems[r.mac];
+    const res = runs.map(r => { const o = v.result[r.mac], was = v.before[r.mac] || 'RGB', bad = v.problems[r.mac], nu = (v.nudges || {})[r.mac];
       return `<p class="res"><b>${esc(r.name)}</b>: ${bad ? `<span class="warn">${esc(bad)}</span>`
         : o === undefined ? 'left as it was' : o === was ? `already right (${ctLab(o)})`
-        : `colour order ${ctLab(o)} (fixed: ${ctSay(o)}), was ${ctLab(was)}`}</p>` }).join('');
+        : `colour order ${ctLab(o)} (fixed: ${ctSay(o)}), was ${ctLab(was)}`}${nu ? `<br><span class="warn">Note: ${esc(nu)}.</span>` : ''}</p>` }).join('');
     body = `<div class="big">Before and after</div>
       <p class="help">The house shows orange and blue stripes, like a Broncos game. Switch between how it looked before and how it looks now.</p>
       <div class="ba"><button data-w="before" class="${v.showing === 'before' ? 'on' : ''}">Before</button><button data-w="after" class="${v.showing !== 'before' ? 'on' : ''}">After</button></div>

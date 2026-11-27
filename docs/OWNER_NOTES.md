@@ -75,6 +75,12 @@ finds out:
   diagnostics here) is affected the same way on these boxes; the app applies the same order
   to it. If the Govee app shows correct colours but our test needs R-B-G, that's the
   realtime (razer) path only, which is what the show uses anyway.
+* Don't pre-set R-B-G on any box from the report alone. The old RGBW probe answer for Peak
+  and Accent ("red/green/blue/off pattern") would, if read literally, mean those two
+  H805As are normal R-G-B and the pink/cyan comes from another box (the Tip H705E?); that
+  answer was a preset button, so it is weak evidence. The test decides per run.
+* Colour nudges made in Match the runs before the fix were set on the mixed-up colours;
+  the test flags such runs so they can be checked (or reset) in Match the runs.
 
 ## Tip lit only in some looks
 

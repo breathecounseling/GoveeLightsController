@@ -347,6 +347,8 @@ class Controller:
                 e.takeover, e.takeover_live = old.takeover, old.takeover_live
             e.start(live=False)
             self.engine = e
+            if e.takeover is not None and e.takeover_live and not was_live:
+                e.output.start()                   # a lights-off check or test still drives the boxes (new ones too)
             if was_live:
                 # the same lights back on, not a new lights-on: a colour test that switched
                 # them on still owns them, and "phone only" stays as it is
@@ -1092,7 +1094,7 @@ class Controller:
         return self.calibrations(), note
 
     def _tests_stop(self, why: str):
-        """End the Bulb check and the colour test (whichever is on the lights)."""
+        """End the Bulb check and the colour order test (whichever is on the lights)."""
         self.bulbcheck.stop(why)
         self.colourtest.stop(why)
 
@@ -1103,10 +1105,13 @@ class Controller:
         with self.cfg.lock:
             if mac not in self.cfg.devices or self.engine.layout.run(mac) is None:
                 raise ValueError("that run isn't in the show")
-            colororder.set_order(self.cfg.devices[mac], o)
+            d = self.cfg.devices[mac]
+            changed = colororder.of(d) != o
+            colororder.set_order(d, o)
             self.cfg.save()
         log.info("colour order of %s set to %s", self.cfg.devices[mac].get("name", mac), o)
-        return {"mac": mac, "order": o, "label": colororder.label(o), "say": colororder.say(o)}
+        note = colororder.NUDGE_NOTE if changed and colororder.tuned(d) else ""
+        return {"mac": mac, "order": o, "label": colororder.label(o), "say": colororder.say(o), "note": note}
 
     def match(self, action: str, color: str | None = None) -> dict:
         """POST /api/match: one test colour on every run at once, over whatever is playing.
@@ -1133,11 +1138,11 @@ class Controller:
                 raise ValueError("Camera mapping is using the lights. Finish it first.")
             if self.bulbcheck.active:                  # its takeover owns the boxes (and would hide the colour)
                 raise ValueError("The bulb check is using the lights. Tap Done first.")
+            if self.colourtest.active:                 # the same: it owns the boxes
+                raise ValueError("The colour order test is using the lights. Tap Done first.")
             if st is None and (self.interrupt or {}).get("show"):
                 raise ValueError("A show is playing. Try again when it ends.")
             key = color if color in calibrate.SWATCHES else (st or {}).get("color", "warm")
-            if st is None and self.colourtest.active:
-                self.colourtest.stop("match test")
             if st is None:
                 if not e.live and not any(d.get("ip") or (d.get("cloud") or {}).get("enabled")
                                           for d in self.cfg.devices.values() if d.get("pixel_count")):
@@ -1386,7 +1391,7 @@ class Controller:
         self.vqueue[:] = [r for r in self.vqueue if r.get("expires", now + 1) > now]
         if not self.vqueue or not self.engine.live or self.engine.blackout or self.map_state or self.diag_active:
             return
-        if self.match_state or self.bulbcheck.active:   # the owner is matching the runs / checking bulbs: picks wait
+        if self.match_state or self.bulbcheck.active or self.colourtest.active:   # a test is on the lights: picks wait
             return
         it = self.interrupt
         if it and not it.get("visitor"):            # a show, countdown or celebration is on: wait

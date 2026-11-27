@@ -98,6 +98,24 @@ const { chromium } = require('playwright');
     await page.waitForTimeout(400);
     out.steps.push('manual');
 
+    // the sheet's own Done gives the house back too, and so does leaving the app
+    const testOn = () => page.evaluate(() => fetch('/api/colours').then(r => r.json()).then(r => !!r.test));
+    await page.click('#ctGo');
+    await page.waitForSelector('#sheet.on #ctWiz .ctq');
+    out.help = await page.textContent('#ctWiz .help');
+    out.onAgain = await testOn();
+    await page.click('#sheet h3 button');
+    await page.waitForFunction(() => !document.querySelector('#sheet').classList.contains('on'));
+    await page.waitForTimeout(400);
+    out.afterHeaderDone = await testOn();
+    await page.click('#ctGo');
+    await page.waitForSelector('#sheet.on #ctWiz .ctq');
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide')));
+    await page.waitForTimeout(600);
+    out.afterPagehide = await testOn();
+    await page.evaluate(() => closeSheet());
+    out.steps.push('ends');
+
     // Bulb check links to it
     await page.click('#bcToCt');
     await page.waitForTimeout(500);

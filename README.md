@@ -132,9 +132,8 @@ blue in a different order than the app sends them. That is wiring, not taste, so
 fixed per run: More → *Match the runs* → **Colours look wrong?** (also linked from the
 Bulb check card).
 
-1. Every run shows one plain test colour. Look at the house (not the phone: the picture in
-   the app always shows the colours the show means) and tap, for each run, **Red**,
-   **Green**, **Blue** or **Other / off**.
+1. Every run shows one plain test colour. Answer from the house, not the phone: look at
+   each run outside and tap **Red**, **Green**, **Blue** or **Other / off**.
 2. **Next: the second colour**, same question. From the two answers the app knows the
    order (the third colour follows); **Check with a third colour first** is an optional
    check, and an answer that doesn't add up leaves that run alone and says so.
@@ -143,9 +142,15 @@ Bulb check card).
    back; **Done** gives the house back to what was playing.
 
 It takes over the lights the way the Bulb check does: the show carries on underneath and
-comes back when you tap Done, switch the lights off, stop, pick something, or after 4
-minutes without a tap, and it won't start while a show is playing. Lights that were off
-switch on for the test and off again after it.
+comes back when you tap Done (either one), leave the app, switch the lights off, stop,
+pick something, or after 4 minutes without a tap, and it won't start while a show is
+playing. Lights that were off (or on only for a celebration) switch on for the test and
+off again after it. One test at a time: it won't start during a Bulb check, and the Bulb
+check and Match the runs' colours wait until it is done (starting it ends a Match test).
+
+If a run whose order changed had colour nudges from Match the runs ("A bit warmer" and so
+on), the result says so: those nudges were set while its colours were mixed up and now act
+on the other colour, so check that run in Match the runs again (or reset it there).
 
 Know your wiring already? Open **Colour order of each run** in the same card and pick it
 (R-G-B is normal; R-B-G is green and blue swapped, G-R-B red and green, B-G-R red and

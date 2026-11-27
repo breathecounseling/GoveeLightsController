@@ -164,6 +164,9 @@ class BulbCheck:
             raise ValueError("close diagnostics or camera mapping first")
         if (self.ctl.interrupt or {}).get("show") and self.st is None:
             raise ValueError("A show is playing. Try again after it ends.")
+        ct = getattr(self.ctl, "colourtest", None)
+        if ct is not None and ct.active:          # one test on the lights at a time (neither ends the other)
+            raise ValueError("The colour order test is using the lights. Tap Done first.")
         if mac != "all" or mode != "sweep":
             r = self._run(mac)
             name = r.name
@@ -174,9 +177,6 @@ class BulbCheck:
         if self.st is None and self.ctl.match_state:
             with self.ctl.lock:                   # a colour test ends first: it would release the boxes under the walk
                 self.ctl._end_match()
-        ct = getattr(self.ctl, "colourtest", None)
-        if ct is not None and ct.active:
-            ct.stop("bulb check")                 # one test on the lights at a time
         with self.lock:
             fresh = self.st is None
             now = self.clock()

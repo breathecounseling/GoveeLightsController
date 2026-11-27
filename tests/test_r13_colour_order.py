@@ -317,7 +317,7 @@ class ColourTestFlow(unittest.TestCase):
         self.assertIn("show is playing", str(cm.exception))
         self.assertIsNone(ctl.engine.takeover)
 
-    def test_lights_off_stop_pick_and_the_other_tests_end_it(self):
+    def test_lights_off_stop_pick_and_no_tap_end_it(self):
         r, ctl = self.rig()
         # started in the dark: the boxes switch on for it, and go off again after
         self.assertFalse(ctl.engine.live)
@@ -333,16 +333,6 @@ class ColourTestFlow(unittest.TestCase):
         ctl.colourtest.start()
         ctl.play_preset("warm-white", fade=0)
         self.assertFalse(ctl.colourtest.active)
-        ctl.colourtest.start()
-        ctl.bulbcheck.start(self.macs(ctl)["Eaves"])        # one test on the lights at a time
-        self.assertFalse(ctl.colourtest.active)
-        self.assertEqual(ctl.engine.takeover, ctl.bulbcheck.frames)
-        ctl.colourtest.start()
-        self.assertFalse(ctl.bulbcheck.active)
-        self.assertEqual(ctl.engine.takeover, ctl.colourtest.frames)
-        ctl.match("start", "red")
-        self.assertFalse(ctl.colourtest.active)
-        ctl.match("stop")
         ctl.colourtest.start()
         r.tick(ctl.colourtest.IDLE_S + 5)
         self.assertFalse(ctl.colourtest.active)
@@ -406,6 +396,115 @@ class ColourApi(unittest.TestCase):
         self.assertEqual(post("colours/order", {"mac": pk, "order": "GRB"})["order"], "GRB")
         self.assertFalse(post("colours/order", {"mac": pk, "order": "XYZ"})["ok"])
         self.assertEqual(ctl.cfg.devices[pk]["color_order"], "GRB")
+
+
+class KeptApart(unittest.TestCase):
+    """Review fixes: the colour order test and the Bulb check both own the boxes, so one
+    is refused while the other runs (nobody is ended silently); Match the runs is an
+    overlay: either test ends it, and it is refused while one runs. Lights borrowed for
+    a forced celebration count as off."""
+    def rig(self, when=datetime(2026, 11, 26, 17, 0)):
+        r = Rig(self, when, {"schedule": {"enabled": False}})
+        return r, r.ctl
+
+    def test_one_test_on_the_lights_at_a_time(self):
+        r, ctl = self.rig()
+        ctl.set_live(True)
+        eaves = ctl.engine.layout.runs[0].mac
+        ctl.bulbcheck.start(eaves)
+        with self.assertRaises(ValueError) as cm:
+            ctl.colourtest.start()
+        self.assertIn("bulb check", str(cm.exception).lower())
+        self.assertTrue(ctl.bulbcheck.active)
+        self.assertEqual(ctl.engine.takeover, ctl.bulbcheck.frames)
+        ctl.bulbcheck.stop("done")
+        ctl.colourtest.start()
+        with self.assertRaises(ValueError) as cm:
+            ctl.bulbcheck.start(eaves)
+        self.assertIn("colour order test", str(cm.exception).lower())
+        with self.assertRaises(ValueError) as cm:
+            ctl.match("start", "red")
+        self.assertIn("colour order test", str(cm.exception).lower())
+        self.assertTrue(ctl.colourtest.active)
+        self.assertEqual(ctl.engine.takeover, ctl.colourtest.frames)
+        ctl.colourtest.stop()
+        ctl.match("start", "red")                           # Match is an overlay: the test ends it
+        ctl.colourtest.start()
+        self.assertIsNone(ctl.match_state)
+        ctl.colourtest.stop()
+
+    def test_visitor_picks_wait_for_it(self):
+        r = Rig(self, datetime(2026, 11, 26, 17, 30),
+                {"schedule": {"enabled": False}, "visitor": {"enabled": True, "presets": ["candy-cane-chase", "warm-white"]}})
+        ctl = r.ctl
+        ctl.play_preset("warm-white")
+        ctl.set_live(True)
+        ctl.colourtest.start()
+        ctl.visitor_pick("candy-cane-chase", "phone-A")
+        r.tick(5)
+        self.assertIsNone(ctl.interrupt)
+        self.assertTrue(ctl.colourtest.active)
+
+    def test_lights_borrowed_for_a_forced_celebration_go_off_after(self):
+        r, ctl = self.rig(datetime(2026, 11, 29, 14, 0))
+        ctl.play_preset("warm-white", manual=False)
+        self.assertFalse(ctl.engine.live)
+        now = r.clock.t
+        ctl._pending.append((now, "touchdown", ["#fc4c02", "#0a2343"]))
+        ctl._pending_tick(now, force_live=True)
+        self.assertTrue(ctl.engine.live)                    # on only for the celebration
+        ctl.colourtest.start()
+        self.assertFalse(ctl.colourtest.st["live_before"])
+        for _ in range(12):
+            r.tick(5)
+            ctl.colourtest.answer(ctl.engine.layout.runs[0].mac, "red")
+        self.assertIsNone(ctl.interrupt)
+        self.assertTrue(ctl.colourtest.active, "the celebration ending is not the owner switching off")
+        self.assertTrue(ctl.engine.output.started, "the test still needs the boxes")
+        ctl.colourtest.stop()
+        self.assertFalse(ctl.engine.live)
+        self.assertFalse(ctl.engine.output.started, "borrowed lights go off again")
+
+    def test_rebuild_mid_test_with_the_lights_off_still_ends_dark(self):
+        r, ctl = self.rig()
+        self.assertFalse(ctl.engine.live)
+        ctl.colourtest.start()
+        ctl.build_engine()                                  # e.g. the Tip move or Change
+        r.tick(1)
+        self.assertTrue(ctl.colourtest.active)
+        self.assertEqual(ctl.engine.takeover, ctl.colourtest.frames)
+        self.assertTrue(ctl.engine.output.started)
+        ctl.colourtest.stop()
+        self.assertFalse(ctl.engine.output.started)
+        self.assertFalse(ctl.engine.live)
+
+
+class NudgesSetOnSwappedChannels(unittest.TestCase):
+    """Match-the-runs gains act before the colour order: a run tuned while its green and
+    blue were swapped needs a fresh look once the order is fixed."""
+    def test_finish_and_set_directly_flag_a_tuned_run(self):
+        r = Rig(self, datetime(2026, 11, 26, 17, 0), {"schedule": {"enabled": False}})
+        ctl = r.ctl
+        m = {x.name: x.mac for x in ctl.engine.layout.runs}
+        ctl.calibrate({"mac": m["Peak"], "nudge": "warmer"})
+        ctl.set_live(True)
+        ctl.colourtest.start()
+        for step, saw in (("red", "red"), ("green", "blue")):
+            if step != "red":
+                ctl.colourtest.step(step)
+            for name, mac in m.items():
+                ctl.colourtest.answer(mac, saw if name in ("Peak", "Accent") else step)
+        v = ctl.colourtest.finish()
+        self.assertEqual(v["result"][m["Peak"]], "RBG")
+        self.assertIn(m["Peak"], v["nudges"])
+        self.assertIn("Match the runs", v["nudges"][m["Peak"]])
+        self.assertNotIn(m["Accent"], v["nudges"])         # changed, but never nudged
+        self.assertNotIn(m["Eaves"], v["nudges"])          # nudged? no; unchanged anyway
+        ctl.colourtest.stop()
+        res = ctl.set_color_order(m["Peak"], "RGB")
+        self.assertIn("Match the runs", res["note"])
+        self.assertEqual(ctl.set_color_order(m["Peak"], "RGB")["note"], "")   # no change: no note
+        self.assertEqual(ctl.set_color_order(m["Accent"], "GRB")["note"], "")  # not tuned
 
 
 # =========================================================== Take it out / Change
