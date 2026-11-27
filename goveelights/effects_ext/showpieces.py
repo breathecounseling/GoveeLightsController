@@ -26,7 +26,7 @@ over black, the sleigh and a crescent moon, three candles in the dark. Elsewhere
 round the zigzag) the free-form drawing is unchanged. Since round 15 they are drawn on
 hexcanvas.true(): distances measured with the rows' TRUE gap (~0.66 of a bulb spacing, as
 the owner's photos show the Peak hang), so the sun disc and the sunburst's hub are round
-on the house, and the turkey, the candles (slim pillars, tall flames) and the falling
+on the house, and the turkey, the candles (wax and flame taller than wide) and the falling
 star's head (a round head on a one-bulb streak) are drawn standing up, not 2-3x too wide.
 
 All are @frame_effect generators: memory lives in the layer's state dict, randomness is
@@ -212,7 +212,10 @@ def _polar(u: float, v: float, k: float = 1.0) -> tuple[float, float]:
           help="from the outside in, mirrored on both sides; deep autumn colours read best on bulbs"),
     Param("feathers", "int", 7, "Feathers / rays", 3, 16, 1),
     Param("tip", "color", "#ffe0a0", "Feather tips", help="the pale edge at the end of every feather"),
-    Param("body", "color", "#5a1400", "Turkey body", help="a dark chestnut; bulbs show brown as deep orange"),
+    Param("body", "color", "#c85414", "Turkey body",
+          help="a bright brown amber; a dark chestnut shows on bulbs as a dim red, lost among red feathers"),
+    Param("head", "color", "#b0d0ff", "Turkey head",
+          help="a cool blue-white (as on a real turkey), so the head stands out from the warm feather tips"),
     Param("wattle", "color", "#ff0000", "Wattle"),
     Param("level", "number", 0.9, "Brightness", 0.2, 1, 0.01),
     Param("intro", "number", 4, "Opening (s)", 0, 20, 0.5,
@@ -308,7 +311,7 @@ def _turkey(frame, cv, polar, P, clock, age, opened, cols, nf, lvl, seed):
             continue
         hd = hx * hx + hy * hy
         if hd <= 1.0:
-            frame[i] = _scale((1.0, 0.72, 0.42), lvl)
+            frame[i] = _scale(P["head"], lvl)
             continue
         if bx * bx + by * by <= 1.0 or (abs(u) < 0.08 and v < 0.6):
             sh = 0.75 + 0.25 * wobble(cv["si"][i], clock, 0.4, seed)
@@ -581,7 +584,7 @@ def _turkey_hex(frame, hc, st, P, clock, age, opened, cols, nf, lvl, seed):
             sh = 0.85 + 0.15 * wobble(_ckey(c), clock, 0.4, seed)
             frame[c.i] = _scale(body, lvl * sh)
         elif kind == "head":
-            frame[c.i] = _scale((1.0, 0.72, 0.42), lvl)
+            frame[c.i] = _scale(P["head"], lvl)       # cool, against the warm feather tips
         elif kind == "wattle":
             frame[c.i] = _scale(wattle, lvl)
         else:
@@ -1363,8 +1366,9 @@ def sleigh_tour(t, ctx, P, st):
 # ====================================================================== candlelight
 # candles for the honeycomb: W wax, C the flame's bright heart, F its orange edge, L / R
 # its tip, which leans slowly from one to the other (a waver, never a flicker)
-# drawn in TRUE proportions (rows ~0.66 of a bulb spacing apart on the house): slim
-# pillars of wax taller than they are wide, and flames taller than wide
+# drawn in TRUE proportions (rows ~0.66 of a bulb spacing apart on the house): without the
+# Tip the wax is 3 bulbs by 3 rows (about 3 x 2 spacings: squat), the side candles 3 x 2
+# rows; it is the whole candle, wax and flame together, that stands taller than wide
 CANDLE = _art("""
    L R
     C

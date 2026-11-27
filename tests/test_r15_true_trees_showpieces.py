@@ -161,6 +161,35 @@ class Trees(unittest.TestCase):
                     if a is not b:
                         self.assertGreater(T._hexdist(a, b), 1)           # green between them
 
+    def test_sparkler_sparks_do_not_drown_the_tree(self):
+        """The embers once lit more bulbs than the 13-bulb tree and laid a 5-8-bulb white bar
+        on the top row: now they are fewer than the tree and never a bar."""
+        for tip in (False, True):
+            L = house(tip)
+            ii = gable(L)
+            hc = hx.true(L, ii)
+            pr = preset("sparkler-tree")
+            tree = Scene.from_dict({"layers": [l for l in pr["layers"] if l["effect"] == "tree"]})
+            sparks = Scene.from_dict({"layers": [l for l in pr["layers"] if l["effect"] == "embers"]})
+            f = tree.render(20.0, L)
+            n_tree = sum(1 for i in ii if f[i][1] > 0.3 and f[i][1] > f[i][0])
+            self.assertGreaterEqual(n_tree, 10, tip)
+            rows = {}
+            for c in hc.cells:
+                if c.i is not None:
+                    rows.setdefault(c.r, []).append(c)
+            top = sorted(rows[max(r for r, cs in rows.items() if len(cs) >= 8)], key=lambda c: c.x)
+            worst = 0
+            for k in range(40, 400, 5):
+                g = sparks.render(k / 20, L)
+                lit = sum(1 for i in ii if max(g[i]) > 0.3)
+                self.assertLess(lit, n_tree, (tip, k / 20, lit, n_tree))
+                run = 0
+                for c in top:
+                    run = run + 1 if min(g[c.i]) > 0.5 else 0
+                    worst = max(worst, run)
+            self.assertLessEqual(worst, 3, tip)                       # no white T-bar
+
     def test_dead_bulbs_move_nothing(self):
         for tip in (False, True):
             a, b = house(tip), house(tip, DEAD)
@@ -272,6 +301,48 @@ class Showpieces(unittest.TestCase):
                 side = [c for c in hc.cells if c.key in plan and plan[c.key][1] == k and plan[c.key][0] != "glow"]
                 sw, sh = size(hc, side)
                 self.assertGreaterEqual(sh / sw, 0.85, (tip, k, sw, sh))
+
+    def _turkey_frame(self, L, t=8.0):
+        """The turkey-fan preset's fan layer alone, at t seconds (the fan fully open)."""
+        lay = next(l for l in preset("turkey-fan")["layers"] if l["effect"] == "fan")
+        fx = EFFECTS["fan"]
+        P = fx.resolve(lay["params"])
+        st, cols = {}, None
+        for k in range(int(t * 20) + 1):
+            cols = fx.fn(k / 20, Ctx(L, gable(L), k / 20, 0.05, 120, {}), P, st)
+        return cols
+
+    def test_turkey_head_stands_out_from_the_pale_feather_tips(self):
+        """The street read the head as two more pale feather tips (the same warm cream, one
+        dark bulb between): the head is a cool blue-white now, every tip stays warm."""
+        for tip in (False, True):
+            L = house(tip)
+            hc = hx.true(L, gable(L))
+            plan = sp._turkey_plan(hc, 7)
+            cols = self._turkey_frame(L)
+            heads = [cols[c.i] for c in hc.cells if c.i is not None and plan[c.key][0] == "head"]
+            tips = [cols[c.i] for c in hc.cells if c.i is not None and plan[c.key][0] == "tip"
+                    and max(cols[c.i]) > 0.1]
+            self.assertTrue(heads and tips, tip)
+            for r, g, b in heads:
+                self.assertGreater(b, r, (tip, (r, g, b)))           # cool
+                self.assertGreater(min(r, g, b), 0.4, (tip, (r, g, b)))  # and bright
+            for r, g, b in tips:
+                self.assertGreater(r, b + 0.2, (tip, (r, g, b)))      # warm
+
+    def test_turkey_body_is_a_bright_brown_not_a_dim_feather_red(self):
+        """The body showed as a dim red (about 0.4, the hue of the red feathers round it): it
+        is a brighter, browner amber now, so the bird reads as a body under its head."""
+        for tip in (False, True):
+            L = house(tip)
+            hc = hx.true(L, gable(L))
+            plan = sp._turkey_plan(hc, 7)
+            cols = self._turkey_frame(L)
+            body = [cols[c.i] for c in hc.cells if c.i is not None and plan[c.key][0] == "body"]
+            self.assertTrue(body, tip)
+            for r, g, b in body:
+                self.assertGreaterEqual(r, 0.55, (tip, (r, g, b)))
+                self.assertGreaterEqual(g / r, 0.3, (tip, (r, g, b)))   # brown, not #ff1000 red
 
     def test_dead_bulbs_do_not_shift_the_pictures(self):
         for tip in (False, True):
