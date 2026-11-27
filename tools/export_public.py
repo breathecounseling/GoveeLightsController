@@ -121,10 +121,11 @@ def builtin_checks(root: Path = ROOT) -> list[str]:
     house = root / "layouts" / "house.json"
     if house.exists():
         import json
-        try:
-            ids = list((json.loads(house.read_text(encoding="utf-8")).get("devices") or {}))
-        except (ValueError, AttributeError):
-            ids = []
+        try:                                    # utf-8-sig: as saved by Notepad, like the app reads it
+            ids = list((json.loads(house.read_text(encoding="utf-8-sig")).get("devices") or {}))
+        except (ValueError, AttributeError, TypeError) as e:
+            raise SystemExit(f"export FAILED: {house} can't be read ({e}), so its device ids "
+                             "can't be checked") from None
         for mac in ids:
             raw = re.sub(r"[^0-9A-Fa-f]", "", str(mac))
             if len(raw) >= 6:

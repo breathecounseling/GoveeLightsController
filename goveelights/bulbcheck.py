@@ -37,10 +37,13 @@ def rehung_ranges(d: dict) -> list[list[int]]:
     """The device entry's re-hung sections as clean [from, to] pairs within its count."""
     n = int(d.get("pixel_count") or 0)
     out = []
-    for r in d.get("rehung") or ():
+    v = d.get("rehung")
+    for r in v if isinstance(v, (list, tuple)) else ():
+        if not isinstance(r, (list, tuple)):
+            continue
         try:
             a, b = int(r[0]), int(r[1])
-        except (TypeError, ValueError, IndexError):
+        except (TypeError, ValueError, IndexError, OverflowError):
             continue
         a, b = min(a, b), max(a, b)
         if n:

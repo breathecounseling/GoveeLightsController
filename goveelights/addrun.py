@@ -42,7 +42,7 @@ LOCATIONS = {
               "zones": ()},
 }
 _PREV_KEYS = ("name", "pixel_count", "order", "geometry", "geometry_guess", "hidden", "enabled", "role",
-              "location", "cloud", "reversed", "follows", "dead", "rehung")
+              "location", "cloud", "reversed", "follows", "dead", "rehung", "calibration", "trim")
 
 def locations() -> list[dict]:
     return [{"id": k, "label": v["label"], "role": v["role"], "name": v["name"]} for k, v in LOCATIONS.items()]

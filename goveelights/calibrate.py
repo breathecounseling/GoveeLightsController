@@ -67,14 +67,18 @@ def read(dev: dict) -> dict:
     gain = c.get("gain") if isinstance(c.get("gain"), (list, tuple)) and len(c["gain"]) == 3 else None
     if gain is None and isinstance(dev.get("trim"), (list, tuple)) and len(dev["trim"]) == 3:
         gain = dev["trim"]                       # the older colour trim
-    out = dict(IDENTITY)
-    try:
-        out["brightness"] = _num(c.get("brightness", 1.0), *BRIGHT, 1.0)
-        out["gamma"] = _num(c.get("gamma", 1.0), *GAMMA, 1.0)
-        out["fade"] = _num(c.get("fade", 0.0), *FADE, 0.0)
-        out["gain"] = [_num(v, 0.2, 1.0, 1.0, rnd=False) for v in gain] if gain else [1.0, 1.0, 1.0]
-    except ValueError:
-        return dict(IDENTITY, gain=[1.0, 1.0, 1.0])  # a hand-edited typo must not stop the lights
+    out = dict(IDENTITY, gain=[1.0, 1.0, 1.0])
+    # each field on its own: a hand-edited typo in one must not stop the lights or lose the others
+    for k, lim, dflt in (("brightness", BRIGHT, 1.0), ("gamma", GAMMA, 1.0), ("fade", FADE, 0.0)):
+        try:
+            out[k] = _num(c.get(k, dflt), *lim, dflt)
+        except ValueError:
+            pass
+    if gain:
+        try:
+            out["gain"] = [_num(v, 0.2, 1.0, 1.0, rnd=False) for v in gain]
+        except ValueError:
+            pass
     return out
 
 

@@ -73,6 +73,7 @@ def straight_layout(cfg, boxes: list) -> list[str]:
             if straight or not d.get("geometry"):
                 d["geometry"] = [[0, x, 0.0], [n - 1, x + n - 1, 0.0]]
                 d.pop("geometry_prev", None)
+                d.pop("rehung_prev", None)
             x += n - 1 + GAP
             done.append(name)
         cfg.save()

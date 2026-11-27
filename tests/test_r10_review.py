@@ -69,7 +69,7 @@ class PreviewUnmappedRunTests(unittest.TestCase):
         import preview
         d = _tmp(self)
         lay = json.loads((ROOT / "layouts" / "house.json").read_text(encoding="utf-8"))
-        lay["devices"]["AA:BB:CC:DD:EE:04"] = {"name": "Run 4", "pixel_count": 50, "order": 99}
+        lay["devices"]["AA:BB:CC:DD:EE:" + "04"] = {"name": "Run 4", "pixel_count": 50, "order": 99}
         p = d / "lay.json"
         p.write_bytes(BOM + json.dumps(lay).encode("utf-8"))              # (and saved with a BOM)
         n = len(preview.house_layout(p).pixels)

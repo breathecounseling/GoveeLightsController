@@ -702,7 +702,7 @@ function tabTo(t){
   if (t === 'shows') loadTonight();
   if (t === 'holo') loadHolo();
   if (t === 'more'){ loadFourth(); loadBulbs() }
-  else if (MT.on) matchStop();                       // leaving More ends the colour test
+  else if (MT.on || MT.starting) matchStop();        // leaving More ends the colour test (or one starting)
 }
 document.querySelectorAll('#nav button').forEach(b => b.onclick = () => tabTo(b.dataset.t));
 function openSheet(title, body){ $('sheetTitle').textContent = title; const sb=$('sheetBody'); sb.innerHTML=''; if (typeof body === 'string') sb.innerHTML = body; else sb.appendChild(body); $('sheet').scrollTop=0; $('sheet').classList.add('on'); $('scrim').classList.add('on') }
@@ -2464,7 +2464,7 @@ function drawCloud(){
    back when it stops), one-tap nudges per run, finer sliders under "Fine-tune". */
 const MT_SW = [['warm','Warm white','#ffb46b'],['cool','Cool white','#ffffff'],['red','Red','#ff0000'],
                ['green','Green','#00ff00'],['blue','Blue','#0000ff'],['gold','Gold','#ffa000']];
-const MT = {on: null, ping: null, cal: {}};
+const MT = {on: null, ping: null, cal: {}, starting: 0, cancel: false};
 const MT_ID = {brightness:1, gain:[1,1,1], gamma:1, fade:0};
 function mtCal(r){ return MT.cal[r.mac] || r.cal || MT_ID }
 /* roughly how this run shows the test colour (the bar and dots), so a nudge visibly lands */
@@ -2489,7 +2489,16 @@ async function matchColor(key){
   const waking = !MT.on && !(ST && ST.live);
   if (waking) $('mtNote').textContent = 'Switching the lights on… this takes a few seconds.';
   MT.pend = key;                                     // stays highlighted while the reply is on its way
-  const r = await post('match', {action: MT.on ? 'color' : 'start', color: key}).finally(() => { if (MT.pend === key) MT.pend = null });
+  const starting = !MT.on;
+  if (starting) { MT.starting = (MT.starting || 0) + 1; MT.cancel = false }
+  const r = await post('match', {action: starting ? 'start' : 'color', color: key}).finally(() => {
+    if (MT.pend === key) MT.pend = null;
+    if (starting) MT.starting--;
+  });
+  if (r && starting && MT.cancel) {                  // the card was left while the test was starting
+    if (!MT.starting) MT.cancel = false;
+    post('match', {action:'stop'}); matchEnded(); return;
+  }
   if (!r) { if (waking) $('mtNote').textContent = ''; drawMatch(true); return }
   MT.on = r.color; MT.t = Date.now(); clearInterval(MT.ping);
   MT.ping = setInterval(() => post('match', {action:'ping'}).then(x => { if (x && !x.on) matchEnded() }), 30000);
@@ -2499,7 +2508,11 @@ async function matchColor(key){
   drawMatch(true);
 }
 function matchEnded(){ MT.on = null; clearInterval(MT.ping); MT.ping = null; $('mtNote').textContent = ''; drawMatch(true) }
-function matchStop(){ if (!MT.on) return; post('match', {action:'stop'}); matchEnded() }
+function matchStop(){
+  if (MT.starting) MT.cancel = true;                 // a start still on its way: stop it when it lands
+  if (!MT.on) return;
+  post('match', {action:'stop'}); matchEnded();
+}
 async function matchCal(body){
   const r = await post('calibrate', body); if (!r) return;
   MT.cal = r.cal; drawMatch(true);
@@ -2563,7 +2576,8 @@ function drawMatch(force){
 }
 ['pointerup','pointercancel','touchend','touchcancel'].forEach(ev => window.addEventListener(ev, () =>   // a finger lifted anywhere ends a drag
   document.querySelectorAll('#mtRuns input').forEach(i => { if (i._drag) { i._drag = false; setTimeout(() => drawMatch(), 400) } }), true));
-window.addEventListener('pagehide', () => { if (!MT.on) return; MT.on = null;     // leaving the app ends the test
+window.addEventListener('pagehide', () => { if (!MT.on && !MT.starting) return; MT.on = null;     // leaving the app ends the test
+  if (MT.starting) MT.cancel = true;                 // (and one still starting, should the page come back)
   fetch('/api/match', {method:'POST', keepalive:true, headers:{'Content-Type':'application/json','X-Requested-With':'lights'}, body:'{"action":"stop"}'}).catch(()=>{}) });
 
 // ------------------------------------------------------------- security

@@ -243,6 +243,7 @@ class Config:
             if any("geometry" in lay[m] for m in target):
                 for d in self.devices.values():      # an older map undo must not undo the import
                     d.pop("geometry_prev", None)
+                    d.pop("rehung_prev", None)
             ren, misfits = {}, set()
             foreign = any(target.get(m) != m for m in lay)     # not (all) this house's own boxes
             for src, mac in target.items():
