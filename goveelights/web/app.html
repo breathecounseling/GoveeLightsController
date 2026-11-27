@@ -569,6 +569,7 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
     <p class="help">Run in the background: <code>python -m goveelights install-service</code> on a Windows PC; on macOS or Linux see docs/SERVICE.md.</p>
     <div class="row"><button class="grow" onclick="openSetup()">Run first-time setup again</button>
     <button class="bad" onclick="if(confirm('Stop the app? Lights go back to the Govee app.'))post('quit').then(()=>toast('Stopped'))">Quit app</button></div>
+    <p class="help" id="appVer"></p>
   </div>
   <p class="disc" id="disclaimer">Unofficial project, not affiliated with or endorsed by Govee. "Govee" is a trademark of its owner, used only to name the lights this works with. It uses undocumented LAN commands that may change or stop working with a firmware update. Use at your own risk. MIT licence.</p>
 </section>
@@ -826,6 +827,7 @@ setInterval(() => { if (document.visibilityState === 'visible' && $('s-play').cl
 // ------------------------------------------------------------- status
 async function refresh(){
   const s = await get('status').catch(()=>null); if (!s) return; ST = s;
+  if ($('appVer')) $('appVer').textContent = s.version ? `Running update ${s.version} · started ${new Date(s.started*1000).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'})}` : '';
   liveBtnUI(s);
   const p = s.playing, dusk = s.dusk_intro;
   $('nowName').textContent = p ? p.name : 'Nothing';

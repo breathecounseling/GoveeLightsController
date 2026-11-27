@@ -242,6 +242,18 @@ def migrate_presets(store: PresetStore, root: Path | None = None) -> list[str]:
 
 STROBE_HOLD_RATE = 2.5        # flashes/s for a latched pad strobe (a tap's 3 s burst stays at 12)
 
+
+def _app_version() -> str:
+    """The git commit and date the app was started from ('' outside a git checkout)."""
+    import subprocess
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        out = subprocess.run(["git", "-C", root, "log", "-1", "--format=%h %cd", "--date=format-local:%b %d %H:%M"],
+                             capture_output=True, text=True, timeout=3)
+        return out.stdout.strip() if out.returncode == 0 else ""
+    except Exception:  # noqa: BLE001 - no git, or it hung: just show nothing
+        return ""
+
 class Controller:
     CLOUD_THREAD = True                             # the cloud output's own thread (tests pump it by hand)
 
@@ -290,6 +302,7 @@ class Controller:
         self._live_on_gen = 0                       # bumped by every "lights on" (the match test knows if it still owns them)
         self._stop = threading.Event()
         self.started = time.time()
+        self.version = _app_version()                 # More -> App shows it: which update is running
         self.bulbcheck = BulbCheck(self, lambda: time.time())   # More -> Bulb check (takes over the lights for a while)
         self.colourtest = colororder.ColourTest(self, lambda: time.time())   # "Colours look wrong?" (the same way)
         self.build_engine()
@@ -2288,6 +2301,7 @@ class Controller:
             pl = {"name": self.playlist["name"], "next_in": max(0, round(self.playlist["next_at"] - time.time()))}
         return {
             "live": e.live, "phone_only": self.phone_only and not e.live,
+            "version": getattr(self, "version", ""), "started": round(self.started),
             "playing": self.playing, "playlist": pl, "diag_active": self.diag_active,
             "fps": e.fps, "gamma": e.gamma, "brightness": e.brightness, "stats": e.stats,
             "audio_offset_ms": round(e.audio.offset * 1000),
