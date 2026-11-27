@@ -13,6 +13,11 @@ phone ──HTTPS──> Cloudflare (Access login) ──tunnel──> cloudflar
 
 Cloudflare's free plan covers all of this.
 
+The computer running the app and the tunnel has to stay at home and switched on. If
+yours is a laptop that travels, run both on a small always-on box instead (a Raspberry
+Pi or a used mini PC): [docs/RASPBERRY_PI.md](docs/RASPBERRY_PI.md). Your laptop then
+opens the page like your phone does, from anywhere.
+
 ## 0. Before you start
 
 * Your domain's DNS must be on Cloudflare. If your website's DNS is somewhere else,

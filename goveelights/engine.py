@@ -92,6 +92,94 @@ class _Still:
         return self.cols
 
 
+class FrameGovernor:
+    """Automatic frame rate for a slow computer (a Raspberry Pi, an old laptop).
+
+    The render loop reports how long each frame took (render + send). While that stays
+    well inside the frame budget (1/fps) nothing happens: the configured rate is used and
+    the frames are exactly what they would be without it. If the average cost stays above
+    `high` x the budget for `down_after` seconds, the rate steps down (20 -> 15 -> 12 fps);
+    once the average is below `low` x the budget of the next faster step for `up_after`
+    seconds it steps back up. Effects are driven by time, not frame count, so a lower rate
+    only means fewer in-between frames, never a different look or a slower show."""
+
+    STEPS = (20.0, 15.0, 12.0)
+
+    def __init__(self, enabled: bool = True, down_after: float = 3.0, up_after: float = 10.0,
+                 high: float = 0.9, low: float = 0.6, alpha: float = 0.2):
+        self.enabled = enabled
+        self.down_after, self.up_after, self.high, self.low, self.alpha = down_after, up_after, high, low, alpha
+        self.configured = 0.0
+        self.ladder: list[float] = []
+        self.level = 0
+        self.cost = 0.0                 # smoothed seconds per frame
+        self._over_since: float | None = None
+        self._cheap_since: float | None = None
+        self.changes = 0
+        self.last_change = 0.0          # time.time() of the last step
+        self.reason = ""
+
+    def _setup(self, fps: float):
+        self.configured = fps
+        self.ladder = [fps] + [s for s in self.STEPS if s < fps - 1e-9]
+        self.level = 0
+        self._over_since = self._cheap_since = None
+        self.reason = ""
+
+    def fps_for(self, configured: float) -> float:
+        """The rate to run at now, for this configured rate."""
+        configured = max(1.0, float(configured))
+        if configured != self.configured:
+            self._setup(configured)
+        if not self.enabled:
+            return configured
+        return self.ladder[min(self.level, len(self.ladder) - 1)]
+
+    def update(self, cost_s: float, now: float, configured: float) -> float:
+        """Record one frame's cost (seconds) at monotonic time `now`; returns the rate to use."""
+        fps = self.fps_for(configured)
+        if not self.enabled:
+            return fps
+        self.cost = cost_s if self.cost <= 0 else self.cost + self.alpha * (cost_s - self.cost)
+        budget = 1.0 / fps
+        if self.cost > self.high * budget and self.level < len(self.ladder) - 1:
+            self._cheap_since = None
+            if self._over_since is None:
+                self._over_since = now
+            elif now - self._over_since >= self.down_after:
+                self._step(+1, f"frames took {self.cost * 1000:.0f} ms, more than the "
+                               f"{budget * 1000:.0f} ms a frame has at {fps:g} fps")
+        else:
+            self._over_since = None
+            if self.level > 0 and self.cost < self.low / self.ladder[self.level - 1]:
+                if self._cheap_since is None:
+                    self._cheap_since = now
+                elif now - self._cheap_since >= self.up_after:
+                    self._step(-1, "back up: frames are cheap again")
+            else:
+                self._cheap_since = None
+        return self.ladder[self.level]
+
+    def _step(self, d: int, why: str):
+        old = self.ladder[self.level]
+        self.level += d
+        self._over_since = self._cheap_since = None
+        self.changes += 1
+        self.last_change = time.time()
+        self.reason = "" if self.level == 0 else why
+        log.warning("frame rate %g -> %g fps (%s)", old, self.ladder[self.level], why)
+
+    def state(self, configured: float | None = None) -> dict:
+        """For /api/status: `configured` is the engine's frame-rate setting."""
+        if configured is not None:
+            self.fps_for(configured)
+        fps = self.ladder[self.level] if self.ladder and self.enabled else self.configured
+        return {"enabled": self.enabled, "configured_fps": self.configured, "fps": fps,
+                "slowed": bool(self.enabled and self.level > 0), "cost_ms": round(self.cost * 1000, 1),
+                "budget_ms": round(1000.0 / fps, 1) if fps else 0.0, "changes": self.changes,
+                "last_change": round(self.last_change) if self.last_change else None, "reason": self.reason}
+
+
 class Engine:
     def __init__(self, layout: Layout, output: Output, fps: float = 20.0, gamma: float = 1.0,
                  brightness: float = 1.0):
@@ -124,6 +212,7 @@ class Engine:
         self.last_colors: list[Color] = []      # what was rendered (before each run's calibration)
         self.preview_colors: list[Color] = []   # the same with each run's calibration: the phone's preview
         self.stats = {"frames": 0, "render_ms": 0.0, "late": 0}
+        self.governor = FrameGovernor()          # slows to 15/12 fps only if frames can't keep up
         self._run = False
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
@@ -318,11 +407,14 @@ class Engine:
     def _loop(self):
         nxt = time.perf_counter()
         while self._run:
+            t0 = time.perf_counter()
             try:
                 self.tick()
             except Exception:  # noqa: BLE001
                 log.exception("render failed")
-            nxt += 1.0 / max(1.0, self.fps)      # fps can change while running
+            t1 = time.perf_counter()
+            fps = self.governor.update(t1 - t0, t1, self.fps)   # fps can change while running
+            nxt += 1.0 / max(1.0, fps)
             delay = nxt - time.perf_counter()
             if delay > 0:
                 time.sleep(delay)

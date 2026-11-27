@@ -1,23 +1,30 @@
 # systemd unit for GoveeLightsController (Linux). See docs/SERVICE.md.
-# 1. Change User, WorkingDirectory and ExecStart to your user and folder.
+# Easiest: 'python3 -m goveelights install-service' writes this for you with your user
+# and folder filled in ('--print' shows it first). By hand instead:
+# 1. Change User, Group, WorkingDirectory and ExecStart to your user and folder.
 # 2. sudo cp docs/examples/goveelights.service /etc/systemd/system/
 # 3. sudo systemctl daemon-reload && sudo systemctl enable --now goveelights
-# Logs: journalctl -u goveelights -f   (and goveelights.log in the folder)
+# Logs: journalctl -u goveelights -f
 [Unit]
-Description=GoveeLightsController (local effects for Govee lights)
+Description=Govee lights controller (effects and schedule for Govee lights)
 Wants=network-online.target
-After=network-online.target
+After=network-online.target time-sync.target
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 User=pi
+Group=pi
 WorkingDirectory=/home/pi/GoveeLightsController
-ExecStart=/usr/bin/python3 -m goveelights serve --log /home/pi/GoveeLightsController/goveelights.log
-Restart=on-failure
-RestartSec=30
-# Ctrl+C equivalent: the app hands the lights back to the Govee app on SIGTERM
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 -m goveelights serve
+Restart=always
+RestartSec=10
+# SIGTERM is the app's Ctrl+C: it hands the lights back to the Govee app, then exits
 KillSignal=SIGTERM
 TimeoutStopSec=15
+# a little ahead of other programs, so the 20 frames a second stay smooth on a Pi
+Nice=-5
 
 [Install]
 WantedBy=multi-user.target

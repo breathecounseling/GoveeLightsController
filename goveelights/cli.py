@@ -5,7 +5,7 @@
   python -m goveelights play <preset>   play without the UI
   python -m goveelights effects | layout | set-password
   python -m goveelights hologram <scene> clips for LED hologram fans (--list, --help)
-  python -m goveelights install-service | uninstall-service      (Windows, at boot, admin)
+  python -m goveelights install-service | uninstall-service      (at boot: Windows task / Linux systemd)
   python -m goveelights install-startup | uninstall-startup      (Windows, at login)
 """
 from __future__ import annotations
@@ -144,9 +144,8 @@ def not_windows(cmd: str) -> str:
                f"~/Library/LaunchAgents/, set the paths in it (Python: {py}, folder: {root}),\n"
                f"then: launchctl load ~/Library/LaunchAgents/goveelights.plist")
     else:
-        how = (f"On Linux, run it with systemd: copy docs/examples/goveelights.service to\n"
-               f"/etc/systemd/system/, set User and the paths in it (Python: {py}, folder: {root}),\n"
-               f"then: sudo systemctl daemon-reload && sudo systemctl enable --now goveelights")
+        how = ("On Linux (a Raspberry Pi too), start it at boot with:\n"
+               "  python3 -m goveelights install-service      (--print shows what it would do)")
     return f"'{cmd}' is for Windows (Task Scheduler / Startup folder).\n{how}\nDetails: docs/SERVICE.md"
 
 
@@ -199,12 +198,178 @@ def firewall_cmds(port: int, add: bool = True) -> list[list[str]]:
     return cmds
 
 
-def cmd_service(uninstall=False):
+UNIT = "goveelights"
+UNIT_PATH = "/etc/systemd/system/goveelights.service"
+
+
+def _sd_quote(v: str) -> str:
+    """One ExecStart word for systemd: quoted if it has a space or a quote in it."""
+    v = str(v)
+    if not v or any(c in v for c in " \t\"'\\"):
+        return '"' + v.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return v
+
+
+def systemd_unit(user: str, group: str, root, python: str, extra_args=()) -> str:
+    """The systemd unit 'install-service' writes on Linux: a system service (starts at
+    boot, nobody needs to log in) running as `user` in the project folder, restarted
+    whenever it stops. Its output goes to the journal (journalctl -u goveelights)."""
+    cmd = " ".join(_sd_quote(w) for w in [python, "-m", "goveelights", "serve", *extra_args])
+    return f"""# Written by 'python -m goveelights install-service'. Remove it with
+# 'python -m goveelights uninstall-service'. Logs: journalctl -u {UNIT} -f
+[Unit]
+Description=Govee lights controller (effects and schedule for Govee lights)
+Wants=network-online.target
+After=network-online.target time-sync.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User={user}
+Group={group}
+WorkingDirectory={root}
+Environment=PYTHONUNBUFFERED=1
+ExecStart={cmd}
+Restart=always
+RestartSec=10
+# SIGTERM is the app's Ctrl+C: it hands the lights back to the Govee app, then exits
+KillSignal=SIGTERM
+TimeoutStopSec=15
+# a little ahead of other programs, so the 20 frames a second stay smooth on a Pi
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+
+def _service_user(explicit: str | None, euid: int) -> str:
+    """Who the service runs as: --user, else whoever ran sudo, else you."""
+    if explicit:
+        return explicit
+    if euid == 0 and os.environ.get("SUDO_USER") and os.environ["SUDO_USER"] != "root":
+        return os.environ["SUDO_USER"]
+    import getpass
+    return getpass.getuser()
+
+
+def _primary_group(user: str) -> str:
+    try:
+        import grp
+        import pwd
+        return grp.getgrgid(pwd.getpwnam(user).pw_gid).gr_name
+    except (ImportError, KeyError):
+        return user
+
+
+def linux_service_plan(uninstall: bool, user: str, root, python: str, euid: int) -> tuple:
+    """(unit text or None, the commands to run) for install/uninstall-service on Linux.
+    Commands that need root get 'sudo' in front unless we are root already."""
+    sudo = [] if euid == 0 else ["sudo"]
+    if uninstall:
+        return None, [sudo + ["systemctl", "disable", "--now", UNIT],
+                      sudo + ["rm", "-f", UNIT_PATH],
+                      sudo + ["systemctl", "daemon-reload"]]
+    unit = systemd_unit(user, _primary_group(user), root, python)
+    return unit, [sudo + ["install", "-m", "0644", UNIT_FILE_SLOT, UNIT_PATH],
+                  sudo + ["systemctl", "daemon-reload"],
+                  sudo + ["systemctl", "enable", UNIT],
+                  sudo + ["systemctl", "restart", UNIT]]
+
+
+UNIT_FILE_SLOT = "<unit file>"
+
+
+def _has_systemd() -> bool:
+    from pathlib import Path
+    return Path("/run/systemd/system").is_dir()
+
+
+def linux_service(uninstall: bool, argv=(), run=None, euid: int | None = None, write=print) -> int:
+    """Linux: install (or remove) the systemd service. --print shows the unit and the
+    commands without changing anything; --user NAME runs it as someone else."""
+    import argparse
+    import shlex
+    import subprocess
+    import tempfile
+    from pathlib import Path
+    ap = argparse.ArgumentParser(prog=f"python -m goveelights {'un' if uninstall else ''}install-service")
+    ap.add_argument("--print", "--dry-run", dest="dry", action="store_true",
+                    help="show the unit file and the commands, change nothing")
+    ap.add_argument("--user", help="the user the service runs as (default: you)")
+    a = ap.parse_args(list(argv))
+    run = run or subprocess.run
+    euid = os.geteuid() if euid is None else euid
+    root = Path(__file__).resolve().parent.parent
+    python = sys.executable or "/usr/bin/python3"
+    user = _service_user(a.user, euid)
+    if user == "root" and not a.user and not uninstall:
+        raise SystemExit("Run this as your normal user (not as root): the service runs as whoever installs it,\n"
+                         "and your settings files belong to you. Or pass --user NAME.")
+    unit, cmds = linux_service_plan(uninstall, user, root, python, euid)
+
+    def show(c):
+        return " ".join(shlex.quote(w) for w in c)
+    if a.dry:
+        if unit:
+            write(f"--- {UNIT_PATH} (not written: --print) ---\n{unit}--- end ---")
+        write("Would run:\n" + "\n".join("  " + show(c) for c in cmds))
+        return 0
+    if not _has_systemd():
+        raise SystemExit("This system doesn't run systemd, so there is no service to "
+                         f"{'remove' if uninstall else 'install'}.\n"
+                         "Start the app by hand instead: ./start.sh   (details: docs/SERVICE.md)")
+    tmp = None
+    try:
+        if unit:
+            fd, tmp = tempfile.mkstemp(prefix="goveelights.", suffix=".service")
+            with open(fd, "w", encoding="utf-8") as fh:
+                fh.write(unit)
+            cmds = [[tmp if w == UNIT_FILE_SLOT else w for w in c] for c in cmds]
+        for c in cmds:
+            write("+ " + show(c))
+            rc = getattr(run(c), "returncode", 0)
+            if rc and not (uninstall and "disable" in c):     # not installed: carry on removing
+                raise SystemExit(f"That failed (exit {rc}). Nothing after it was run.")
+    finally:
+        if tmp:
+            Path(tmp).unlink(missing_ok=True)
+    if uninstall:
+        write(f"Removed the '{UNIT}' service: the app was stopped and no longer starts at boot.")
+        return 0
+    port = 8080
+    try:
+        port = int(Config().data["server"].get("port", 8080))
+    except Exception:  # noqa: BLE001 - only for the message
+        pass
+    from .diag_server import lan_ips
+    urls = "\n".join(f"  http://{ip}:{port}/" for ip in lan_ips())
+    write(f"""
+Installed the '{UNIT}' service ({UNIT_PATH}):
+  runs as {user}, in {root}
+  with {python} -m goveelights serve
+  starts at boot (no login needed), and again 10 s after it stops for any reason.
+It is running now. Open it from a phone or computer at home:
+{urls}
+
+  See what it's doing:        journalctl -u {UNIT} -f     (Ctrl+C stops watching, not the app)
+  Today's log:                journalctl -u {UNIT} --since today
+  Is it running?              systemctl status {UNIT}
+  Restart (after an update):  sudo systemctl restart {UNIT}
+  Stop until the next boot:   sudo systemctl stop {UNIT}
+  Remove it:                  python3 -m goveelights uninstall-service
+The schedule uses this computer's clock and time zone: check them with 'timedatectl'.""")
+    return 0
+
+
+def cmd_service(uninstall=False, argv=()):
     """Windows: run at boot (before anyone logs in) via Task Scheduler, restart on failure.
-    Needs an administrator PowerShell."""
+    Needs an administrator PowerShell. Linux: a systemd service (linux_service)."""
     import subprocess
     from pathlib import Path
     if os.name != "nt":
+        if sys.platform.startswith("linux"):
+            return linux_service(uninstall, argv)
         raise SystemExit(not_windows("install-service" if not uninstall else "uninstall-service"))
     if uninstall:
         r = subprocess.run(["schtasks", "/Delete", "/TN", TASK, "/F"], capture_output=True, text=True)
@@ -259,7 +424,8 @@ COMMANDS_HELP = """commands (python -m goveelights <command> --help for each):
   layout [import <file>]     show the virtual strip, or import a layout file
   diag                       the diagnostics page on its own
   set-password               allow remote access with a password
-  install-service / uninstall-service, install-startup / uninstall-startup  (Windows)
+  install-service / uninstall-service   start at boot (Windows task, Linux systemd; --print)
+  install-startup / uninstall-startup   start at login (Windows)
 Options such as --config may come before or after the command."""
 
 
@@ -295,7 +461,7 @@ def main(argv=None):
         print(f"Password set ({a.path}). Remote access is now allowed with this password; all devices were signed out.")
         return 0
     if argv[0] in ("install-service", "uninstall-service"):
-        return cmd_service(uninstall=argv[0] == "uninstall-service")
+        return cmd_service(uninstall=argv[0] == "uninstall-service", argv=argv[1:])
     if argv[0] in ("install-startup", "uninstall-startup"):
         return cmd_install_startup(uninstall=argv[0] == "uninstall-startup")
 

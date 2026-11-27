@@ -335,6 +335,7 @@ class Controller:
                        brightness=float(self.ecfg.get("brightness", 1.0)))
             e.master.update(self.cfg.data.get("master", {}))
             e.dither = bool(self.ecfg.get("dither", True))
+            e.governor.enabled = bool(self.ecfg.get("auto_fps", True))   # step down on a slow computer
             if old:
                 e.audio = old.audio                # a listening phone keeps its beat across a rebuild
                 e.dim, e.blackout = old.dim, old.blackout   # late-night dim and Blackout stay as they were
@@ -399,6 +400,8 @@ class Controller:
         with self.cfg.lock:
             if "fps" in b:
                 e.fps = self.ecfg["fps"] = max(1.0, min(60.0, float(b["fps"])))
+            if "auto_fps" in b:
+                e.governor.enabled = self.ecfg["auto_fps"] = bool(b["auto_fps"])
             if "gamma" in b:
                 e.gamma = self.ecfg["gamma"] = max(0.5, min(3.0, float(b["gamma"])))
             if "brightness" in b:
@@ -2258,6 +2261,7 @@ class Controller:
             "live": e.live, "phone_only": self.phone_only and not e.live,
             "playing": self.playing, "playlist": pl, "diag_active": self.diag_active,
             "fps": e.fps, "gamma": e.gamma, "brightness": e.brightness, "stats": e.stats,
+            "governor": e.governor.state(e.fps),
             "audio_offset_ms": round(e.audio.offset * 1000),
             "master": e.master, "blackout": e.blackout, "dither": e.dither,
             "evolve": ({"next_in": max(0, round(evs["next_at"] - time.time())), "step": evs["step"]} if evs else None),
