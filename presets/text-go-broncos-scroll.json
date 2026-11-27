@@ -1,0 +1,44 @@
+{
+  "name": "Go Broncos (scrolling)",
+  "tags": [
+    "Sports",
+    "Text"
+  ],
+  "layers": [
+    {
+      "effect": "candy_cane",
+      "target": [
+        "Eaves",
+        "Lower roofline"
+      ],
+      "params": {
+        "colors": [
+          "#ff4f00",
+          "#1040ff"
+        ],
+        "width": 6,
+        "blend": 0.1,
+        "speed": 1
+      }
+    },
+    {
+      "effect": "peak_text",
+      "target": "Peak",
+      "params": {
+        "text": "GO BRONCOS!",
+        "mode": "marquee",
+        "colors": [
+          "#ff4f00",
+          "#1040ff"
+        ],
+        "color_mode": "words",
+        "hold": 0.7,
+        "transition": "fade",
+        "pause": 1.6,
+        "border_color": "#1040ff",
+        "speed": 4.0,
+        "dwell": 0.6
+      }
+    }
+  ]
+}

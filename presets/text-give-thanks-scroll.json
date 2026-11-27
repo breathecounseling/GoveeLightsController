@@ -1,0 +1,37 @@
+{
+  "name": "Give thanks (scrolling)",
+  "tags": [
+    "Holiday",
+    "Thanksgiving",
+    "Text"
+  ],
+  "layers": [
+    {
+      "effect": "candlelight",
+      "params": {
+        "level": 0.6,
+        "waver": 0.25,
+        "swell_every": 0
+      }
+    },
+    {
+      "effect": "peak_text",
+      "target": "Peak",
+      "params": {
+        "text": "GIVE THANKS",
+        "mode": "marquee",
+        "colors": [
+          "#ffb000",
+          "#ffe2a8"
+        ],
+        "color_mode": "words",
+        "hold": 0.8,
+        "transition": "fade",
+        "pause": 2.0,
+        "border_color": "#ff7a10",
+        "speed": 4.0,
+        "dwell": 0.6
+      }
+    }
+  ]
+}

@@ -10,6 +10,10 @@ choose one big letter at a time ('single') or a marquee.
              cross-fade), letters as tall as the Peak and one bulb thick. A letter is lit
              only once (nearly) all of it is on the Peak: the sloped sides never show a
              letter cut in half, and nothing out on the low flanks reads as stray dots.
+             The Peak's top row is only about nine bulbs across, so a letter is fully in
+             the window for a second or so; the scroll stops for `dwell` seconds with each
+             letter in the middle of the window, so every one is read whole before it
+             moves on (the letter alone on a dark Peak).
 
 The rest of the target keeps time with the text. The Eaves (bulbs that point out to the
 street) are the rhythm: 'pulse' flashes them in each letter's colour as it arrives,
@@ -43,6 +47,7 @@ SOURCES = scrolltext.SOURCES
 WHITE = (1.0, 1.0, 1.0)
 HEART_RGB = (1.0, 0.06, 0.25)
 CUT = 0.35                 # marquee: a letter the sloped sides cut by a bulb or two, clearly dimmer
+QUIET = 0.2                # marquee: seconds for the cut neighbours to fade when the scroll stops
 RISE, FALL, WIPE = 0.08, 0.14, 0.3
 WALL_WORDS = ("accent", "porch", "garage", "door", "window", "wall wash")
 
@@ -179,6 +184,9 @@ def _fallback(t, ctx, P, st):
     Param("transition", "choice", "fade", "Letters come in", options=TRANSITIONS,
           help="single: fade in and out, cut, wipe up the rows, or a white flash"),
     Param("speed", "number", 4.0, "Marquee speed", 1, 12, 0.25, help="marquee: bulbs per second"),
+    Param("dwell", "number", 0.6, "Stop on each letter (s)", 0, 3, 0.05,
+          help="marquee: the scroll stops this long with each letter in the middle of the Peak, so it is "
+               "read whole before it moves on (0: a steady scroll)"),
     Param("pause", "number", 1.6, "Pause at the end (s)", 0, 10, 0.25,
           help="dark before the message starts again"),
     Param("repeat", "choice", "loop", "Repeat", options=REPEATS, help="loop the message, or show it once"),
@@ -222,7 +230,7 @@ def peak_text(t, ctx, P, st):
 
     # the message: fixed for a whole pass, so a new time or score never changes mid-word
     pkey = (P["text"], P["source"], P["date"], P["label"], P["clock"], P["score_detail"], mode,
-            P["hold"], P["gap"], P["word_gap"], P["pause"], P["speed"])
+            P["hold"], P["gap"], P["word_gap"], P["pause"], P["speed"], P["dwell"])
     if st.get("pkey") != pkey:
         st["pkey"], st["t0"], st["pass"] = pkey, T, 0
         st["msg"] = None
@@ -234,7 +242,8 @@ def peak_text(t, ctx, P, st):
         msg = msg or " "
         st["msg"], st["extra"] = msg, extra
         if mode == "marquee":
-            st["cyc"] = _marquee_period(lat, msg, P) / P["speed"]
+            st["stops"] = marquee_stops(lat, msg)
+            st["cyc"] = _marquee_period(lat, msg, P) / P["speed"] + P["dwell"] * len(st["stops"])
         else:
             st["cyc"] = max(0.5, letter_timeline(msg, P["hold"], P["pause"], P["gap"], P["word_gap"])[1])
     # a score change celebrates at once (the trim strobes), even though the score on the
@@ -341,13 +350,56 @@ def _marquee_period(lat, text, P) -> int:
     return int(math.ceil(W + (rt - lt) + 4 + P["pause"] * P["speed"]))
 
 
+def _marquee_x(lat, step: int) -> int:
+    """The line's left edge at a marquee step: the text comes in just right of where the
+    Peak is full height (its top row) and steps left a bulb at a time."""
+    return math.floor(lat.width_at(lat.peak_rows - 1)[1]) + 2 - step
+
+
+def marquee_stops(lat, text: str) -> list[int]:
+    """The marquee steps the scroll stops at: one per letter (spaces have none), the
+    middle of the steps at which the whole letter is on the Peak (else the step it is
+    least cut), so it stands in the middle of the window."""
+    lt, rt = lat.width_at(lat.peak_rows - 1)
+    mid = (lt + rt) / 2
+    out = []
+    for ch, gx, w in hexfont.line_layout(text):
+        if ch == " ":
+            continue
+        k0 = round(_marquee_x(lat, 0) + gx + w / 2 - mid)     # the step that centres it
+        cand = range(k0 - 8, k0 + 9)
+        off = {k: hexfont.off_peak(lat, ch, _marquee_x(lat, k) + gx) for k in cand}
+        full = [k for k in cand if off[k] == 0]
+        k = full[len(full) // 2] if full else min(cand, key=lambda k: (off[k], abs(k - k0)))
+        if k >= 0 and (not out or k > out[-1]):
+            out.append(k)
+    return out
+
+
+def marquee_position(u: float, speed: float, stops: list[int], dwell: float) -> tuple[float, float]:
+    """(how far in steps the marquee has scrolled u seconds into its pass, how still it
+    is): `speed` steps a second, standing still for `dwell` seconds at each stop. Still is
+    0 while it moves and eases to 1 over QUIET seconds once it stops (and back before it
+    moves on), so the letter stands alone while it is read."""
+    s0 = 0.0
+    for k in stops:
+        run = (k - s0) / speed
+        if u < run:
+            return s0 + u * speed, 0.0
+        u -= run
+        if u < dwell:
+            return float(k), _sm(min(u, dwell - u) / QUIET)
+        u -= dwell
+        s0 = float(k)
+    return s0 + u * speed, 0.0
+
+
 def _marquee(frame, lat, text, cols, u, P, lvl, bg, st):
     """Draw the marquee u seconds into its pass. Returns (colour of the letter now fully
     on the Peak or None, how fresh it is, step number)."""
-    # the text comes in just right of where the Peak is full height (its top row): out on
-    # the low flanks a letter would be cut by the slopes, so it stays dark there
-    lt, rt = lat.width_at(lat.peak_rows - 1)
-    s = u * P["speed"]
+    # out on the low flanks a letter would be cut by the slopes, so it stays dark there
+    s, still = marquee_position(u, P["speed"], st.get("stops") or [], P["dwell"])
+    cut = CUT * (1 - still)                         # stopped on a letter: it stands alone
     k = int(math.floor(s))
     f = _sm((s - k - 0.72) / 0.28)                  # each step: hold, then a quick cross-fade
     gl = hexfont.line_layout(text)
@@ -358,12 +410,12 @@ def _marquee(frame, lat, text, cols, u, P, lvl, bg, st):
         if key not in fit:
             fit[key] = hexfont.off_peak(lat, ch, gx)
         m = fit[key]
-        return 1.0 if m == 0 else CUT if m <= 2 else 0.0
+        return 1.0 if m == 0 else cut if m <= 2 else 0.0
 
     full = []
 
     def draw(step):
-        x = math.floor(rt) + 2 - step
+        x = _marquee_x(lat, step)
         out = {}
         for q, (ch, gx, _) in enumerate(gl):
             if ch != " " and strength(ch, x + gx) == 1.0:

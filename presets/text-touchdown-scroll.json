@@ -1,0 +1,65 @@
+{
+  "name": "Touchdown! (scrolling)",
+  "tags": [
+    "Sports",
+    "Game day",
+    "Text"
+  ],
+  "layers": [
+    {
+      "effect": "sequins",
+      "target": [
+        "Eaves",
+        "Lower roofline"
+      ],
+      "params": {
+        "colors": [
+          "#ff4a00",
+          "#1a40ff"
+        ],
+        "spacing": 24,
+        "speed": 22,
+        "flash": 1,
+        "level": 0.75
+      }
+    },
+    {
+      "effect": "peak_text",
+      "target": "Peak",
+      "params": {
+        "text": "TOUCHDOWN!",
+        "mode": "marquee",
+        "colors": [
+          "#ff4a00",
+          "#1a40ff"
+        ],
+        "color_mode": "letters",
+        "hold": 0.6,
+        "transition": "flash",
+        "pause": 1.2,
+        "border_color": "#1a40ff",
+        "speed": 4.0,
+        "dwell": 0.6
+      }
+    },
+    {
+      "effect": "bursts",
+      "target": [
+        "Eaves",
+        "Lower roofline"
+      ],
+      "blend": "lighten",
+      "params": {
+        "colors": [
+          "#ff4a00",
+          "#ffffff",
+          "#1a40ff"
+        ],
+        "interval": 0.7,
+        "life": 1.2,
+        "burst_speed": 16,
+        "seed": 4
+      }
+    }
+  ]
+}
