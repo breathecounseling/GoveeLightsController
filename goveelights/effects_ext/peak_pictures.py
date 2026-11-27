@@ -138,14 +138,15 @@ STAR_TIP = {
     0: [(-5, -4, "S"), (4, 5, "S")],
 }
 
-# ---- the wreath: a ring two bulbs thick round a dark middle, the bow at the bottom
+# ---- the wreath: a ring two bulbs thick round a dark middle, the bow on the bottom of
+# the ring itself (in the hole it read as a red smile)
 WREATH = {
     5: [(-2.5, 2.5, "G")],
     4: [(-5, -2, "G"), (2, 5, "G")],
     3: [(-6.5, -3.5, "G"), (3.5, 6.5, "G")],
-    2: [(-7, -5, "G"), (-3, -2, "R"), (2, 3, "R"), (5, 7, "G")],
-    1: [(-6.5, -3.5, "G"), (-2.5, -1.5, "R"), (-0.5, 0.5, "K"), (1.5, 2.5, "R"), (3.5, 6.5, "G")],
-    0: [(-5, -3, "G"), (-1, -1, "R"), (1, 1, "R"), (3, 5, "G")],
+    2: [(-7, -5, "G"), (5, 7, "G")],
+    1: [(-6.5, -5.5, "G"), (-4.5, -3.5, "R"), (3.5, 4.5, "R"), (5.5, 6.5, "G")],
+    0: [(-5, -4, "G"), (-3, -1, "R"), (0, 0, "K"), (1, 3, "R"), (4, 5, "G")],
 }
 WREATH_TIP = {          # hung from a gold bow on the apex by a red ribbon
     8: [(0, 0, "Y")],
@@ -479,11 +480,12 @@ def _rudolph(hc, T, g):
             return (1.0, 0.72, 0.35)
         if ch == "F":
             if c.r <= 1 and abs(c.x) < 2.6:             # his nose's glow on his muzzle
-                return _mix((0.55, 0.16, 0.0), (1.0, 0.1, 0.02), 0.6 * nb)
+                # (only while it blinks: at rest plain brown frames the red nose)
+                return _mix((0.55, 0.16, 0.0), (1.0, 0.1, 0.02), 0.5 * (nb - 0.6) / 0.4)
             return (0.55, 0.16, 0.0)
         if ch == "E":
             return _sc(WHITE, 1 - blink) if blink < 0.95 else (0.55, 0.16, 0.0)
-        return _sc(RED, 0.3 + 0.7 * nb)                  # N: the nose
+        return _sc(RED, 0.4 + 0.6 * nb)                  # N: the nose, never below 3/4
     lit = _paint(hc, RUDOLPH, shade, T, g)
     if hc.has_tip:
         _paint(hc, RUDOLPH_TIP, shade, T, g, lit)
@@ -520,16 +522,20 @@ def _joy(hc, T, g):
             return _sc(_mix(gold, (1.0, 0.95, 0.75), shimmer), v) if v > 0.01 else None
         _paint(hc, LETTERS["JOY"[k]], letter, T, g, out)
         return out
-    # the burst: gold glitter all over the gable, a star on the top rows
+    # the burst: a sprinkle of gold glitter over the gable, a star on the top rows at
+    # full level in a dark ring of its own (dense glitter swallowed it)
     fade = (1 - _sm((u - 0.7) / 0.3)) * _sm(u / 0.1)
+    sfade = _sm(u / 0.04) * (1 - _sm((u - 0.85) / 0.15))
     for c in hc.cells:
         if c.i is None or c.i not in hc.allowed:
             continue
-        sp = glint(_seed(c), T, 1.0, 0.05, 0.35, 23)[0] * fade
+        if not hc.has_tip and c.r >= 2 and abs(c.x) <= 3.5:
+            continue
+        sp = glint(_seed(c), T, 0.3, 0.05, 0.35, 23)[0] * fade
         if sp > 0.02:
             out[c.i] = _sc((1.0, 0.85, 0.4), sp)
     if not hc.has_tip:
-        _paint(hc, JOY_STAR, lambda *a: _sc((1.0, 0.95, 0.7), fade), T, g, out)
+        _paint(hc, JOY_STAR, lambda *a: _sc((1.0, 0.95, 0.7), sfade), T, g, out)
     return out
 
 
@@ -565,7 +571,7 @@ def _wash(style, i, f, T, g):
     if style == "ornament":
         return _sc((1.0, 0.05, 0.02), 0.75 * b)
     if style == "rudolph":
-        return _mix(_sc((0.05, 0.12, 0.75), 0.7 * b), (1.0, 0.03, 0.0), 0.65 * (g["nose"] - 0.25) / 0.75)
+        return _mix(_sc((0.05, 0.12, 0.75), 0.7 * b), (1.0, 0.03, 0.0), 0.65 * (g["nose"] - 0.6) / 0.4)
     return _sc((1.0, 0.02, 0.05), 0.8 * b)               # joy
 
 
@@ -682,7 +688,7 @@ def peak_picture(t, ctx, P, st):
     g["shine"] = max(0.0, math.cos(T * TAU / 3.4))
     nt = T % 2.4                                             # Rudolph's nose: blink, and a double blink
     nose = max(math.exp(-((nt - 0.3) / 0.22) ** 2), 0.8 * math.exp(-((nt - 0.95) / 0.18) ** 2))
-    g["nose"] = 0.25 + 0.75 * nose
+    g["nose"] = 0.6 + 0.4 * nose                             # bright, blinking brighter
     g["ripple"] = nt * 30.0
     jt = T % JOY_CYCLE                                       # JOY: which letter, how far in
     g["joy"] = (int(jt // JOY_STEP), (jt % JOY_STEP) / JOY_STEP) if jt < 3 * JOY_STEP \

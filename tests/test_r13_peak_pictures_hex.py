@@ -168,5 +168,54 @@ class HoneycombPictures(unittest.TestCase):
             self.assertTrue(any(max(c) > 0.5 for c in cols), style)
 
 
+@unittest.skipUnless(OWNER.exists(), "the owner's layout is not in this copy")
+class ReviewFixes(unittest.TestCase):
+    """Round 13 review: Rudolph's nose stays bright, the wreath's hole stays dark, the
+    JOY burst leaves room round its star."""
+
+    def test_rudolph_nose_is_bright_all_cycle_and_redder_than_his_muzzle(self):
+        for tip in (False, True):
+            L = house(tip=tip)
+            hc = hx.get(L)
+            nose = [c.i for c, ch in pp._cells(hc, pp.RUDOLPH) if ch == "N"]
+            muzzle = [c.i for c, ch in pp._cells(hc, pp.RUDOLPH)
+                      if ch == "F" and c.r <= 1 and abs(c.x) < 2.6]
+            ts = [k * 0.1 for k in range(25)]
+            fr = frames("rudolph", L, ts)
+            peak = max(cols[i][0] for cols in fr for i in nose)
+            for t, cols in zip(ts, fr):
+                with self.subTest(tip=tip, t=t):
+                    n = min(cols[i][0] for i in nose)
+                    self.assertGreaterEqual(n, 0.75 * peak)
+                    self.assertGreaterEqual(n - max(cols[i][0] for i in muzzle), 0.15 * peak)
+
+    def test_wreath_hole_is_dark_and_the_bow_sits_on_the_ring(self):
+        for r, spans in pp.WREATH.items():
+            for a, b, ch in spans:
+                if ch in "RK":
+                    self.assertLessEqual(r, 1, "the bow sits on the bottom of the ring")
+        for tip in (False, True):
+            L = house(tip=tip)
+            hc = hx.get(L)
+            hole = [c.i for c in hc.cells if c.i is not None and 1 <= c.r <= 3 and abs(c.x) <= 2.5]
+            self.assertGreaterEqual(len(hole), 8)
+            for cols in frames("wreath", L, TIMES):
+                self.assertTrue(all(max(cols[i]) < 0.02 for i in hole))
+
+    def test_joy_burst_is_sparse_and_its_star_stays_bright(self):
+        L = house()
+        hc = hx.get(L)
+        scr = set(hc.live())
+        star = {c.i for c, _ in pp._cells(hc, pp.JOY_STAR)}
+        b0 = 3 * pp.JOY_STEP
+        ts = [b0 + pp.JOY_BURST * u for u in (0.15, 0.3, 0.45, 0.6, 0.7)]
+        ref = max(max(c) for c in frames("star", L, [1.2])[0])
+        for t, cols in zip(ts, frames("joy", L, ts)):
+            with self.subTest(t=t):
+                lit = [i for i in scr - star if max(cols[i]) > 0.05]
+                self.assertLessEqual(len(lit), 0.4 * len(scr - star))
+                self.assertTrue(all(max(cols[i]) >= 0.8 * ref for i in star))
+
+
 if __name__ == "__main__":
     unittest.main()
