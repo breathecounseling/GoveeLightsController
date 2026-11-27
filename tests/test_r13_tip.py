@@ -162,7 +162,15 @@ class TipInTheEffects(unittest.TestCase):
             plan = tree.tree_plan(T, T.indices("Whole front gable"))
             tip = {p.i for p in T.run("Tip").pixels}
             drawn = tip & (set(plan["leaf"]) | set(plan["star"]))
-            self.assertEqual(len(drawn), 6, pid)              # the star (3) and the top boughs (3)
+            # the star (3) and the fir's top bough(s): since round 15 the tree is drawn in true
+            # proportions (rows ~0.66 of a bulb apart), so it is narrow and only the middle of
+            # the Tip's 7-bulb row is bough
+            star = tip & set(plan["star"])
+            boughs = tip & set(plan["leaf"])
+            self.assertEqual(len(star), 3, pid)
+            self.assertGreaterEqual(len(boughs), 1, pid)
+            row7 = [p.i for p in T.run("Tip").pixels[:7]]
+            self.assertIn(row7[3], boughs, pid)                # centred under the star
             self.assertTrue(all(max(cols[-1][i]) > 0.2 for i in drawn), pid)
 
     def test_canvas_keeps_the_peaks_scale(self):
