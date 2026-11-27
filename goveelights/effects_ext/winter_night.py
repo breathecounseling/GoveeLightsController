@@ -28,7 +28,7 @@ import math
 import random
 import time as _time
 
-from .. import font
+from .. import bignum
 from .. import geometry as geo
 from ..color import BLACK, hash01, lerp
 from ..effects import EFFECTS, Param, frame_effect
@@ -978,6 +978,9 @@ def ball_drop(t, ctx, P, st):
             g, _ = glint(i, clock, 0.08, 0.05, 0.4, seed, 1)
             c = lerp(gcol, WARM_WHITE, 0.6 * g)
             _add(frame, i, c, lvl + 0.5 * g)
+        if phase == "drop":                         # the sky first: the digits cover it
+            _bd_wait_sky(frame, st, px, P, clock, seed, 0.3 if P["countdown"] != "digits" else 0.18,
+                         stars=False)
         # the countdown on the zigzag
         if phase == "drop" and P["countdown"] == "digits":
             nsec = max(1, math.ceil(r - 1e-9))
@@ -991,8 +994,6 @@ def ball_drop(t, ctx, P, st):
                     _add(frame, i, dc, v)
         elif phase == "wait":
             _bd_wait_sky(frame, st, px, P, clock, seed, 1.0)
-        if phase == "drop":
-            _bd_wait_sky(frame, st, px, P, clock, seed, 0.3, stars=False)
         size = 1.0
         ws = P.get("wait_size", 1.0)
         if phase == "wait":
@@ -1121,53 +1122,25 @@ def _bd_ball(frame, st, L, P, clock, x, y, size=1.0, show=0.0):
             _add(frame, i, GOLD, 0.25)
 
 
-def _bd_digit_cells(st, px, nsec: int) -> list:
-    """[(bulb, weight)] lighting the number on the zigzag's text rows (the bottom five),
-    centred, as bold as fits. Digits stand still, so they are drawn crisply: each bulb
-    by how much of its own footprint lit font columns cover."""
+def _bd_digit_cells(st, layout, nsec: int) -> list:
+    """[(bulb, weight)] lighting the number on the zigzag, bulb for bulb in the big-number
+    font (bignum.py: all six rows of the Peak, the Tip left to the ball)."""
     key = ("cells", nsec)
     cache = st["txt"]
     out = cache.get(key)
-    if out is not None:
-        return out
-    rows = st["rows"][:font.ROWS]
-    bm = font.layout(str(nsec))
-    out = []
-    if rows and bm.width:
-        nr = len(rows)
-        dx = sorted(px[b].x - px[a].x for r in rows for a, b in zip(r, r[1:]) if px[b].x - px[a].x > 1e-6)
-        pitch = max(0.2, min(2.0, dx[len(dx) // 2])) if dx else 1.0
-        top = rows[-1]
-        avail = px[top[-1]].x - px[top[0]].x + pitch
-        cw = max(0.3, min(2.0 * pitch, avail / bm.width))
-        x0 = st["cx"] - bm.width * cw / 2
-        h = pitch / 2
-        for k, row in enumerate(rows):
-            gr = font.ROWS - 1 - (round(k * (font.ROWS - 1) / (nr - 1)) if nr > 1 else 2)
-            for i in row:
-                x = px[i].x
-                cov = 0.0
-                lo, hi = (x - h - x0) / cw, (x + h - x0) / cw
-                c = max(0, math.floor(lo))
-                while c < hi and c < bm.width:
-                    if bm.cols[c] >> gr & 1:
-                        cov += min(hi, c + 1) - max(lo, c)
-                    c += 1
-                w = _smooth(cov * cw / pitch * 1.4 - 0.2)
-                if w > 0.02:
-                    out.append((i, w))
-    if len(cache) > 128:
-        cache.clear()
-    cache[key] = out
+    if out is None:
+        if len(cache) > 128:
+            cache.clear()
+        out = cache[key] = list(bignum.cells(layout, st["zig"], str(nsec)).items())
     return out
 
 
 def _bd_digit(frame, st, ctx, P, nsec, r):
-    cells = _bd_digit_cells(st, ctx.layout.pixels, nsec)
-    k = 0.3 + 0.7 * _bd_show(r)                       # each new number lands bright, then dims
+    cells = _bd_digit_cells(st, ctx.layout, nsec)
+    k = 0.6 + 0.4 * _bd_show(r)                       # each new number lands bright, then settles
     dc = P["digit_color"]
-    for i, w in cells:
-        _add(frame, i, dc, w * k)
+    for i, w in cells:                               # the number replaces the sky behind it
+        frame[i] = lerp(BLACK, dc, w * k)
 
 
 def _bd_boom(frame, st, ctx, P, since, fade):
