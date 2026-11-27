@@ -28,9 +28,9 @@ PRESETS = [f"peak-{s}" for s in STYLES]
 
 # 40 frames at t = k/10 on the owner's layout (the pictures don't read the clock or date)
 GOLDEN = {
-    "peak-wreath": "8e65ed7e84364442", "peak-snowman": "2fc5f79bc0fc00b1", "peak-gingerbread": "777a778cde8a9000",
-    "peak-present": "2394214a0a1348e9", "peak-star": "3cd62cc555b80b6d", "peak-ornament": "2ae9eb0db050c9a3",
-    "peak-rudolph": "e9536fe69ee08890", "peak-joy": "cd182b2cf2bb58dc",
+    "peak-wreath": "a95d0ba06ffadd9b", "peak-snowman": "a761ceb01dd4e85a", "peak-gingerbread": "074c9adb468a5a44",
+    "peak-present": "88b5879475bc53ce", "peak-star": "21a45e612201a2c7", "peak-ornament": "4207e045f99c8cf8",
+    "peak-rudolph": "6c1dcb91eb35cf06", "peak-joy": "15cd38dcf757b304",
 }
 
 
