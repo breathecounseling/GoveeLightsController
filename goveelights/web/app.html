@@ -1956,8 +1956,8 @@ function txtUI(){
 }
 function txtInit(){
   $('txtCols').innerHTML = TXT_COLS.map((c, k) => `<button class="chip" data-k="${k}">${c.c.map(x => `<i style="background:${x}"></i>`).join('')}${esc(c.n)}</button>`).join('');
-  $('txtCols').querySelectorAll('.chip').forEach(b => b.onclick = () => { TX.col = +b.dataset.k; store.set('txtCol', TX.col); txtUI(); txtPreview() });
-  document.querySelectorAll('#txtMode button').forEach(b => b.onclick = () => { TX.mode = b.dataset.v; store.set('txtMode', TX.mode); txtUI(); txtPreview() });
+  $('txtCols').querySelectorAll('.chip').forEach(b => b.onclick = () => { TX.col = +b.dataset.k; store.set('txtCol', TX.col); txtUI(); txtPreview.now() });
+  document.querySelectorAll('#txtMode button').forEach(b => b.onclick = () => { TX.mode = b.dataset.v; store.set('txtMode', TX.mode); txtUI(); txtPreview.now() });
   $('txtSpd').oninput = e => { if (TX.mode === 'single') TX.hold = +e.target.value; else TX.speed = +e.target.value; txtUI(); txtPreview() };
   $('txtIn').value = store.get('txtText', '');
   $('txtIn').oninput = () => { store.set('txtText', $('txtIn').value); txtPreview() };
@@ -1970,7 +1970,8 @@ const txtPreview = Object.assign(debounce(() => txtPreview.now(), 350), {now: as
   const r = await post('text', {...o, action: 'preview'});
   if (seq !== TX.seq || !r) return;
   TX.pv = r; TX.k = 0;
-  $('txtSkip').textContent = r.skipped && r.skipped.length ? 'Skipped: ' + r.skipped.join(' ') : '';
+  $('txtSkip').textContent = [r.skipped && r.skipped.length ? 'Skipped: ' + r.skipped.join(' ') : '',
+    r.partial ? 'Preview shows the first 30 s.' : ''].filter(Boolean).join(' ');
 }});
 /* The Peak (and the Tip) close up, with the eaves and porch around it. */
 function txtGeo(c){

@@ -42,7 +42,7 @@ REPEATS = ["loop", "once"]
 SOURCES = scrolltext.SOURCES
 WHITE = (1.0, 1.0, 1.0)
 HEART_RGB = (1.0, 0.06, 0.25)
-CUT = 0.7                  # marquee: strength of a letter the sloped sides cut by a bulb or two
+CUT = 0.35                 # marquee: a letter the sloped sides cut by a bulb or two, clearly dimmer
 RISE, FALL, WIPE = 0.08, 0.14, 0.3
 WALL_WORDS = ("accent", "porch", "garage", "door", "window", "wall wash")
 

@@ -109,10 +109,13 @@ OVERRIDES: dict[str, dict[str, tuple[float, list]]] = {
         "G": (3, [[(3, 4), (1, 4), (0, 3.2), (0, 0.8), (1, 0), (2, 0), (3, 0.8), (3, 2.4), (1.6, 2.4)]]),
         "O": (3.5, [_OB]),
         "Q": (3.5, [_OB, [(2.2, 1.6), (3.8, -0.3)]]),
-        # S: rounded at both ends, its top end open on the right (a 9 and an 8 are closed
-        # there) and a hook low on the left (a 5 has a hard corner)
-        "S": (3, [[(3, 3.7), (2.4, 4), (1, 4), (0, 3.2), (1, 2.4), (2, 2.4), (3, 1.6), (3, 0.8), (2, 0), (1, 0),
-                   (0, 0.8)]]),
+        # S: round at the top left and the bottom right (a 5 has a hard corner there), its
+        # top end open on the right (a 9 and an 8 are closed there), and the middle a
+        # diagonal spine, not a bar (a 5 and a 3 both have a bar across the middle)
+        "S": (3, [[(3, 3.6), (2.2, 4), (1, 4), (0, 3.2), (0.5, 2.5), (2.5, 1.5), (3, 0.8), (2, 0), (0.8, 0),
+                   (0, 0.4)]]),
+        # A: a narrow peak, so its top never reads as R's or P's flat top
+        "A": (3, [[(0, 0), (0, 2.4), (1, 4), (2, 4), (3, 2.4), (3, 0)], [(0, 2.0), (3, 2.0)]]),
         # P: a bowl three rows deep (an F's bar is a row higher and open)
         "P": (3, [[(0, 0), (0, 4), (2, 4), (3, 3.2), (3, 2.4), (2, 1.6), (0, 1.6)]]),
         "5": (3, [[(3, 4), (0, 4), (0, 2.4), (2, 2.4), (3, 1.6), (3, 0.8), (2, 0), (0, 0)]]),
@@ -131,7 +134,9 @@ OVERRIDES: dict[str, dict[str, tuple[float, list]]] = {
         "K": (3, [[(0, 0), (0, 4)], [(3, 4), (0.4, 2)], [(0.9, 2.4), (3, 0)]]),
         "Z": (3, [[(0, 4), (3, 4)], (0.7, [(3, 4), (0, 0)]), [(0, 0), (3, 0)]]),
         "2": (3, [[(0, 3.2), (1, 4), (2, 4), (3, 3.2), (3, 2.4)], (0.7, [(3, 2.4), (0, 0)]), [(0, 0), (3, 0)]]),
-        "R": (3, [[(0, 0), (0, 4), (2, 4), (3, 3.2), (2, 2.4), (0, 2.4)], [(1.6, 2.4), (3, 0)]]),
+        # R: the bowl's bar stops short of the right side and the leg slants out from the
+        # middle of the bar, so R never reads as A with a flat top
+        "R": (3, [[(0, 0), (0, 4), (2, 4), (3, 3.2), (2, 2.4), (0, 2.4)], [(1.2, 2.4), (3.2, 0)]]),
     },
     "marquee": {},
 }

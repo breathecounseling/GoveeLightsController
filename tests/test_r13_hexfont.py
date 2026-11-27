@@ -111,6 +111,32 @@ class Glyphs(unittest.TestCase):
                 n = sum(1 for i, _ in self.lat.rows[r] if i in cov)
                 self.assertGreaterEqual(n, 4, (ch, r))
 
+    def _row(self, cov, r):
+        return sorted(x for i, x in self.lat.rows[r] if i in cov)
+
+    def test_r_never_reads_as_a(self):
+        # review: R's bar ran the full width and its leg dropped straight down, an A with a
+        # flat top. Now R's bar stops short of the right side, its leg slants out from the
+        # middle of the bar, and A comes to a narrow peak
+        A, R = hexfont.render_big(self.lat, "A"), hexfont.render_big(self.lat, "R")
+        self.assertGreaterEqual(len(set(A) ^ set(R)), 12)
+        self.assertLessEqual(max(self._row(R, 3)), max(self._row(A, 3)) - 1)      # the shorter bar
+        self.assertGreaterEqual(max(self._row(R, 0)) - max(self._row(R, 2)), 2)  # the slanted leg
+        self.assertLessEqual(len(self._row(A, 5)), 4)                           # A's peak
+        self.assertGreater(len(self._row(R, 5)), len(self._row(A, 5)))          # R's flat top
+
+    def test_s_never_reads_as_5_or_3(self):
+        # review: S, 5 and 3 shared one frame (top bar, a corner, a middle bar, the right
+        # side, a bottom bar). S is round at the top left and its middle is a diagonal spine
+        R = {ch: hexfont.render_big(self.lat, ch) for ch in "S53"}
+        self.assertGreaterEqual(len(set(R["S"]) ^ set(R["5"])), 10)
+        self.assertGreaterEqual(len(set(R["S"]) ^ set(R["3"])), 10)
+        self.assertGreater(min(self._row(R["S"], 5)), min(self._row(R["5"], 5)))  # round top left
+        for r in (2, 3):                                                         # no middle bar
+            self.assertLessEqual(len(self._row(R["S"], r)), 4, r)
+        self.assertGreater(min(self._row(R["S"], 2)), min(self._row(R["S"], 3)))  # it slants down
+        self.assertGreater(max(self._row(R["S"], 2)), max(self._row(R["S"], 3)))
+
     def test_four_has_a_full_height_right_stem(self):
         cov = hexfont.render_big(self.lat, "4")
         top = [x for i, x in self.lat.rows[5] if i in cov]
@@ -146,7 +172,8 @@ class PeakText(unittest.TestCase):
         frames = render(self.scene(mode="marquee", text="TOUCHDOWN", speed=4), L, frames=100, fps=20)
         lat = hexfont.lattice(L, L.indices("Peak"))
         peak = [i for i, _, _ in lat.cells]
-        lit = [frozenset(i for i in peak if max(frames[k][i]) > 0.5) for k in (40, 60, 80)]
+        # (any lit bulb: a letter the slopes still cut is drawn dim, at peak_text.CUT)
+        lit = [frozenset(i for i in peak if max(frames[k][i]) > 0.05) for k in (40, 60, 80)]
         self.assertTrue(all(lit))
         self.assertEqual(len(set(lit)), 3)
 

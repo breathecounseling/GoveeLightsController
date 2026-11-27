@@ -124,14 +124,23 @@ class Marquee(unittest.TestCase):
         # letter that is on the Peak (full), or cut by a bulb or two (0.7) - never a dim preview
         fr = render(scene(mode="marquee", text="MERRY CHRISTMAS", colors=["#ffffff"], color_mode="solid", speed=4),
                     self.L, frames=400, fps=FPS)
-        seen = 0
+        seen = cut = 0
         for k in range(0, 400, 5):                  # every step (4 a second)
             for i in self.peak:
                 v = max(fr[k][i])
                 if v > 0.02:
                     seen += 1
-                    self.assertGreater(v, 0.69, (k, i, v))
+                    if v < 0.69:                    # a clipped letter: clearly dimmer, never a ghost
+                        cut += 1
+                        self.assertAlmostEqual(v, PT.CUT, delta=0.03, msg=(k, i, v))
         self.assertGreater(seen, 200)
+        self.assertGreater(cut, 0)
+
+    def test_clipped_letters_are_clearly_dimmer(self):
+        # review: at 0.7 a letter cut by the slopes looked full from the street; at about a
+        # third it reads as "on its way in" and the whole letter stands out
+        self.assertLessEqual(PT.CUT, 0.4)
+        self.assertGreaterEqual(PT.CUT, 0.25)
 
     def test_moves_and_colours_letters_by_default(self):
         fr = render(scene(mode="marquee", text="HI HO", colors=["#ff0000", "#00ff00"], speed=6), self.L,
@@ -262,6 +271,36 @@ class Generator(unittest.TestCase):
         f = pv["frames"][3]                                      # 0.6 s: the O
         on = {i for i in peak if f[i * 6:i * 6 + 6] != "000000" and int(f[i * 6:i * 6 + 2], 16) > 100}
         self.assertEqual(on, set(hexfont.render_big(lat, "O")))
+
+    def test_length_is_the_house_pass(self):
+        # review: the phone looped on a 0.4 s end pause while the house waits 1.6 s
+        sc = textgen.scene({"text": "GO BRONCOS", "hold": 0.8})
+        want = PT.letter_timeline("GO BRONCOS", 0.8, 1.6, 0.22, 0.65)[1]
+        self.assertAlmostEqual(textgen.length(sc), want, places=6)
+        sc["layers"][0]["params"]["pause"] = 3.0
+        self.assertAlmostEqual(textgen.length(sc), PT.letter_timeline("GO BRONCOS", 0.8, 3.0, 0.22, 0.65)[1])
+        mq = textgen.scene({"text": "GO", "mode": "marquee", "speed": 4})
+        self.assertAlmostEqual(textgen.length(mq), (hexfont.line_width("GO") + 16) / 4 + 1.6)
+
+    def test_long_phrase_previews_thirty_seconds_and_says_so(self):
+        # review: a 60-letter phrase previewed only its first 16 s (about 14 letters)
+        L = house()
+        long_ = textgen.scene({"text": "MERRY CHRISTMAS AND A HAPPY NEW YEAR FROM ALL OF US HERE 2026"})
+        self.assertGreater(textgen.length(long_), 30)
+        pv = textgen.preview(long_, L, seconds=textgen.length(long_), fps=6)
+        self.assertEqual(len(pv["frames"]), 30 * 6)
+        self.assertTrue(pv["partial"])
+        short = textgen.scene({"text": "GO"})
+        pv = textgen.preview(short, L, seconds=textgen.length(short), fps=6)
+        self.assertFalse(pv["partial"])
+
+    def test_chip_and_mode_taps_preview_at_once(self):
+        # review: a chip tap waited out the typing debounce while the old colours played on
+        html = (ROOT / "goveelights" / "web" / "app.html").read_text()
+        for sel in ("$('txtCols').querySelectorAll('.chip').forEach(", "document.querySelectorAll('#txtMode button').forEach("):
+            line = next(ln for ln in html.splitlines() if sel in ln and "onclick" in ln)
+            self.assertIn("txtPreview.now()", line, sel)
+        self.assertIn("r.partial", html)
 
     def test_api_preview_play_save(self):
         from goveelights import controller as C
