@@ -110,7 +110,8 @@ def _tracks(layout, idx) -> list:
 
 def _is_fill(layout, pth) -> bool:
     """True for a zigzag fill (the Peak's rows) rather than a roofline."""
-    return geo._rows_by_reversal(layout.pixels, pth.order) is not None
+    return (geo._rows_by_reversal(layout.pixels, pth.order) is not None
+            or geo.continues_a_fill(layout.pixels, pth.order))
 
 
 def _roof_tracks(layout, idx) -> list:

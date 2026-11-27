@@ -1771,7 +1771,22 @@ class Controller:
                 "zones": zones, "suggest": {k: addrun.suggest_zone(zones, k) for k in addrun.LOCATIONS},
                 "runs": [{"id": r.mac, "name": r.name} for r in L.runs if not self.cfg.devices[r.mac].get("added_run")],
                 "suggest_follow": {k: addrun.suggest_follow(L, zones, k) for k in addrun.LOCATIONS},
-                "cloud": self.cloud_state()}
+                "tip": self._tip_info(L), "cloud": self.cloud_state()}
+
+    def _tip_info(self, L) -> dict:
+        """For "Top of the Peak": the zigzag it would continue and the zones it would join
+        (as they are now, without any Tip), and the default rows."""
+        base = L
+        added = [r.mac for r in L.runs if r.extends]
+        if added:
+            from .layout import Layout
+            base = Layout(addrun.copy_runs(L, set(added)))
+        host = addrun.zigzag_host(base)
+        zones = [z for z in self.cfg.data.get("zones") or [] if isinstance(z, dict) and z.get("name")]
+        clean = [dict(z, parts=[pt for pt in z.get("parts") or [] if not (isinstance(pt, dict) and pt.get("run") in
+                 {self.cfg.devices.get(m, {}).get("name") for m in added} | set(added))]) for z in zones]
+        return {"host": host.name if host else None, "zones": addrun.gable_zones(clean, host) if host else [],
+                "rows": list(addrun.TIP_ROWS), "visible": addrun.TIP_VISIBLE}
 
     def cloud_state(self) -> dict:
         st = {"key_set": self.cloud_key.present, "key": self.cloud_key.masked()}
@@ -1825,7 +1840,8 @@ class Controller:
         res = addrun.add_run(self.cfg, self.engine.layout, str(b["mac"]), b.get("count"), str(b.get("where", "")),
                              str(b.get("name") or ""), b.get("join") or None, str(b.get("output") or "lan"),
                              b.get("cloud") if isinstance(b.get("cloud"), dict) else None,
-                             str(b["follows"]) if b.get("follows") else None)
+                             str(b["follows"]) if b.get("follows") else None,
+                             visible=b.get("visible"), flip=bool(b.get("flip")), rows=b.get("rows"))
         self.build_engine()
         return res
 

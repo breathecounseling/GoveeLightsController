@@ -29,6 +29,14 @@ The picture is drawn in "bulb units" (X across, about one unit per bulb, 0 at th
 middle; Y up, 0 on the bottom row and 5 on the top row), so shapes keep their proportions
 on the house's wide, flat triangle. Every moving edge is anti-aliased between bulbs.
 Without a zigzag in the target the target's bounding box is the canvas.
+
+With the Tip (a run that carries the zigzag on up to the gable apex, see addrun.py) its
+rows sit above the top row at Y of about 5.9, 6.8 and 7.6 (the apex), on the same scale,
+and each picture uses them: the wreath hangs from a red ribbon with a gold bow at the
+apex, the snowman's hat rises to a point with its bobble on the apex, the gingerbread
+roof comes to an iced point, the present's bow gets a gold loop, the star and the
+ornament's hook sit on the apex itself, Rudolph's antlers branch up into it and JOY's
+star moves up to the apex. Without the Tip every picture is exactly as before.
 """
 from __future__ import annotations
 
@@ -111,6 +119,10 @@ def _wreath(X, Y, i, T, P, g):
     bow = _cov(min(loops, tails))
     c = _mix(c, red, bow)
     c = _mix(c, (1.0, 0.18, 0.12), _cov(knot))
+    if g["tip"] and Y > g["top"] + 0.4:                   # hung from the apex on a red ribbon
+        if Y > g["apex"] - 0.3:
+            return _mix(red, GOLD, 0.35 + 0.25 * math.sin(T * 1.3))
+        return _mix(c, red, _cov(abs(X) - 0.7, 0.4))
     return c
 
 
@@ -149,6 +161,13 @@ def _snowman(X, Y, i, T, P, g):
     if Y > 3.9:
         if Y < 4.7 and abs(X) < 4.4:
             c = (0.9, 0.92, 1.0)
+        elif Y >= 4.7 and g["tip"]:                      # with the Tip: a tall hat, its bobble on the apex
+            if Y > g["apex"] - 0.3:
+                c = _sc((1.0, 1.0, 1.0), 0.9 + 0.1 * math.sin(T * 2.0))
+            else:
+                w = 3.6 * max(0.0, (g["apex"] - Y) / max(0.5, g["apex"] - 4.7)) + 0.6
+                if abs(X) < w:
+                    c = (1.0, 0.0, 0.03)
         elif Y >= 4.7:
             if abs(X) < 0.9:
                 c = (1.0, 1.0, 1.0)
@@ -162,6 +181,8 @@ def _gingerbread(X, Y, i, T, P, g):
     icing = (0.95, 0.95, 1.0)
     edge = i in g["ends"]                                # bulbs on the triangle's outline
     if Y > 2.6:                                          # the roof (the zigzag's own triangle)
+        if g["tip"] and Y > g["apex"] - 0.3:             # with the Tip: an iced point on the apex
+            return _sc(icing, 0.9 + 0.1 * glint(i, T, 0.25, 0.05, 0.4, 2)[0])
         if edge:
             return _sc(icing, 0.85 + 0.15 * glint(i, T, 0.25, 0.05, 0.4, 2)[0])
         k = int(math.floor(X + 0.5))
@@ -216,6 +237,9 @@ def _present(X, Y, i, T, P, g):
         loops = min(_ell(X, Y, -1.6, 4.7, 1.4 * bs, 0.55), _ell(X, Y, 1.6, 4.7, 1.4 * bs, 0.55))
         c = _mix(c, gold, _cov(loops) * bs)
         c = _mix(c, (1.0, 0.85, 0.3), _cov(_ell(X, Y, 0, 4.4, 0.6, 0.5)) * bs)
+        if g["tip"] and Y > g["top"] + 0.4:              # with the Tip: the bow's loop stands up into it
+            loop = abs(_ell(X, Y, 0, (g["top"] + g["apex"]) / 2 + 0.3, 1.6, (g["apex"] - g["top"]) / 2)) - 0.45
+            c = _mix(c, gold, _cov(loop, 0.4) * bs)
     if glow > 0 and Y > 2.5 and abs(X) < 8.0 and _box(X, Y, -5.6 + lx, 5.6 + lx, ly - 0.45, ly + 0.45) > 0.3:
         # gold light pours up out of the open box, with sparkles
         ray = 0.55 + 0.45 * math.cos(math.atan2(Y - 2.0, X) * 9 - T * 3.0)
@@ -292,6 +316,8 @@ def _rudolph(X, Y, i, T, P, g):
     # antlers on the top two rows: a stem from each side of his head that forks in two
     ax = abs(X)
     spans = [(1.9, 3.3)] if 3.8 <= Y < 4.7 else [(0.9, 1.9), (3.2, 4.6)] if Y >= 4.7 else []
+    if g["tip"] and Y > g["top"] + 0.4:                  # with the Tip: the antlers' tines reach up into it
+        spans = [(1.5, 3.0)] if Y < g["apex"] - 1.2 else [(0.6, 1.6)] if Y < g["apex"] - 0.3 else []
     for lo, hi in spans:
         c = _mix(c, antler, _cov(max(lo - ax, ax - hi), 0.25))
     head = _ell(X, Y, 0, 1.8, 4.3, 2.0)
@@ -322,6 +348,12 @@ def _joy(X, Y, i, T, P, g):
             s = (X - T * 4.0) % 22.0
             shimmer = max(0.0, 1 - abs(s - 11) / 2.2)
             c = _mix(gold, (1.0, 0.95, 0.75), shimmer)
+    elif g["tip"]:                                       # with the Tip: the star on the apex, a glow under it
+        tw = 0.6 + 0.4 * math.sin(T * 2.5)
+        d = math.hypot(X, (Y - g["apex"]) * 1.4)
+        c = _mix(red, (1.0, 0.9, 0.6), max(0.0, 1 - d / 1.6) * tw)
+        if Y > g["top"] + 0.4:
+            c = _mix(c, gold, 0.25 * glint(i, T, 0.3, 0.05, 0.5, 23)[0])
     else:                                                # a little star on the top row
         tw = 0.6 + 0.4 * math.sin(T * 2.5)
         c = _mix(red, (1.0, 0.9, 0.6), _cov(abs(X) - 1.0, 0.4) * tw)
@@ -444,11 +476,15 @@ def peak_picture(t, ctx, P, st):
         ax, ay = cv["apex"]
         rest = [(i, math.hypot(px[i].x - ax, (px[i].y - ay) * 0.5),
                  (px[i].y - L.miny) / max(1e-6, L.maxy - L.miny)) for i in cv["rest"]]
-        geo = st["geo"] = {"xy": xy, "ends": ends, "rest": rest}
+        # the Tip (if any): its bulbs sit above the zigzag's own top row (Y 5)
+        tip = bool(cv.get("tip"))
+        geo = st["geo"] = {"xy": xy, "ends": ends, "rest": rest, "tip": tip, "top": 5.0,
+                           "apex": max((y for _, y in xy.values()), default=5.0),
+                           "crown": sorted(cv["tip"], key=lambda i: (-xy[i][1], abs(xy[i][0])))[:1] if tip else []}
         st["geo_key"] = id(cv)
     xy, ends = geo["xy"], geo["ends"]
 
-    g = {"ends": ends}
+    g = {"ends": ends, "tip": geo["tip"], "top": geo["top"], "apex": geo["apex"]}
     # per-frame values shared by the bulbs
     g["run"] = (T * 0.12) % 1.0
     bt = T % 5.3                                             # a blink every few seconds
@@ -471,7 +507,10 @@ def peak_picture(t, ctx, P, st):
     if tl > 0:
         for i, d, f in geo["rest"]:
             frame[i] = _sc(_trim(style, i, d, f, T, g, seed), tl)
-    if tl > 0 and style in ("star", "ornament") and cv["rest"]:
+    if style in ("star", "ornament") and geo["crown"]:
+        for i in geo["crown"]:                     # with the Tip: the apex itself crowns the picture
+            frame[i] = _sc((1.0, 0.95, 0.8) if style == "star" else GOLD, lvl)
+    elif tl > 0 and style in ("star", "ornament") and cv["rest"]:
         for i in _apex(L, idx, 1):                 # the bulb crowning the picture
             frame[i] = _sc((1.0, 0.95, 0.8) if style == "star" else GOLD, lvl)
     return _clamp(frame, idx)

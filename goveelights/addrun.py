@@ -11,6 +11,14 @@
   the zone it joined and its role's stand-ins change. Optionally (follows) it copies
   another run or zone in any preset that leaves it dark (Scene.render), which changes
   nothing on the other runs either. remove_run() undoes it.
+* "Top of the Peak" (where = "peak top"): a box whose bulbs carry the Peak's zigzag on up
+  to the gable apex (this house's "Tip", an H705E). Its visible bulbs get rows above the
+  Peak's top row worked out from the Peak's own geometry (row spacing, centre line, bulb
+  spacing and the slope of its sides), the rest of its bulbs are hidden, it joins every
+  zone that holds the Peak's top row, and it "extends" the Peak (layout.py): every
+  layer aimed at the Peak, the zigzag pictures, the tree's star, text and the sleigh's
+  stardust treat the two as one triangle. tip_geometry() is the maths; TIP_ROWS the
+  assumed rows.
 * answer_check(): "Is it answering now?" in plain words: the discovery scan, the status
   command and a realtime (razer) test frame, plus the Govee cloud when a key is saved.
 """
@@ -38,11 +46,22 @@ LOCATIONS = {
                   "zones": ("flat eaves", "eave")},
     "right eave": {"label": "Right eave", "role": "roofline", "name": "Right eave", "x": (0.6, 1.0), "y": 0.45,
                    "zones": ("flat eaves", "eave")},
+    "peak top": {"label": "Top of the Peak (completes the gable)", "role": "peak", "name": "Tip",
+                 "x": (0.45, 0.55), "y": 1.0, "zones": (), "tip": True},
     "other": {"label": "Somewhere else", "role": "accent", "name": "Run 4", "x": (0.0, 1.0), "y": 0.0,
               "zones": ()},
 }
 _PREV_KEYS = ("name", "pixel_count", "order", "geometry", "geometry_guess", "hidden", "enabled", "role",
-              "location", "cloud", "reversed", "follows", "dead", "rehung")
+              "location", "cloud", "reversed", "follows", "dead", "rehung", "extends", "tip")
+
+# The Tip's rows, from its bulb 0: what the owner's landmarks give (Nov 2026). Bulb 0 is
+# "Left (South) corner bottom row", 6 "Right (North) corner 2nd row" (read as the NORTH
+# END OF ITS FIRST ROW: 0-6 is one row of 7, south to north), 7 "Right corner 2nd row"
+# and 10 "Left corner 2nd row" (7-10, north to south) and 11 "Tip" (the apex). If the
+# Tip turns out to be wired differently, change these numbers (or type other rows in
+# the Add a run sheet): nothing else depends on them.
+TIP_ROWS = (7, 4, 1)
+TIP_VISIBLE = 12
 
 def locations() -> list[dict]:
     return [{"id": k, "label": v["label"], "role": v["role"], "name": v["name"]} for k, v in LOCATIONS.items()]
@@ -71,6 +90,144 @@ def suggest_follow(layout, zones: list[str], where: str) -> str | None:
         if r in runs:
             return r.mac
     return runs[0].mac
+
+def zigzag_host(layout):
+    """The run whose zigzag the Tip continues: the original run that is wired as a
+    zigzag (rows that reverse), the one with most bulbs; None if the house has none."""
+    if layout is None:
+        return None
+    best, size = None, 0
+    for r in layout.runs:
+        if r.role or r.extends or not r.geometry:
+            continue
+        rows = _host_rows(r)
+        n = sum(x["n"] for x in rows)
+        if rows and all(x["n"] >= 2 for x in rows) and n > size:
+            best, size = r, n
+    return best
+
+
+def copy_runs(layout, leave_out=()) -> list:
+    """Fresh Run objects for a layout's runs (a Layout fills its runs' pixel lists, so a
+    new Layout must not reuse another one's Run objects)."""
+    from .layout import Run
+    return [Run(mac=r.mac, name=r.name, count=r.count, reverse=r.reverse, hidden=set(r.hidden),
+                geometry=r.geometry, trim=r.trim, bright=r.bright, rgamma=r.rgamma, fade=r.fade, role=r.role,
+                guess=r.guess, follows=r.follows, dead=set(r.dead), extends=r.extends)
+            for r in layout.runs if r.mac not in leave_out]
+
+
+def _host_rows(r) -> list[dict]:
+    """The host's rows in wiring order (physical bulb order, hidden bulbs left out):
+    [{"y", "x0", "x1", "n", "dir"}], x0 where the row starts and dir +1/-1 its way."""
+    pos = r.positions()
+    order = [k for k in range(r.count) if k not in r.hidden]
+    if len(order) < 2:
+        return []
+    rows, cur, direction = [], [order[0]], 0
+    for a, b in zip(order, order[1:]):
+        dx = pos[b][0] - pos[a][0]
+        d = 1 if dx > 0.2 else -1 if dx < -0.2 else 0
+        if d and direction and d != direction and len(cur) >= 2:
+            rows.append((cur, direction))
+            cur = []
+        if d:
+            direction = d
+        cur.append(b)
+    rows.append((cur, direction))
+    out = []
+    for ks, dr in rows:
+        ys = [pos[k][1] for k in ks]
+        out.append({"y": sum(ys) / len(ys), "x0": pos[ks[0]][0], "x1": pos[ks[-1]][0], "n": len(ks), "dir": dr,
+                    "pitch": abs(pos[ks[-1]][0] - pos[ks[0]][0]) / max(1, len(ks) - 1)})
+    return out if len(out) >= 3 else []
+
+
+def parse_rows(rows) -> tuple[int, ...]:
+    """'7, 4, 1' (or a list) -> (7, 4, 1); ValueError on anything else."""
+    if rows is None or rows == "":
+        return TIP_ROWS
+    if isinstance(rows, str):
+        rows = [v for v in rows.replace("+", ",").replace(" ", ",").split(",") if v.strip()]
+    try:
+        out = tuple(int(v) for v in rows)
+    except (TypeError, ValueError):
+        raise ValueError("bulbs per row: whole numbers, e.g. 7, 4, 1") from None
+    if not out or len(out) > 12 or any(not 1 <= v <= 60 for v in out):
+        raise ValueError("bulbs per row: 1 to 12 rows of 1 to 60 bulbs, e.g. 7, 4, 1")
+    return out
+
+
+def tip_geometry(host, visible: int = TIP_VISIBLE, rows=TIP_ROWS, flip: bool = False) -> list[list[float]]:
+    """Knots [[bulb, x, y], ...] for a run that carries the host's zigzag on up to its apex.
+
+    From the host's own rows: the bulb spacing (median along its rows), the centre line
+    (the middle of its rows) and the slope of its sides (a straight-line fit of each
+    row's half-width against its height). A Tip row of n bulbs is (n - 1) bulb spacings
+    wide and sits at the height where the sides are that far apart, so the rows narrow
+    to a point exactly as the Peak's do; a row is never closer than half the host's
+    usual row spacing to the one below. Bulb 0 starts at the end where the host's top
+    row finished (the zigzag carries on), or at the other end with flip. Only the first
+    `visible` bulbs are placed (rows fill in order)."""
+    hr = _host_rows(host)
+    if not hr:
+        return []
+    visible = max(1, int(visible))
+    pitches = sorted(r["pitch"] for r in hr if r["n"] > 1)
+    pitch = pitches[len(pitches) // 2] if pitches else 1.0
+    cx = sum((r["x0"] + r["x1"]) / 2 for r in hr) / len(hr)
+    ys = [r["y"] for r in hr]
+    hws = [abs(r["x1"] - r["x0"]) / 2 for r in hr]
+    my, mh = sum(ys) / len(ys), sum(hws) / len(hws)
+    var = sum((y - my) ** 2 for y in ys)
+    slope = sum((y - my) * (h - mh) for y, h in zip(ys, hws)) / var if var > 1e-9 else 0.0
+    gaps = sorted(abs(b - a) for a, b in zip(ys, ys[1:]))
+    gap = gaps[len(gaps) // 2] if gaps else 1.0
+    top = max(hr, key=lambda r: r["y"])
+    last = hr[-1]
+    # which way the first Tip row runs: back from where the host's last row ended
+    d = -last["dir"] if last["dir"] else 1
+    if flip:
+        d = -d
+    out, k, y_prev = [], 0, top["y"]
+    for n in rows:
+        if k >= visible:
+            break
+        m = min(n, visible - k)                     # bulbs of this row that are placed
+        hw = (n - 1) * pitch / 2                    # the whole row decides where it sits
+        y = (hw - mh) / slope + my if slope < -1e-6 else y_prev + gap
+        y = max(y, y_prev + gap * 0.5)
+        x0 = cx - d * hw
+        x1 = x0 + d * (m - 1) * pitch
+        r3 = lambda v: round(v, 3)  # noqa: E731
+        out.append([k, r3(x0), r3(y)])
+        if m > 1:
+            out.append([k + m - 1, r3(x1), r3(y)])
+        k += m
+        d = -d
+        y_prev = y
+    return out
+
+
+def layout_with_tip(layout, count: int = 108, visible: int = TIP_VISIBLE, flip: bool = False, rows=TIP_ROWS,
+                    name: str = "Tip", mac: str = "TIP"):
+    """A copy of `layout` with a Tip added the way 'Add it to the show' -> 'Top of the
+    Peak' adds one (for previews, contact sheets and tests; nothing is saved)."""
+    import copy as _copy
+
+    from .layout import Layout, Run
+    host = zigzag_host(layout)
+    if host is None:
+        raise ValueError("this layout has no zigzag (Peak) for a Tip to continue")
+    runs = copy_runs(layout)
+    runs.append(Run(mac=mac, name=name, count=int(count), hidden=set(range(int(visible), int(count))),
+                    geometry=tip_geometry(host, visible, rows, flip), role="peak", guess=True, extends=host.mac))
+    zones = _copy.deepcopy(layout.zone_specs)
+    for z in zones:
+        if z.get("name") in gable_zones(zones, host):
+            z.setdefault("parts", []).append({"run": name, "from": 0, "to": int(visible) - 1})
+    return Layout(runs, zones, layout.aliases)
+
 
 def guess_geometry(layout, where: str, count: int) -> list[list[float]]:
     """A straight placeholder line for the new run inside the house's current outline."""
@@ -113,14 +270,19 @@ def candidates(cfg, layout=None) -> list[dict]:
                     "estimated_count": d.get("estimated_count"), "in_show": mac in in_show, "added": added,
                     "where": d.get("location") or "", "cloud": bool((d.get("cloud") or {}).get("enabled")),
                     "joined": (d.get("added_run") or {}).get("joined"), "follows": d.get("follows"),
+                    "tip": d.get("tip") if d.get("added_run") else None,
                     "last_check": ((d.get("diag") or {}).get("answer_check") or {}).get("value")})
     return out
 
 def add_run(cfg, layout, mac: str, count, where: str, name: str = "", join: str | None = None,
-            output: str = "lan", cloud: dict | None = None, follows: str | None = None) -> dict:
+            output: str = "lan", cloud: dict | None = None, follows: str | None = None,
+            visible=None, flip: bool = False, rows=None) -> dict:
     """Make `mac` a new run (see the module doc). Returns {"name", "count", "role", "joined"}.
     follows (opt-in): another run (its id) or a zone whose colours this run copies in
-    any preset that leaves it dark; the other runs are not changed either way."""
+    any preset that leaves it dark; the other runs are not changed either way.
+    For where = "peak top": visible (how many of its bulbs are on the gable, default 12;
+    the rest are hidden), flip (bulb 0 is at the north end instead of where the Peak's
+    top row finished) and rows (bulbs per row from bulb 0, default TIP_ROWS)."""
     if where not in LOCATIONS:
         raise ValueError(f"where must be one of: {', '.join(LOCATIONS)}")
     count = int(count)
@@ -136,6 +298,19 @@ def add_run(cfg, layout, mac: str, count, where: str, name: str = "", join: str 
         except (TypeError, ValueError):
             raise ValueError("segments must be a number") from None
     loc = LOCATIONS[where]
+    tip = None
+    if loc.get("tip"):
+        rws = parse_rows(rows)
+        try:
+            vis = int(visible) if visible not in (None, "") else min(TIP_VISIBLE, count)
+        except (TypeError, ValueError):
+            raise ValueError("bulbs on the gable must be a number") from None
+        if not 1 <= vis <= count:
+            raise ValueError(f"bulbs on the gable: 1 to {count} (the box's bulb count)")
+        if vis > sum(rws):
+            raise ValueError(f"the rows ({' + '.join(map(str, rws))}) hold {sum(rws)} bulbs: "
+                             f"add a row or show fewer than {vis}")
+        tip = {"visible": vis, "flip": bool(flip), "rows": list(rws)}
     with cfg.lock:
         zones = [z for z in cfg.data.get("zones") or [] if isinstance(z, dict) and z.get("name")]
         if join and join not in {z["name"] for z in zones}:
@@ -165,10 +340,23 @@ def add_run(cfg, layout, mac: str, count, where: str, name: str = "", join: str 
         base = layout
         if base is not None and mac in {r.mac for r in base.runs}:
             from .layout import Layout
-            base = Layout([r for r in base.runs if r.mac != mac])
+            base = Layout(copy_runs(base, {mac}))
+        host = zigzag_host(base) if tip else None
+        if tip and host is None:
+            raise ValueError("this house has no zigzag (Peak) for it to continue")
         d.update({"name": nm, "pixel_count": count, "enabled": True, "role": loc["role"], "location": where,
                   "order": max([int(x.get("order", 0) or 0) for x in others.values()] + [-1]) + 1,
                   "geometry": guess_geometry(base, where, count), "hidden": [], "reversed": False})
+        d.pop("extends", None)
+        d.pop("tip", None)
+        joins = [join] if join else []
+        if tip:
+            d["geometry"] = tip_geometry(host, tip["visible"], tip["rows"], tip["flip"])
+            d["hidden"] = list(range(tip["visible"], count))
+            d["extends"] = host.mac
+            d["tip"] = dict(tip, host=host.name)
+            follows = None                      # it lights with the Peak in every preset
+            joins = gable_zones(zones, host)
         d.pop("dead", None)                         # broken-bulb marks were for the old count
         d.pop("rehung", None)
         d["geometry_guess"] = bool(d["geometry"])
@@ -182,16 +370,42 @@ def add_run(cfg, layout, mac: str, count, where: str, name: str = "", join: str 
             d["follows"] = str(follows)
         else:
             d.pop("follows", None)
-        if join:
-            for z in zones:
-                if z["name"] == join:
-                    z.setdefault("parts", []).append({"run": nm, "from": 0, "to": count - 1})
-        d["added_run"] = {"prev": prev, "joined": join, "at": time.strftime("%Y-%m-%d %H:%M")}
+        top = (tip["visible"] if tip else count) - 1
+        for z in zones:
+            if z["name"] in joins:
+                z.setdefault("parts", []).append({"run": nm, "from": 0, "to": top})
+        joined = ", ".join(joins) or None
+        d["added_run"] = {"prev": prev, "joined": joined, "at": time.strftime("%Y-%m-%d %H:%M")}
         cfg.save()
-    log.info("added run %s (%d bulbs, %s%s%s)", nm, count, where, f", joined {join}" if join else "",
+    log.info("added run %s (%d bulbs, %s%s%s)", nm, count, where, f", joined {joined}" if joined else "",
              ", Govee cloud" if output == "cloud" else "")
-    return {"name": nm, "count": count, "role": loc["role"], "joined": join, "output": output,
-            "follows": follows or None}
+    out = {"name": nm, "count": count, "role": loc["role"], "joined": joined, "output": output,
+           "follows": follows or None}
+    if tip:
+        out["tip"] = {"visible": tip["visible"], "flip": tip["flip"], "rows": tip["rows"], "host": host.name}
+    return out
+
+
+def gable_zones(zones: list[dict], host) -> list[str]:
+    """The zones the Tip joins: every zone that holds the top of the host's zigzag (on
+    this house 'Zigzag top half', 'Whole front gable' and 'Whole front')."""
+    vis = [k for k in range(host.count) if k not in host.hidden]
+    if not vis:
+        return []
+    last = vis[-1]
+    out = []
+    for z in zones:
+        for pt in z.get("parts") or []:
+            if not isinstance(pt, dict) or pt.get("run") not in (host.name, host.mac):
+                continue
+            try:
+                lo, hi = int(pt.get("from", 0)), int(pt.get("to", host.count - 1))
+            except (TypeError, ValueError):
+                continue
+            if lo <= last <= hi:
+                out.append(z["name"])
+                break
+    return out
 
 def _undo(cfg, mac: str, d: dict, save: bool = True):
     info = d.get("added_run") or {}

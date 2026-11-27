@@ -3,11 +3,16 @@
     python3 tools/contact_sheet.py turkey-fan harvest-sunset --times 1,4,10,30 --out /tmp/sheet
     python3 tools/contact_sheet.py --show "Thanksgiving tonight" --out /tmp/thanksgiving
         [--layout layouts/examples/gable-house.json] [--extra-run 100] [--fps 20] [--cols 2]
+        [--tip 12] [--tip-flip] [--tip-rows 7,4,1]
 
 Each preset is rendered at the real frame rate from t = 0 (effects with memory evolve as
 they would live) and snapshotted at --times seconds. --show renders every cue's preset at
 a few moments of its hold. --extra-run N adds a run of N bulbs with no mapped shape (as a
 newly added box shows up before camera mapping) to check a fourth run is used.
+--tip N adds a Tip on top of the layout's zigzag with N visible bulbs, placed exactly as
+"Add it to the show" -> "Top of the Peak" places it (--tip-flip: bulb 0 at the other end,
+--tip-rows: bulbs per row from bulb 0). A layout file whose Tip entry has "extends" works
+with --layout too.
 Writes <out>.html and, with node + playwright, <out>.png.
 """
 from __future__ import annotations
@@ -29,7 +34,7 @@ from goveelights.layout import Layout, Run  # noqa: E402
 
 def with_extra_run(L: Layout, count: int) -> Layout:
     runs = [Run(mac=r.mac, name=r.name, count=r.count, reverse=r.reverse, hidden=set(r.hidden),
-                geometry=r.geometry) for r in L.runs]
+                geometry=r.geometry, role=r.role, extends=r.extends) for r in L.runs]
     runs.append(Run(mac="EXTRA", name="Run 4", count=count))
     return Layout(runs, L.zone_specs, L.aliases)
 
@@ -79,6 +84,9 @@ def main(argv=None):
     ap.add_argument("--fps", type=float, default=20.0)
     ap.add_argument("--cols", type=int, default=2)
     ap.add_argument("--extra-run", type=int, default=0)
+    ap.add_argument("--tip", type=int, default=0, help="add a Tip with this many visible bulbs (0 = none)")
+    ap.add_argument("--tip-flip", action="store_true", help="the Tip's bulb 0 is at the other end")
+    ap.add_argument("--tip-rows", default="", help="the Tip's bulbs per row from bulb 0 (default 7,4,1)")
     ap.add_argument("--layout", default=str(default_layout_file().relative_to(ROOT)))
     ap.add_argument("--focus", help="also draw this target (e.g. 'Whole front gable') close up")
     ap.add_argument("--out", required=True)
@@ -88,6 +96,9 @@ def main(argv=None):
         lay = lay.resolve() if lay.exists() else ROOT / lay
     os.chdir(ROOT)
     L = house_layout(lay)
+    if a.tip:
+        from goveelights import addrun
+        L = addrun.layout_with_tip(L, visible=a.tip, flip=a.tip_flip, rows=addrun.parse_rows(a.tip_rows))
     if a.extra_run:
         L = with_extra_run(L, a.extra_run)
     jobs = []
@@ -116,7 +127,8 @@ def main(argv=None):
     title = a.show or ", ".join(a.presets)
     html = (f'<meta charset="utf-8"><style>body{{background:#000;color:#bbb;font:12px sans-serif;margin:8px}}'
             f'.g{{display:grid;grid-template-columns:repeat({a.cols},480px);gap:6px}}.l{{margin:3px 0}}</style>'
-            f'<div style="margin-bottom:6px">{title}{" · + run of " + str(a.extra_run) if a.extra_run else ""}</div>'
+            f'<div style="margin-bottom:6px">{title}{" · + run of " + str(a.extra_run) if a.extra_run else ""}'
+            f'{" · with the Tip (" + str(a.tip) + " bulbs)" if a.tip else ""}</div>'
             f'<div class="g">{"".join(cells)}</div>')
     page = Path(a.out + ".html").resolve()
     page.parent.mkdir(parents=True, exist_ok=True)

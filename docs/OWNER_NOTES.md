@@ -4,8 +4,9 @@
 
 ## This house
 
-* Four boxes on the LAN: three H805A (the runs *Eaves*, *Peak*, *Accent*) and one H705E
-  that does not respond to LAN commands (see below).
+* Four boxes on the LAN: three H805A (the runs *Eaves*, *Peak*, *Accent*) and one H705E,
+  the *Tip* at the point of the front gable, which answers LAN commands since late Nov 2026
+  (see below).
 * The house faces east, so the sunset is behind the roof as seen from the street: *Sky at
   dusk* puts the afterglow on the side where the sun went down.
 * The PC runs on Mountain time (America/Denver); clock-mode presets such as *Ball drop at
@@ -26,15 +27,28 @@
 | razer per-bulb realtime | works | works | no response to any command (Wi-Fi fw 1.01.17 vs 1.02.06 on the others) |
 | bulbs (one colour per bulb at n = count) | 96 (93-95 hidden) | 108 (6-row zigzag) | - |
 | frame with n > bulbs | ignored, previous frame stays | same | - |
-| frame rate | 10-25 fps smooth, 30 stutters | same | - |
+| frame rate | 10-25 fps smooth, 30 stutters | same | 30 fps smooth (late Nov 2026, as "Tip") |
 | realtime timeout | none seen in 45 s without frames | - | - |
 | white diode | not reachable: 4-byte frames are read as RGB triplets, so realtime is RGB only | same | - |
+
+Update (late Nov 2026): the H705E, named **Tip** (Wi-Fi fw 1.01.17), now answers LAN
+commands: razer works, frames of up to 108 colours (bigger ones are ignored), smooth at
+30 fps; gradient flag 01 blends, 00 gives hard halves. Landmarks: 0 "Left (South) corner
+bottom row", 6 "Right (North) corner 2nd row", 7 "Right corner 2nd row", 10 "Left corner
+2nd row", 11 "Tip". The Peak (108): 0 first bulb, 26 North bottom corner, 49 2nd row south
+corner, 69 3rd row North corner, 85 4th row south corner, 97 5th row North corner, 107 6th
+row south corner. So the Tip continues the Peak's zigzag: row 7 = 0-6 (south to north),
+row 8 = 7-10 (north to south), 11 = the apex; 12 and up are hidden. "6 = 2nd row" is read
+as the north end of row 7 (see FOURTH_RUN.md, *The top of the Peak*, to change it).
 
 ## The fourth run (the H705E)
 
 More → *Fourth run* in the app (details in [FOURTH_RUN.md](FOURTH_RUN.md)): it lists the
 H705E, checks it in one tap, and adds it as a run without touching Eaves, Peak, Accent or
-their zones. If it never answers on the LAN, paste a Govee API key there and add it with
+their zones. For the Tip pick **Top of the Peak (completes the gable)**: it then completes the
+gable's triangle in every Peak preset, picture, word and tree (details in FOURTH_RUN.md).
+`layouts/house.json` has no Tip entry on purpose: tonight's frames stay exactly the same
+until you add it in the app (the with-Tip frames are checked in tests/test_r13_tip.py). If it never answers on the LAN, paste a Govee API key there and add it with
 *Govee cloud (slow)*. Nothing changes for the show until you add it.
 
 ## After a repair: Bulb check

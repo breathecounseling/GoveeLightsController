@@ -2328,7 +2328,7 @@ function drawFourth(){
 function frBox(b){
   const loc = frLoc(b.where);
   if (b.realtime === undefined && !b.in_show && /^0\//.test((b.last_check || {}).status || '')) b.realtime = false;  // its last check
-  const what = b.in_show ? `In the show: ${b.pixel_count} bulbs${loc ? ' · ' + esc(loc.label) : ''}${b.joined ? ' · part of ' + esc(b.joined) : ''}${b.cloud ? ' · <b class="warn">slow, Govee cloud</b>' : ''}`
+  const what = b.in_show ? `In the show: ${b.pixel_count} bulbs${b.tip ? ` (${b.tip.visible} on the gable)` : ''}${loc ? ' · ' + esc(loc.label) : ''}${b.joined ? ' · part of ' + esc(b.joined) : ''}${b.cloud ? ' · <b class="warn">slow, Govee cloud</b>' : ''}`
     : 'Not in the show yet' + (b.ip ? ' · ' + esc(b.ip) : ' · no address yet');
   const el = h(`<div class="frb">
     <div class="row"><b class="grow">${esc(b.name)}</b><span class="dim">${esc(b.sku)}${b.wifi_fw ? ' · Wi-Fi fw ' + esc(b.wifi_fw) : ''}</span></div>
@@ -2368,8 +2368,10 @@ async function frCheck(b, out, btn){
     b.realtime = x.dataset.y === '1';
   });
 }
+let drawTip = null;
 function frAdd(b){
   const f = FOURTH, C = f.cloud || {};
+  drawTip = null;
   let where = b.where || 'porch', out = b.cloud ? 'cloud' : (b.realtime === false ? 'cloud' : 'lan'), cdev = null;
   const el = h(`<div class="fr">
     <p class="help" style="margin-top:0">Adds <b>${esc(b.name)}</b> as a new run at the end of the strip. The other runs keep their bulbs, zones and looks; it shows up in every "whole house" layer, in the zone you join it to, and in presets aimed at its kind of place.</p>
@@ -2378,12 +2380,25 @@ function frAdd(b){
     <div class="grp">Bulbs</div>
     <div class="row"><input type="number" id="frCount" min="1" max="255" inputmode="numeric" style="width:110px" value="${b.pixel_count || b.estimated_count || 50}"><button class="grow" id="frFind">Find the count</button></div>
     <div id="frFindBox"></div>
+    <div id="frTip" hidden>
+      <div class="grp">Bulbs you can see on the gable</div>
+      <input type="number" id="frVisible" min="1" max="255" inputmode="numeric" style="width:110px;min-height:44px">
+      <p class="help">The first bulbs of the box, counted from bulb 0. Any more it has (coiled up or hidden) stay dark.</p>
+      <div class="grp">Which end is bulb 0?</div>
+      <div class="tgt" id="frFlip"></div>
+      <div class="grp">Bulbs in each row, from bulb 0</div>
+      <input type="text" id="frRows" inputmode="numeric" style="width:160px;min-height:44px" autocomplete="off">
+      <p class="help" id="frRowsHelp"></p>
+      <p class="help" id="frTipJoins"></p>
+    </div>
+    <div id="frJoinBox">
     <div class="grp">Join a zone (optional)</div>
     <select id="frJoin" style="min-height:44px"><option value="">Don't join a zone</option>${f.zones.map(z => `<option>${esc(z)}</option>`).join('')}</select>
     <p class="help">e.g. a second roofline joined to "Lower roofline" makes roofline effects run along both.</p>
     <div class="grp">When a preset leaves it dark</div>
     <select id="frFollow" style="min-height:44px"><option value="">Leave it dark</option>${(f.runs || []).map(r => `<option value="${esc(r.id)}">Copy ${esc(r.name)}</option>`).join('')}${f.zones.map(z => `<option value="${esc(z)}">Copy ${esc(z)}</option>`).join('')}</select>
     <p class="help">Presets written for three runs (candy cane, the peak ones…) don't light a new run. "Copy" shows that run's or zone's colours stretched along this one instead; the other runs look exactly the same.</p>
+    </div>
     <div class="grp">How it's driven</div>
     <label class="row frr"><input type="radio" name="frOut" value="lan"> <span><b>Realtime over Wi-Fi</b>: per bulb, smooth, like the other three. Needs it to answer the check.${b.realtime === false ? '<br><span class="warn">Its last check: it ignores commands, so this would leave it dark. Fix LAN Control and check again first.</span>' : ''}</span></label>
     <label class="row frr"><input type="radio" name="frOut" value="cloud"> <span><b>Govee cloud (slow)</b>: follows the show's colours a few times a minute, with a coarse gradient if the box supports segments; on a long, busy night the changes slow down so the day's requests last until midnight. Needs an API key (below the checklist).</span></label>
@@ -2395,7 +2410,8 @@ function frAdd(b){
   if (named) name.value = b.name;
   name.oninput = () => named = !!name.value.trim();
   const drawW = () => { W.innerHTML = ''; f.locations.forEach(l => { const c = h(`<button class="chip ${l.id === where ? 'on' : ''}">${esc(l.label)}</button>`);
-    c.onclick = () => { where = l.id; drawW(); if (!named) name.value = l.name; if (!b.in_show){ join.value = f.suggest[l.id] || ''; follow.value = sf[l.id] || '' } }; W.appendChild(c) }) };
+    c.onclick = () => { where = l.id; drawW(); if (!named) name.value = l.name; if (!b.in_show){ join.value = f.suggest[l.id] || ''; follow.value = sf[l.id] || '' } }; W.appendChild(c) });
+    if (typeof drawTip === 'function') drawTip() };
   drawW(); if (!named) name.value = (frLoc(where) || {}).name || '';
   join.value = b.in_show ? (b.joined || '') : (f.suggest[where] || '');
   const follow = el.querySelector('#frFollow'), sf = f.suggest_follow || {};
@@ -2413,15 +2429,41 @@ function frAdd(b){
         if (d.matches === b.mac) cdev = d;
         c.onclick = () => { cdev = d; L.querySelectorAll('.chip').forEach(x => x.classList.remove('on')); c.classList.add('on') }; L.appendChild(c) }) } };
   radios.forEach(r => r.onchange = () => { out = r.value; drawOut() }); drawOut();
+  // "Top of the Peak": the Tip carries the Peak's zigzag on up to the apex
+  const TI = f.tip || {}, bt = b.tip || {};
+  let flip = !!bt.flip;
+  const vis = el.querySelector('#frVisible'), rowsIn = el.querySelector('#frRows'), FL = el.querySelector('#frFlip');
+  vis.value = bt.visible || TI.visible || 12;
+  rowsIn.value = (bt.rows || TI.rows || [7, 4, 1]).join(', ');
+  const drawFlip = () => { FL.innerHTML = '';
+    [[false, `Where the ${esc(TI.host || 'Peak')}'s top row ends`], [true, 'The other end']].forEach(([v, label]) => {
+      const c = h(`<button class="chip ${v === flip ? 'on' : ''}">${label}</button>`);
+      c.onclick = () => { flip = v; drawFlip() }; FL.appendChild(c) }) };
+  const rowsHelp = () => { const r = rowsIn.value.split(/[ ,+]+/).filter(Boolean).map(Number);
+    let k = 0; const parts = r.map((n, j) => { const a = k; k += n; return n === 1 ? `bulb ${a}` : `bulbs ${a}–${k - 1}` });
+    el.querySelector('#frRowsHelp').textContent = r.length && r.every(n => n >= 1) ?
+      `Row by row from the ${TI.host || 'Peak'}'s top row up: ${parts.join(', then ')}${r[r.length - 1] === 1 ? ' (the very top)' : ''}. ` +
+      'Each row is narrower, like the rows below it. Change the numbers if your Tip is wired differently.' : 'Type the bulbs in each row, e.g. 7, 4, 1.' };
+  rowsIn.oninput = rowsHelp;
+  drawTip = () => { const on = where === 'peak top';
+    el.querySelector('#frTip').hidden = !on; el.querySelector('#frJoinBox').hidden = on;
+    if (!on) return;
+    drawFlip(); rowsHelp();
+    el.querySelector('#frTipJoins').innerHTML = TI.host ?
+      `It becomes part of the <b>${esc(TI.host)}</b>: every preset, picture and word on the ${esc(TI.host)} now reaches up to its top bulb, and the Christmas tree's star moves up there.` +
+      (TI.zones && TI.zones.length ? ` It joins ${TI.zones.map(z => '<b>' + esc(z) + '</b>').join(', ')}.` : '') :
+      '<span class="warn">This house has no zigzag (Peak) for it to continue.</span>' };
+  drawTip();
   el.querySelector('#frFind').onclick = () => frFindCount(b, el.querySelector('#frFindBox'), el.querySelector('#frCount'));
   el.querySelector('#frGo').onclick = async () => {
     const body = {mac: b.mac, count: +el.querySelector('#frCount').value, where, name: name.value.trim(), join: join.value || null, output: out, follows: follow.value || null};
+    if (where === 'peak top') Object.assign(body, {join: null, follows: null, visible: +vis.value, flip, rows: rowsIn.value});
     if (out === 'cloud'){ if (!cdev) return toast('Pick the light in your Govee account'); body.cloud = {sku: cdev.sku, device: cdev.device, segments: cdev.segments} }
     const r = await post('run/add', body); if (!r) return;
-    toast(`${r.name}: ${r.count} bulbs${r.joined ? ', joined ' + r.joined : ''}`);
+    toast(r.tip ? `${r.name}: ${r.tip.visible} bulbs on top of the ${r.tip.host}` : `${r.name}: ${r.count} bulbs${r.joined ? ', joined ' + r.joined : ''}`);
     post('run/blink', {mac: b.mac});
     closeSheet(); await reloadLayout(); loadFourth(); refresh();
-    if (out === 'lan' && confirm(`Map ${r.name} with the camera now? Only that run is changed; until then it sits on a straight guessed line.`)) mapWizard(r.name);
+    if (out === 'lan' && !r.tip && confirm(`Map ${r.name} with the camera now? Only that run is changed; until then it sits on a straight guessed line.`)) mapWizard(r.name);
   };
   openSheet(b.in_show ? 'Change ' + b.name : 'Add ' + b.name, el);
 }

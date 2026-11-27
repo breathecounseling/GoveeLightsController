@@ -112,13 +112,16 @@ def canvas(layout, idx: list[int]) -> dict:
     zset = set(zig)
     uv = {}
     if zig:
-        xs = [px[i].x for i in zig]
-        ys = [px[i].y for i in zig]
+        # the scale comes from the zigzag's own run: a run that continues it (the Tip on
+        # top of the Peak) sits above, at v > 1, so pictures keep their size and shape
+        base = [i for i in zig if not getattr(px[i], "ext", False)] or zig
+        xs = [px[i].x for i in base]
+        ys = [px[i].y for i in base]
         cx, hw = (min(xs) + max(xs)) / 2, max(0.5, (max(xs) - min(xs)) / 2)
         y0, H = min(ys), max(0.5, max(ys) - min(ys))
         for i in zig:
             uv[i] = ((px[i].x - cx) / hw, (px[i].y - y0) / H)
-        apex = (cx, max(ys))
+        apex = (cx, max(px[i].y for i in zig))
         # how high the triangle's tip would be (in canvas heights): a zigzag is usually a
         # trapezoid (its top row is still several bulbs wide), so |u| + v / k <= 1
         k = max([v / (1 - abs(u)) for u, v in uv.values() if abs(u) < 0.9] or [1.0])
@@ -126,7 +129,7 @@ def canvas(layout, idx: list[int]) -> dict:
     else:
         apex, y0, H, k = (0.0, 0.0), 0.0, 1.0, 1.0
     out = {"zig": zig, "uv": uv, "rest": [i for i in idx if i not in zset], "apex": apex, "k": k,
-           "y0": y0, "H": H}
+           "y0": y0, "H": H, "tip": [i for i in zig if getattr(px[i], "ext", False)]}
     c[key] = out
     return out
 
@@ -525,7 +528,8 @@ def _roof_chains(layout, idx) -> list:
         cur.append(i)
     if cur:
         groups.append(cur)
-    chains = [g for g in groups if len(g) >= 6 and geo._rows_by_reversal(px, g) is None]
+    chains = [g for g in groups if len(g) >= 6 and geo._rows_by_reversal(px, g) is None
+              and not geo.continues_a_fill(px, g)]
     return [geo.path(layout, g) for g in chains if geo.path(layout, g).length > 2]
 
 

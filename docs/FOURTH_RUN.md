@@ -79,6 +79,43 @@ each place). Whole-house layers now include it. Afterwards, **Map with your came
 pick the new run under *Apply to*: only that run's shape changes (its placeholder line is
 not used as a reference).
 
+## The top of the Peak (the Tip)
+
+On this house the fourth box, named **Tip** (H705E), carries the Peak's zigzag on up to the
+point of the gable. Once it answers the check, **Add it to the show** → *Where is it?* →
+**Top of the Peak (completes the gable)**:
+
+* **Bulbs**: everything the box drives (the Tip takes frames of up to 108).
+* **Bulbs you can see on the gable** (default 12): the first bulbs from bulb 0. The rest
+  (coiled up or hidden) stay dark.
+* **Which end is bulb 0?** *Where the Peak's top row ends* (the usual way: the zigzag just
+  carries on) or *The other end*.
+* **Bulbs in each row, from bulb 0** (default `7, 4, 1`): row 7 is bulbs 0-6, row 8 is
+  bulbs 7-10, bulb 11 is the very top.
+
+The app works out where those bulbs are from the Peak's own shape: the same bulb spacing
+(0.7), the same centre line, the same slope of the sides (each row is as wide as the
+triangle is at that height), so the rows land at heights 4.38, 5.01 and 5.64, just under
+the Eaves' roofline at the point (Eaves bulbs 42/43, "Peak tip North/South", are that
+roofline, not the Tip). It joins every zone that holds the Peak's top row (*Zigzag top
+half*, *Whole front gable*, *Whole front*) and becomes part of the Peak: a layer aimed at
+"Peak" lights it, the December pictures use it (the wreath hangs from a ribbon with a bow on
+the point, the snowman's hat rises to a bobble there, the star and the ornament's hook sit
+on the point, JOY's star moves up), the Christmas tree and *Tree lighting ceremony* put
+their star on bulb 11, words use it as part of the twinkling border, and the sleigh's
+stardust drifts onto it (the sleigh itself stays on the rooflines). The house's outline
+doesn't change, so whole-house effects keep their size. **Take it out** puts the zones,
+the box and every frame back exactly as before.
+
+Assumption to check from the yard: the owner's landmark "6 = Right (North) corner 2nd row"
+is read as the north end of the Tip's *first* row (0-6 one row of 7, then 7-10, then 11).
+If the Tip is wired differently, change the row numbers in the sheet (*Change* on its card)
+or `TIP_ROWS` in `goveelights/addrun.py`; nothing else depends on them. Camera mapping can
+still measure it afterwards like any other run.
+
+Previews: `python3 tools/contact_sheet.py peak-star christmas-tree --tip 12 --focus "Whole front
+gable" --out /tmp/sheet` (`--tip-flip`, `--tip-rows 6,5,1` try the alternatives).
+
 ## Govee cloud fallback (opt-in)
 
 If the box never answers on the LAN, it can still follow the show through Govee's cloud

@@ -79,7 +79,7 @@ def _roof_tracks(layout, idx) -> list:
     """Tracks a coaster can ride: rooflines only. A zigzag fill is used only when the
     target holds nothing else (e.g. target "Peak")."""
     tracks = _tracks(layout, idx)
-    roof = [t for t in tracks if not _doubles_back(t)]
+    roof = [t for t in tracks if not _doubles_back(t) and not geo.continues_a_fill(layout.pixels, t.order)]
     return roof or tracks
 
 

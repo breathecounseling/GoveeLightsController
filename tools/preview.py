@@ -44,7 +44,8 @@ def house_layout(path=None) -> Layout:
     devs = data["devices"]
     runs = [Run(mac=m, name=d.get("name") or m, count=d["pixel_count"], reverse=d.get("reversed", False),
                 hidden=set(d.get("hidden", [])), geometry=d.get("geometry", []),
-                role=d.get("role") if d.get("role") in ROLES else None, follows=d.get("follows") or None)
+                role=d.get("role") if d.get("role") in ROLES else None, follows=d.get("follows") or None,
+                extends=d.get("extends") or None)
             for m, d in devs.items() if d.get("pixel_count") and d.get("enabled", True) is not False]
     runs.sort(key=lambda r: devs[r.mac].get("order", 0))
     return Layout(runs, data.get("zones"), data.get("target_aliases"))

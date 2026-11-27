@@ -164,7 +164,7 @@ def _sn_setup(ctx, st, P):
     # ---- where shooting stars fly: the rooflines (highest first), else the top row
     tracks = []
     for pth in _tracks(L, idx):
-        if geo._rows_by_reversal(px, pth.order) is not None:
+        if geo._rows_by_reversal(px, pth.order) is not None or geo.continues_a_fill(px, pth.order):
             continue                                   # a zigzag fill is not a roofline
         tracks.append(pth)
     if not tracks:

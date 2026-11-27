@@ -56,6 +56,12 @@ def rows(layout, target="all", tol: float = 0.45) -> list[list[int]]:
     return out
 
 
+def continues_a_fill(px, order) -> bool:
+    """True when these bulbs all belong to a run that continues another run's zigzag
+    (the Tip on top of the Peak, Layout 'extends'): part of that fill, never a roofline."""
+    return bool(order) and all(getattr(px[i], "ext", False) for i in order)
+
+
 def _rows_by_reversal(px, order: list[int]) -> list[list[int]] | None:
     """A zigzag is wired row by row, reversing direction at each end. Split the strip
     order wherever the horizontal direction flips; accept it only if that gives several
@@ -73,7 +79,10 @@ def _rows_by_reversal(px, order: list[int]) -> list[list[int]] | None:
             direction = d
         cur.append(b)
     rows_.append(cur)
-    if len(rows_) < 3 or any(len(r) < 2 for r in rows_):
+    # a single bulb crowning the last row (the apex of a gable that comes to a point,
+    # e.g. the Tip on top of the Peak) is a row of its own
+    crown = len(rows_) >= 3 and len(rows_[-1]) == 1 and px[rows_[-1][0]].y > max(px[i].y for i in rows_[-2])
+    if len(rows_) < 3 or any(len(r) < 2 for r in (rows_[:-1] if crown else rows_)):
         return None
     ys = [sum(px[i].y for i in r) / len(r) for r in rows_]
     spread = max(max(px[i].y for i in r) - min(px[i].y for i in r) for r in rows_)

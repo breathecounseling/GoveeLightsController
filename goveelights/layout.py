@@ -14,6 +14,12 @@ Per-device layout lives in the device's config entry:
             from outside with the house "unrolled"; bulbs between knots are
             interpolated. Missing -> a straight horizontal line.
   enabled   include in the virtual strip (default true)
+  extends   the id (or name) of another run this one continues, e.g. the Tip box that
+            carries the Peak's zigzag up to the gable apex. Its bulbs then count as part
+            of that run for drawing (pixel.run is the host's name, so zigzag pictures,
+            the tree and text treat the two as one triangle) and a layer aimed at the
+            host's name lights them too; the run keeps its own name for its own layers,
+            the Bulb check and the camera. Without such a run nothing changes.
 """
 from __future__ import annotations
 
@@ -24,7 +30,7 @@ from . import calibrate
 
 class Pixel:
     __slots__ = ("i", "n", "u", "run", "mac", "local", "ri", "rn", "ru",
-                 "x", "y", "sx", "sy", "spanx", "spany", "nx", "ny", "rny", "rnx")
+                 "x", "y", "sx", "sy", "spanx", "spany", "nx", "ny", "rny", "rnx", "ext")
 
     def __repr__(self):
         return f"Pixel(i={self.i}, run={self.run!r}, local={self.local}, x={self.x:.1f}, y={self.y:.1f})"
@@ -46,6 +52,7 @@ class Run:
     guess: bool = False                  # geometry is a placeholder until camera mapping measures it
     follows: str | None = None           # opt-in: a run or zone it copies when a scene leaves it dark
     dead: set[int] = field(default_factory=set)   # marked broken in the Bulb check: dark, skipped
+    extends: str | None = None           # another run (id or name) this one continues (the Tip -> the Peak)
     pixels: list[Pixel] = field(default_factory=list)   # visible, virtual order
 
     def positions(self) -> list[tuple[float, float]]:
@@ -182,6 +189,7 @@ class Layout:
             vis = [k for k in order if k not in r.hidden and k not in r.dead]
             for ri, local in enumerate(vis):
                 p = Pixel()
+                p.ext = False
                 p.run, p.mac, p.local, p.ri, p.rn = r.name, r.mac, local, ri, len(vis)
                 p.ru = ri / max(1, len(vis) - 1)
                 p.x, p.y = pos_all[r.mac][local]
@@ -218,6 +226,30 @@ class Layout:
                 p.rny = (p.y - lo) / (hi - lo) if hi > lo else 0.0
                 p.rnx = (p.x - xlo) / (xhi - xlo) if xhi > xlo else 0.5
 
+        # a run that continues another (the Tip on top of the Peak): its bulbs draw as part
+        # of the host, and the host's per-run heights/widths span both
+        self._ext_of: dict[str, list[Run]] = {}
+        for r in runs:
+            if not r.extends or not r.pixels:
+                continue
+            host = next((h for h in runs if h is not r and not h.extends and h.pixels
+                         and r.extends in (h.mac, h.name)), None)
+            if host is None:
+                continue
+            self._ext_of.setdefault(host.mac, []).append(r)
+            for p in r.pixels:
+                p.run, p.ext = host.name, True
+        for hm, exts in self._ext_of.items():
+            host = next(h for h in runs if h.mac == hm)
+            group = host.pixels + [p for e in exts for p in e.pixels]
+            extra = [q for e in [host] + exts for q in gone.get(e.mac, ())]
+            ys = [p.y for p in group] + [y for _, y in extra]
+            xs = [p.x for p in group] + [x for x, _ in extra]
+            lo, hi, xlo, xhi = min(ys), max(ys), min(xs), max(xs)
+            for p in group:
+                p.rny = (p.y - lo) / (hi - lo) if hi > lo else 0.0
+                p.rnx = (p.x - xlo) / (xhi - xlo) if xhi > xlo else 0.5
+
         # zones: named groups of bulbs, e.g. {"name": "North wall",
         #   "parts": [{"run": "Eaves", "from": 0, "to": 30}]}   (physical indexes, inclusive)
         self.zones: dict[str, list[int]] = {}
@@ -235,6 +267,11 @@ class Layout:
     @staticmethod
     def _dead_pos(r: Run, pos) -> list[tuple[float, float]]:
         return [pos[k] for k in sorted(r.dead) if 0 <= k < r.count and k not in r.hidden]
+
+    def extensions(self, host) -> list[Run]:
+        """The runs that continue `host` (a Run, name or id), e.g. [Tip] for the Peak."""
+        r = host if isinstance(host, Run) else self.run(host)
+        return list(self._ext_of.get(r.mac, ())) if r else []
 
     @property
     def n(self) -> int:
@@ -261,6 +298,8 @@ class Layout:
                     r = self.run(nm)
                     if r:
                         s.update(p.i for p in r.pixels)
+                        for e in self._ext_of.get(r.mac, ()):     # the run that continues it
+                            s.update(p.i for p in e.pixels)
             out = sorted(s)
         self._targets[key] = out
         return out
@@ -373,7 +412,8 @@ class Layout:
                             role=d.get("role") if d.get("role") in ROLES else None,
                             guess=bool(d.get("geometry_guess")),
                             follows=str(d["follows"]) if d.get("follows") else None,
-                            dead=dead_bulbs(d)))
+                            dead=dead_bulbs(d),
+                            extends=str(d["extends"]) if d.get("extends") else None))
         return cls(runs, cfg.data.get("zones", []), cfg.data.get("target_aliases"), dark + _house_names(cfg))
 
     def summary(self) -> str:
