@@ -99,16 +99,34 @@ class _Stop:
 class HealOneMissTests(unittest.TestCase):
     def test_one_missed_poll_then_same_status_reasserts(self):
         ok = {"onOff": 1, "brightness": 100, "color": {"r": 0, "g": 0, "b": 0}, "colorTemInKelvin": 0}
-        seq = [ok, None, ok, ok, ok]
-        it = iter(seq)
+        # a reboot between polls: the poll and its immediate retry both get no reply
+        self.assertEqual(self.run_loop([ok, None, None, ok, ok, ok], polls=5), ["came back online"])
+
+    @staticmethod
+    def run_loop(replies, polls):
+        it = iter(replies)
         why = []
         fake = types.SimpleNamespace(
             ecfg={}, diag_active=False, map_state=None, health={},
             engine=types.SimpleNamespace(live=True, output=types.SimpleNamespace(devices={"A": {"ip": "1"}})),
             lan=types.SimpleNamespace(status=lambda ip, timeout=1.5: next(it)),
-            _reassert=lambda mac, w: why.append(w), _stop=_Stop(len(seq)))
+            _reassert=lambda mac, w: why.append(w), _stop=_Stop(polls))
         C.Controller._health_loop(fake)
-        self.assertEqual(why, ["came back online"])
+        return why
+
+    def test_a_lost_reply_answered_on_the_retry_does_not_retake(self):
+        ok = {"onOff": 1, "brightness": 100, "color": {"r": 0, "g": 0, "b": 0}, "colorTemInKelvin": 0}
+        self.assertEqual(self.run_loop([ok, None, ok, ok, ok, ok], polls=5), [])
+
+    def test_colour_moving_with_the_show_does_not_retake(self):
+        a = {"onOff": 1, "brightness": 100, "color": {"r": 9, "g": 0, "b": 0}, "colorTemInKelvin": 0}
+        b = dict(a, color={"r": 0, "g": 0, "b": 200})
+        self.assertEqual(self.run_loop([a, b, a, b, a, b], polls=6), [])
+
+    def test_switched_off_still_retakes(self):
+        ok = {"onOff": 1, "brightness": 100, "color": {}, "colorTemInKelvin": 0}
+        off = dict(ok, onOff=0)
+        self.assertEqual(self.run_loop([ok, off, off, off], polls=4)[:1], ["state changed"])
 
 
 class DiagIpTests(unittest.TestCase):

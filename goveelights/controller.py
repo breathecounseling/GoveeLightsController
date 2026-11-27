@@ -1453,11 +1453,18 @@ class Controller:
                                                      "last_enable": now, "seen": None, "paused": False})
                     st = self.lan.status(dev["ip"], timeout=1.5)
                     if st is None:
+                        # A box busy with 20 frames a second sometimes drops or delays one
+                        # status reply. Ask once more before calling it gone: a box that is
+                        # really rebooting misses both, a lost reply does not (and re-taking a
+                        # box that never left makes the lights hitch).
+                        st = self.lan.status(dev["ip"], timeout=2.5)
+                    if st is None:
                         h["miss"] += 1
                         continue
                     h["seen"] = now
-                    sig = (st.get("onOff"), st.get("brightness"), json.dumps(st.get("color"), sort_keys=True),
-                           st.get("colorTemInKelvin"))
+                    # Only power and brightness: the colour a box reports moves with the show
+                    # on some firmware, so comparing it re-took boxes that never left.
+                    sig = (st.get("onOff"), st.get("brightness"))
                     # Any missed poll then a reply counts: a box that reboots between two
                     # polls comes back in its own mode with the same status signature.
                     back = h["miss"] >= 1
