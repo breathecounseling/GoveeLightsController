@@ -118,7 +118,7 @@ const { chromium } = require('playwright');
 
     // Bulb check links to it
     await page.click('#bcToCt');
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(1800);   // a smooth scroll down a long More tab takes a while
     out.linkLands = await page.evaluate(() => { const r = document.querySelector('#ctCard').getBoundingClientRect(); return r.top >= 0 && r.top < innerHeight });
 
     // Fourth run: the Tip added the old way gets a one-tap move
