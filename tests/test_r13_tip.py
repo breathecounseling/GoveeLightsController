@@ -250,6 +250,8 @@ TIP_GOLDEN = {
     "starry-night-sleigh": "64c07353762dfa83", "summer-evening": "789df580428842c6", "summer-fireflies": "c12c960aadfe9c5b",
     "text-give-thanks": "f0ac6a9aebce6e72", "text-go-broncos": "91a8b8fb62e73515", "text-happy-new-year": "1862872b5c5bdb24",
     "text-merry-christmas": "b6fcc6d61b94f0b3", "text-scoreboard": "7ef7c055069da063", "thanksgiving-harvest": "1954ca90a1e28ffc",
+    "text-give-thanks-scroll": "ffc18422853331d9", "text-go-broncos-scroll": "eac86ecc4c09a0a2", "text-happy-new-year-scroll": "8610c3b8c6491846",
+    "text-merry-christmas-scroll": "239bbf4fd7823459", "text-scoreboard-scroll": "0fc622415646d622", "text-touchdown-scroll": "5a13a84405d9d9cf",
     "tree-lighting-ceremony": "82cedf68e54d0160", "twin-coasters": "60157576150ea074", "valentines-glow": "5a06fa830c5230c2",
     "valentines-hearts": "10b4a969c23c880e", "warm-white": "e253164cd9245bb6", "winter-elegance": "4255ee8d325042c5",
     "winter-sparkle": "4256ee9c4b9c1025",
@@ -261,7 +263,9 @@ TIP_SAME = {"apex-ripples", "halloween-pumpkin", "july-4th-flag", "valentines-gl
     "porch-fireworks", "rainbow-roofline", "santas-sleigh", "scanner-trails", "sequin-wave", "sleigh-grand-tour",
     "snow-piling-up", "snowy-evening", "spring-garden", "st-patricks", "starry-night", "starry-night-sleigh",
     "summer-evening", "summer-fireflies", "text-give-thanks", "text-go-broncos", "text-happy-new-year",
-    "text-merry-christmas", "text-scoreboard", "warm-white", "winter-elegance", "winter-sparkle"}
+    "text-merry-christmas", "text-scoreboard", "text-give-thanks-scroll", "text-go-broncos-scroll",
+    "text-happy-new-year-scroll", "text-merry-christmas-scroll", "text-scoreboard-scroll", "text-touchdown-scroll",
+    "warm-white", "winter-elegance", "winter-sparkle"}
 
 
 @unittest.skipUnless(HAS_OWNER, "the owner's layout is not in this copy")
