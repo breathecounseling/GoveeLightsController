@@ -344,7 +344,19 @@ class Controller:
             e.start(live=False)
             self.engine = e
             if was_live:
-                self.set_live(True, manual=False)
+                # the same lights back on, not a new lights-on: a colour test that switched
+                # them on still owns them, and "phone only" stays as it is
+                e.set_live(True)
+
+    def _borrowed_lights(self) -> bool:
+        """The lights are on only for a colour test or a forced celebration: they go off
+        again afterwards, so they count as off."""
+        if not self.engine.live:
+            return False
+        ms = self.match_state
+        if ms is not None and ms["took"] and self._live_on_gen == ms["gen"]:
+            return True
+        return self.interrupt is not None and not self.interrupt.get("live", True)
 
     def set_live(self, on: bool, manual: bool = True):
         if on:
@@ -1346,7 +1358,7 @@ class Controller:
         self.vqueue[:] = [r for r in self.vqueue if r.get("expires", now + 1) > now]
         if not self.vqueue or not self.engine.live or self.engine.blackout or self.map_state or self.diag_active:
             return
-        if self.match_state:                         # the owner is matching the runs: picks wait
+        if self.match_state or self.bulbcheck.active:   # the owner is matching the runs / checking bulbs: picks wait
             return
         it = self.interrupt
         if it and not it.get("visitor"):            # a show, countdown or celebration is on: wait
@@ -1671,8 +1683,13 @@ class Controller:
         self.bulbcheck.stop("camera mapping")
         with self.lock:
             if self.map_state is None:
+                ms = self.match_state
+                lit = self.engine.live and not (ms is not None and ms["took"] and self._live_on_gen == ms["gen"])
+                if ms is not None:                 # mapping ends the colour test; it keeps the lights
+                    ms["took"] = False
+                    self._end_match()
                 it, self.interrupt = self.interrupt, None
-                base = it or {"scene": self.scene_dict, "playing": self.playing, "live": self.engine.live}
+                base = it or {"scene": self.scene_dict, "playing": self.playing, "live": lit}
                 self.map_state = {"scene": base["scene"], "playing": base["playing"], "live": base["live"],
                                   "speed": self.engine.master.get("speed", 1.0), "blackout": self.engine.blackout}
             self.engine.master["speed"] = 1.0
@@ -1682,6 +1699,7 @@ class Controller:
             self.engine.set_scene(Scene.from_dict({"layers": [{"effect": "mapcode",
                                                                "params": {"level": max(0.05, min(1.0, float(level)))}}]}))
             self.playing = {"kind": "event", "name": "Camera mapping pattern"}
+            self._live_on_gen += 1                     # a lights-on of its own
         self.engine.set_live(True, release=True, force=True)     # every box must show the pattern
         return {"on": MAP_ON, "off": MAP_OFF, "slot": MAP_SLOT, "bits": MAP_BITS, "cycle": map_cycle(),
                 "n": self.engine.layout.n}
@@ -1843,6 +1861,8 @@ class Controller:
         if self.cloud_out is not None and r and (d.get("cloud") or {}).get("enabled"):
             self.cloud_out.blink(mac)
             return "flashing white through the Govee cloud (give it a few seconds)"
+        if r and e.takeover is not None:
+            raise ValueError("The bulb check is using the lights. Finish it first.")
         if e.live and r:
             now = time.time()
             e.overlays["pad:blink"] = (Scene.from_dict({"layers": [{"effect": "solid", "target": r.name,
@@ -1881,7 +1901,8 @@ class Controller:
             self.diag_active = True
             with self.lock:
                 self.vqueue.clear()
-            self._diag_was_live = self.engine.live
+                # lights on only for a colour test or a forced celebration were off
+                self._diag_was_live = self.engine.live and not self._borrowed_lights()
             self.engine.set_live(False, release=False)
 
     def exit_diag(self):

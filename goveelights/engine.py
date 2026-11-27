@@ -275,8 +275,8 @@ class Engine:
                 self.live = True
             elif not on and self.live:
                 self.live = False
-                if release:
-                    self.output.stop()
+                if release and not (self.takeover is not None and self.takeover_live):
+                    self.output.stop()     # a lights-off bulb check still drives the boxes
 
     def start(self, live: bool = True):
         """Start the render loop (and, if live, take control of the lights)."""
