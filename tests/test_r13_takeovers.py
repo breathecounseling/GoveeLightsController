@@ -59,8 +59,9 @@ class Takeovers(unittest.TestCase):
         ctl = r.ctl
         ctl.bulbcheck.start(ctl.engine.layout.runs[0].mac, "groups")
         self.assertTrue(ctl.engine.output.started)
-        self.assertTrue(ctl.match("start", "warm")["took_lights"])
-        ctl.match("stop")
+        with self.assertRaises(ValueError):        # the two are kept apart: no colour test during a check
+            ctl.match("start", "warm")
+        ctl.match("stop")                          # a stray Stop must not release the check either
         r.tick(1)
         self.assertTrue(ctl.bulbcheck.active)
         self.assertTrue(ctl.engine.output.started, "the check still needs the boxes")
