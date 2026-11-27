@@ -40,6 +40,9 @@ corner, 69 3rd row North corner, 85 4th row south corner, 97 5th row North corne
 row south corner. So the Tip continues the Peak's zigzag: row 7 = 0-6 (south to north),
 row 8 = 7-10 (north to south), 11 = the apex; 12 and up are hidden. "6 = 2nd row" is read
 as the north end of row 7 (see FOURTH_RUN.md, *The top of the Peak*, to change it).
+Not yet checked on the box: realtime frames go out with the gradient flag 00 and one colour
+per bulb; confirm the Tip shows each bulb's own colour that way (the star on bulb 11 in
+*Christmas tree*), otherwise give it a per-box gradient flag.
 
 ## The fourth run (the H705E)
 

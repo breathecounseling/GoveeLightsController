@@ -62,9 +62,9 @@ def glint_bloom(p, t: float, rate: float, attack: float, decay: float, seed: int
     g, key = glint_frame(p.i, t, rate, attack, decay, seed)
     if bloom > 0:
         if p.ri > 0:
-            g = max(g, glint_frame(p.i - 1, t, rate, attack, decay, seed)[0] * bloom)
+            g = max(g, glint_frame(p.seq[p.ri - 1], t, rate, attack, decay, seed)[0] * bloom)
         if p.ri < p.rn - 1:
-            g = max(g, glint_frame(p.i + 1, t, rate, attack, decay, seed)[0] * bloom)
+            g = max(g, glint_frame(p.seq[p.ri + 1], t, rate, attack, decay, seed)[0] * bloom)
     return g, key
 
 

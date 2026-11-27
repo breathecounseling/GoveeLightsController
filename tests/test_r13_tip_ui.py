@@ -38,8 +38,13 @@ class TipInTheBrowser(unittest.TestCase):
         # is still running when the next test patches the controller's clock
         self.addCleanup(lambda: [t.join(6) for t in set(threading.enumerate()) - pre])
         base = 40 + os.getpid() % 180                     # a range of its own (other runs may be going)
+        # the first three fakes stand in for the house's own boxes (their ids), the fourth is the
+        # Tip as it really reports itself: H705E on Wi-Fi firmware 1.01.17
+        house = sorted(json.loads(OWNER.read_text())["devices"].items(), key=lambda kv: kv[1].get("order", 0))
+        macs = ",".join([m for m, _ in house] + [TIP])
         fake = subprocess.Popen([sys.executable, str(ROOT / "tools" / "fake_govee.py"), "--counts", "93,108,60,108",
-                                 "--quiet", "--base", str(base)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                 "--quiet", "--base", str(base), "--macs", macs, "--skus", ",,,H705E",
+                                 "--wifis", ",,,1.01.17"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 text=True)
         self.addCleanup(fake.stdout.close)
         self.addCleanup(fake.wait, 5)
@@ -52,6 +57,7 @@ class TipInTheBrowser(unittest.TestCase):
         cfg.import_layout(OWNER, create_missing=True)
         for k, d in enumerate(sorted(cfg.devices.values(), key=lambda d: d.get("order", 0))):
             d["ip"] = f"127.0.0.{base + k}"
+            d["sku"] = "H805A"                            # (the scan would fill it in anyway)
         cfg.upsert_discovered({"device": TIP, "sku": "H705E", "ip": f"127.0.0.{base + 3}",
                                "source_ip": f"127.0.0.{base + 3}", "wifiVersionSoft": "1.01.17"})
         cfg.devices[TIP]["name"] = "Tip"
@@ -104,16 +110,18 @@ class TipInTheBrowser(unittest.TestCase):
         self.assertEqual(out["flipped"], "The other end")
         self.assertTrue(all(h >= 44 for h in out["inputH"]), out["inputH"])
         self.assertIn("108 bulbs (12 on the gable)", out["cardText"])
+        self.assertIn("H705E", out["cardText"])                        # the fake reports the real model
+        self.assertEqual(out["candidates"], 1, out)                    # only the Tip is new
         self.assertIn("Top of the Peak", out["cardText"])
         self.assertEqual(seen.get("peak"), 120, seen)
         self.assertEqual((seen.get("tip"), seen.get("gable")), (12, 144), seen)
-        # taken out: the config is as it was (the check only noted what it found)
+        # taken out: the whole config is as it was (the check only noted what it found)
         after = copy.deepcopy(ctl.cfg.data)
         for d in (before, after):
             for dev in d["devices"].values():
                 dev.pop("diag", None)
                 dev.pop("firmware", None)
-        self.assertEqual(after["zones"], before["zones"])
+        self.assertEqual(after, before)
         self.assertIsNone(ctl.engine.layout.run("Tip"))
         self.assertEqual(ctl.cfg.devices[TIP].get("pixel_count"), None)
 

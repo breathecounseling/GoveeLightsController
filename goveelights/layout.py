@@ -30,7 +30,7 @@ from . import calibrate
 
 class Pixel:
     __slots__ = ("i", "n", "u", "run", "mac", "local", "ri", "rn", "ru",
-                 "x", "y", "sx", "sy", "spanx", "spany", "nx", "ny", "rny", "rnx", "ext")
+                 "x", "y", "sx", "sy", "spanx", "spany", "nx", "ny", "rny", "rnx", "ext", "seq")
 
     def __repr__(self):
         return f"Pixel(i={self.i}, run={self.run!r}, local={self.local}, x={self.x:.1f}, y={self.y:.1f})"
@@ -217,6 +217,10 @@ class Layout:
             p.sy = min(max(p.y - self.miny, 0.0), spany)
             p.spanx, p.spany = spanx, spany
             p.nx, p.ny = p.sx / spanx, p.sy / spany
+        for r in runs:                       # strip index of each bulb of the run, in run order
+            seq = tuple(p.i for p in r.pixels)
+            for p in r.pixels:
+                p.seq = seq
         for r in runs:
             ys = [p.y for p in r.pixels] + [y for _, y in gone.get(r.mac, ())] or [0.0]
             xs = [p.x for p in r.pixels] + [x for x, _ in gone.get(r.mac, ())] or [0.0]
@@ -249,6 +253,12 @@ class Layout:
             for p in group:
                 p.rny = (p.y - lo) / (hi - lo) if hi > lo else 0.0
                 p.rnx = (p.x - xlo) / (xhi - xlo) if xhi > xlo else 0.5
+            # bulb order along the run carries on from the host's last bulb into the extension,
+            # so comets, scanners and mirrors run up the Tip instead of restarting on it
+            seq = tuple(p.i for p in group)
+            for k, p in enumerate(group):
+                p.ri, p.rn, p.seq = k, len(group), seq
+                p.ru = k / max(1, len(group) - 1)
 
         # zones: named groups of bulbs, e.g. {"name": "North wall",
         #   "parts": [{"run": "Eaves", "from": 0, "to": 30}]}   (physical indexes, inclusive)

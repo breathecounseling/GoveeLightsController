@@ -25,11 +25,12 @@ from goveelights import protocol as p  # noqa: E402
 
 
 class FakeDevice:
-    def __init__(self, ip, count, timeout, sku, idx, quiet, oversize="ignore", deaf=False, wifi="1.02.03"):
+    def __init__(self, ip, count, timeout, sku, idx, quiet, oversize="ignore", deaf=False, wifi="1.02.03",
+                 mac=None):
         self.oversize = oversize
         self.deaf, self.wifi = deaf, wifi        # deaf: answers the scan, ignores every command
         self.ip, self.count, self.timeout, self.sku, self.quiet = ip, count, timeout, sku, quiet
-        self.mac = f"AA:BB:CC:DD:EE:FF:00:{idx:02X}"
+        self.mac = mac or f"AA:BB:CC:DD:EE:FF:00:{idx:02X}"
         self.on, self.bright, self.color = 1, 100, (255, 160, 60)
         self.realtime, self.last_frame = False, 0.0
         self.pixels = [self.color] * count
@@ -141,11 +142,24 @@ def main():
     ap.add_argument("--deaf", type=int, action="append", default=[], metavar="N",
                     help="device N (1 = first) answers the scan but ignores commands, as an H705E "
                          "on Wi-Fi firmware 1.01.17 did; it reports that model and firmware")
+    ap.add_argument("--macs", default="", help="comma-separated device ids, one per device (blank = the "
+                    "default AA:BB:...:00:NN), e.g. the ids in layouts/house.json so the fakes stand in for them")
+    ap.add_argument("--skus", default="", help="comma-separated model per device (blank = --sku), e.g. "
+                    ",,,H705E")
+    ap.add_argument("--wifis", default="", help="comma-separated Wi-Fi firmware per device (blank = 1.02.03)")
     a = ap.parse_args()
     counts = [int(x) for x in a.counts.split(",")] if a.counts else [a.count + i for i in range(a.devices)]
-    devs = [FakeDevice(f"127.0.0.{a.base + i}", counts[i], a.timeout, "H705E" if i + 1 in a.deaf else a.sku, i,
-                       a.quiet, a.oversize, deaf=i + 1 in a.deaf, wifi="1.01.17" if i + 1 in a.deaf else "1.02.03")
-            for i in range(len(counts) if a.counts else a.devices)]
+    n = len(counts) if a.counts else a.devices
+
+    def each(text, i):
+        v = text.split(",")
+        return v[i].strip() if i < len(v) else ""
+    devs = [FakeDevice(f"127.0.0.{a.base + i}", counts[i], a.timeout,
+                       each(a.skus, i) or ("H705E" if i + 1 in a.deaf else a.sku), i, a.quiet, a.oversize,
+                       deaf=i + 1 in a.deaf,
+                       wifi=each(a.wifis, i) or ("1.01.17" if i + 1 in a.deaf else "1.02.03"),
+                       mac=each(a.macs, i) or None)
+            for i in range(n)]
     print("fake devices:", ", ".join(f"{d.ip} ({d.sku}, {d.count} bulbs)" for d in devs), flush=True)
     while True:
         time.sleep(3600)

@@ -20,6 +20,7 @@ const { chromium } = require('playwright');
     await page.click('#nav button[data-t="more"]');
     await page.waitForSelector('#frBoxes .frb', { timeout: 8000 });
     out.steps.push('card');
+    out.candidates = await page.locator('#frBoxes .frb', { hasText: 'Not in the show yet' }).count();
     const width = async (where) => {
       const w = await page.evaluate(() => [document.documentElement.scrollWidth, document.body.scrollWidth, innerWidth]);
       if (w[0] > w[2] || w[1] > w[2]) out.overflow.push(`${where}: ${w.join('/')}`);

@@ -331,19 +331,19 @@ def add_run(cfg, layout, mac: str, count, where: str, name: str = "", join: str 
         if layout is not None and mac in {r.mac for r in layout.runs} and not d.get("added_run"):
             raise ValueError(f"{d.get('name') or mac} is already part of the show")
         taken = {x.get("name") for x in others.values() if x.get("name")} | {z["name"] for z in zones}
-        if d.get("added_run"):                      # changing an earlier add: start from before it
-            _undo(cfg, mac, d, save=False)
-        prev = {k: copy.deepcopy(d[k]) for k in _PREV_KEYS if k in d}
-        auto = cfg.auto_name(mac, d) or not d.get("name")
-        nm = _unique(name or (loc["name"] if auto else d.get("name")), taken)
         # the layout without this box: its outline and the end of the strip
         base = layout
         if base is not None and mac in {r.mac for r in base.runs}:
             from .layout import Layout
             base = Layout(copy_runs(base, {mac}))
         host = zigzag_host(base) if tip else None
-        if tip and host is None:
+        if tip and host is None:                    # (checked before an earlier add is undone)
             raise ValueError("this house has no zigzag (Peak) for it to continue")
+        if d.get("added_run"):                      # changing an earlier add: start from before it
+            _undo(cfg, mac, d, save=False)
+        prev = {k: copy.deepcopy(d[k]) for k in _PREV_KEYS if k in d}
+        auto = cfg.auto_name(mac, d) or not d.get("name")
+        nm = _unique(name or (loc["name"] if auto else d.get("name")), taken)
         d.update({"name": nm, "pixel_count": count, "enabled": True, "role": loc["role"], "location": where,
                   "order": max([int(x.get("order", 0) or 0) for x in others.values()] + [-1]) + 1,
                   "geometry": guess_geometry(base, where, count), "hidden": [], "reversed": False})

@@ -120,7 +120,7 @@ def _mirror_map(ctx, axis):
     elif axis == "run":
         for i, p in enumerate(px):
             if p.ri >= p.rn / 2:
-                m[i] = i - p.ri + (p.rn - 1 - p.ri)
+                m[i] = p.seq[p.rn - 1 - p.ri]
     else:
         n = len(px)
         for i in range(n // 2, n):

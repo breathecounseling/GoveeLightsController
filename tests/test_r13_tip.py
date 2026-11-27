@@ -109,6 +109,23 @@ class TipGeometry(unittest.TestCase):
         # a role target for the gable plays on it too
         self.assertIn("Tip", T._by_role("apex"))
 
+    def test_bulb_order_runs_on_from_the_peak_into_the_tip(self):
+        T = tipped()
+        peak, tip = T.run("Peak"), T.run("Tip")
+        hn = len(peak.pixels)
+        self.assertEqual([p.ri for p in peak.pixels], list(range(hn)))
+        self.assertEqual([p.ri for p in tip.pixels], list(range(hn, hn + 12)))
+        self.assertTrue(all(p.rn == hn + 12 for p in peak.pixels + tip.pixels))
+        self.assertAlmostEqual(tip.pixels[-1].ru, 1.0)
+        self.assertAlmostEqual(peak.pixels[0].ru, 0.0)
+        # neighbours along the run step from Peak bulb 107 straight onto Tip bulb 0
+        seq = peak.pixels[0].seq
+        self.assertEqual(seq[hn - 1:hn + 1], (peak.pixels[-1].i, tip.pixels[0].i))
+        self.assertTrue(all(p.seq is seq for p in peak.pixels + tip.pixels))
+        # without the Tip the Peak's own numbering is untouched
+        L = owner()
+        self.assertTrue(all(p.rn == hn and p.ru == p.ri / (hn - 1) for p in L.run("Peak").pixels))
+
     def test_disabled_or_missing_host_changes_nothing(self):
         L = owner()
         runs = addrun.copy_runs(L)
@@ -204,9 +221,9 @@ class _FixedDT(_dt.datetime):
 # the pictures' crown move up, or the strip is 12 bulbs longer (effects that run along it).
 TIP_GOLDEN = {
     "advent-calendar": "65027b5347400bd8", "apex-ripples": "880eff34785c59c9", "ball-drop-at-midnight": "8a22628a34bcd00e",
-    "ball-drop-preview-loop": "a17ab911d18945dd", "breathing-comets": "88117e43c17d0a65", "broncos-game-day": "909e7e3613cb8481",
+    "ball-drop-preview-loop": "a17ab911d18945dd", "breathing-comets": "a3a8bef3c3e3ac6a", "broncos-game-day": "909e7e3613cb8481",
     "candy-cane": "5e2363004f4e511d", "champagne-fizz": "4859f951a5cf63c6", "christmas-tree": "fab6681e34c6e510",
-    "christmas-twinkle": "c9e9b8b992164b14", "comets": "c7cf23e55a210d3b", "diamond-glitter": "d72cefab9a250c78",
+    "christmas-twinkle": "c9e9b8b992164b14", "comets": "c7cf23e55a210d3b", "diamond-glitter": "d7d587adcdf79946",
     "dusk-demo": "67b9c39628124cbd", "dusk-to-night": "8d77cfd04e66bcd4", "easter-pastels": "2886ea70aa07eef4",
     "ember-falls": "e1ec65843cc41dc0", "falling-waves": "51a5f0182aa98bc5", "festive-glitter": "45682c91800ecb0e",
     "fill-the-peak": "294ecbe6f4b1e82c", "fireworks": "350c00e20ed3d0b6", "gift-wrap": "17c31b5188391dd8",
@@ -224,15 +241,15 @@ TIP_GOLDEN = {
     "sequin-wave": "d54313ad9d577eef", "sleigh-grand-tour": "ff7e307a1307939c", "snow-piling-up": "f661b8653667bbc4",
     "snowy-evening": "ba2267fdd9303da1", "sparkler-tree": "da39360aeb78c8f5", "spooky-tree": "de9d525253b8a714",
     "spring-garden": "dafde51e69ffae29", "st-patricks": "7bbd6fdd892eb173", "starry-night": "5aeffa5a346fc93e",
-    "starry-night-sleigh": "64c07353762dfa83", "summer-evening": "304103320ea1ff8b", "summer-fireflies": "06649f3950a10df6",
+    "starry-night-sleigh": "64c07353762dfa83", "summer-evening": "304103320ea1ff8b", "summer-fireflies": "c12c960aadfe9c5b",
     "text-give-thanks": "38b61123b316d259", "text-go-broncos": "9a8af141abdde638", "text-happy-new-year": "c8b09e874c21e116",
     "text-merry-christmas": "26cc4f38edffeb55", "text-scoreboard": "c024ceff358e3958", "thanksgiving-harvest": "1954ca90a1e28ffc",
     "tree-lighting-ceremony": "28591b2d2ba82ef5", "twin-coasters": "60157576150ea074", "valentines-glow": "a12ef298e52f7fff",
     "valentines-hearts": "25b50a533a531967", "warm-white": "e253164cd9245bb6", "winter-elegance": "4255ee8d325042c5",
     "winter-sparkle": "4256ee9c4b9c1025",
 }
-TIP_SAME = {"apex-ripples", "breathing-comets", "candy-cane", "champagne-fizz", "christmas-twinkle", "comets",
-    "diamond-glitter", "falling-waves", "festive-glitter", "fill-the-peak", "glitter-ball", "golden-shimmer",
+TIP_SAME = {"apex-ripples", "candy-cane", "champagne-fizz", "christmas-twinkle", "comets",
+    "falling-waves", "festive-glitter", "fill-the-peak", "glitter-ball", "golden-shimmer",
     "icicles", "lighthouse", "northern-lights", "paparazzi", "party-beat", "peak-wreath", "plasma-party",
     "porch-fireworks", "rainbow-roofline", "santas-sleigh", "scanner-trails", "sequin-wave", "sleigh-grand-tour",
     "snow-piling-up", "snowy-evening", "spring-garden", "st-patricks", "starry-night", "starry-night-sleigh",
@@ -346,6 +363,16 @@ class AddTheTip(unittest.TestCase):
         flat = Layout([Run(mac="A", name="Eaves", count=20, geometry=[[0, 0, 0], [19, 19, 0]])])
         with self.assertRaises(ValueError):
             addrun.add_run(c2, flat, mac, 108, "peak top")
+
+    def test_a_refused_change_leaves_the_config_alone(self):
+        c, mac = self.cfg()
+        addrun.add_run(c, Layout.from_config(c), mac, 108, "peak top")
+        peak = Layout.from_config(c).run("Peak").mac
+        c.devices[peak]["enabled"] = False
+        before = copy.deepcopy(c.data)
+        with self.assertRaises(ValueError):
+            addrun.add_run(c, Layout.from_config(c), mac, 108, "peak top", visible=10)
+        self.assertEqual(c.data, before)
 
     def test_controller_and_state(self):
         r, ctl = self.case.make()

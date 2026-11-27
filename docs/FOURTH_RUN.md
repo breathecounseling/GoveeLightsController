@@ -113,6 +113,16 @@ If the Tip is wired differently, change the row numbers in the sheet (*Change* o
 or `TIP_ROWS` in `goveelights/addrun.py`; nothing else depends on them. Camera mapping can
 still measure it afterwards like any other run.
 
+Effects that run along a strip (comets, scanners, mirrors, the glints' glow) also carry on
+from Peak bulb 107 into Tip bulb 0, so they climb on up to the point instead of starting
+over on the Tip's 12 bulbs.
+
+Second thing to check from the yard: the app sends the Tip one colour per bulb with the
+gradient flag off (00), the same as the other boxes. The owner saw 00 give "hard halves"
+when only two colours are sent; with a colour for every bulb that should not matter. Run
+*Christmas tree* and look at the top: if the Tip shows two blocks of colour instead of a
+star on bulb 11, say so, and the Tip gets its own gradient setting.
+
 Previews: `python3 tools/contact_sheet.py peak-star christmas-tree --tip 12 --focus "Whole front
 gable" --out /tmp/sheet` (`--tip-flip`, `--tip-rows 6,5,1` try the alternatives).
 

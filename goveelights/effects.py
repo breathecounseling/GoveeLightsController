@@ -615,9 +615,11 @@ def fizz(t, p, P):
 def fireflies(t, p, P):
     best = BLACK
     reach = int(P["drift"]) + 1
-    for j in range(p.i - reach, p.i + reach + 1):
-        if j < p.i - p.ri or j > p.i - p.ri + p.rn - 1:
+    for q in range(p.ri - reach, p.ri + reach + 1):
+        if q < 0 or q > p.rn - 1:
             continue                                     # stay inside this run
+        j = p.seq[q]                                     # its bulb (the Tip carries on from the Peak)
+        vj = p.i + (q - p.ri)                            # where it sits along the run, in strip units
         L = P["life"] * 1.3
         k = math.floor((t + hash01(j, P["seed"], 1) * L) / L)
         if hash01(j, k, P["seed"]) >= min(1.0, P["density"] * L):
@@ -629,7 +631,7 @@ def fireflies(t, p, P):
         pk = 0.5 - 0.42 * P["snap"]                       # when the glow peaks (0.5: symmetric)
         env = (math.sin(0.5 * math.pi * f / pk) if f < pk
                else math.sin(0.5 * math.pi * (1.0 - f) / (1.0 - pk))) ** 2
-        center = j + (hash01(j, k, P["seed"], 2) - 0.5) * 2 * P["drift"] * f
+        center = vj + (hash01(j, k, P["seed"], 2) - 0.5) * 2 * P["drift"] * f
         v = env * max(0.0, 1 - abs(p.i - center))
         if v > 0:
             cols = P["colors"]
