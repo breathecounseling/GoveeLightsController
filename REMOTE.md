@@ -59,13 +59,14 @@ Check `goveelights.log` in the project folder if anything seems off.
 
 ## 3. Create the tunnel
 
-1. Cloudflare dashboard → **Zero Trust** → **Networks → Tunnels** → **Create a tunnel** →
+1. Cloudflare dashboard → **Zero Trust** → **Networks → Tunnels** (newer dashboards may
+   call this Networks → **Connectors**) → **Create a tunnel** →
    *Cloudflared* → name it `house-lights`.
 2. Choose **Windows**. Download and install `cloudflared` as shown, then run the
    `cloudflared.exe service install <token>` command it gives you, in an
    **administrator** PowerShell. It runs as a Windows service and starts at boot.
-3. **Public hostname:** subdomain `lights`, your domain, **Type** `HTTP`, **URL**
-   `localhost:8080`. Save.
+3. **Public hostname** (newer dashboards: **Published application routes** → **Add**):
+   subdomain `lights`, your domain, **Type** `HTTP`, **URL** `localhost:8080`. Save.
 
 ## 4. Lock it with Cloudflare Access
 

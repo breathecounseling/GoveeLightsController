@@ -60,8 +60,13 @@ Running `install-service` again is safe: it rewrites the unit and restarts the a
 * **Firewall:** Raspberry Pi OS has none switched on. If you turned on `ufw`, allow the
   lights' replies and the web page: `sudo ufw allow 4002/udp` and `sudo ufw allow 8080/tcp`.
 * **Ethernet and Wi-Fi both connected:** the app looks for the lights on both. If it
-  still finds none, pin it to one: `--bind-ip <the Pi's address on the lights' network>`
-  (or `"bind_ip"` under `"server"` in `govee_config.json`).
+  still finds none, pin it to one: set `"bind_ip"` under `"server"` in
+  `govee_config.json` to the Pi's address on the lights' network (`hostname -I`), then
+  `sudo systemctl restart goveelights`. (The service starts the app with no extra
+  options, so `--bind-ip` only helps when you start it by hand.) An address that isn't
+  this computer's (say, copied from the PC) is ignored with a warning in the log.
+* **A network that connects after the app started** (Wi-Fi coming up late) isn't
+  searched until the app restarts: `sudo systemctl restart goveelights`.
 * **A slow computer:** if frames take longer than the 50 ms they have at 20 fps, the app
   steps down to 15, then 12 fps by itself and back up when it can (More → Output shows
   it). `python3 tools/bench.py` times every preset on your house.

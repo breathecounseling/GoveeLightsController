@@ -73,15 +73,33 @@ class GoveeLan:
             raise SystemExit(
                 f"Cannot bind UDP port {p.LISTEN_PORT} ({e}). Another Govee LAN tool "
                 "(Home Assistant, Homebridge, another copy of this app) may be using it.")
-        iface = socket.inet_aton(self.bind_ip) if self.bind_ip else struct.pack("=I", socket.INADDR_ANY)
+        if self.bind_ip:
+            # A govee_config.json copied from another computer (the Windows PC) can carry
+            # that computer's address: ignore it rather than fail to start.
+            mine = local_ipv4s()
+            if mine and self.bind_ip not in mine:
+                log.warning("bind_ip %s is not an address of this computer (%s); ignoring it. "
+                            "Set server.bind_ip to \"\" in govee_config.json.", self.bind_ip, ", ".join(mine))
+                self.bind_ip = ""
+        any_if = struct.pack("=I", socket.INADDR_ANY)
+        iface = socket.inet_aton(self.bind_ip) if self.bind_ip else any_if
         try:
             s.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, socket.inet_aton(p.SCAN_GROUP) + iface)
         except OSError as e:
             log.warning("multicast join failed (%s); 'add by IP' still works", e)
         self._mcast_ifaces: list[str] = []
         if self.bind_ip:
-            s.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, iface)
-        elif os.name != "nt":
+            try:
+                s.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, iface)
+            except OSError as e:
+                log.warning("can't use bind_ip %s (%s); letting the system choose the network. "
+                            "Set server.bind_ip to \"\" in govee_config.json.", self.bind_ip, e)
+                self.bind_ip = ""
+                try:
+                    s.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, socket.inet_aton(p.SCAN_GROUP) + any_if)
+                except OSError:                    # already joined, or no multicast: 'add by IP' still works
+                    pass
+        if not self.bind_ip and os.name != "nt":
             # Linux / Raspberry Pi with Ethernet and Wi-Fi both up: "any" joins (and scans
             # on) only the interface of the default route, so a box on the other one would
             # never be found. Join on every interface and scan on each (see scan()).

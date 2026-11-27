@@ -67,15 +67,19 @@ The rest of this page is the Raspberry Pi route.
 2. **Device:** Raspberry Pi 5 (or 4). **Operating system:** *Raspberry Pi OS (other)* →
    **Raspberry Pi OS Lite (64-bit)**. (Lite has no desktop. You don't need one: you
    control it from your PC.) **Storage:** your SD card.
-3. Click **Next**, then **Edit settings** when it offers to customise the OS:
-   * **Hostname:** `lights` (you'll reach it as `lights.local`).
+3. Click **Next**. Imager then lets you customise the system before it writes the card.
+   Newer versions walk you through it one page at a time; older ones show an
+   **Edit settings** button with tabs. Either way, set these:
+   * **Hostname** (the computer's name): `lights` (you'll reach it as `lights.local`).
    * **Username and password:** pick your own and write them down.
-   * **Wireless LAN:** your Wi-Fi name and password, and your country. (A backup in case
-     the cable isn't plugged in. Use the cable.)
-   * **Locale settings:** your **time zone**. This matters: the schedule uses the Pi's
-     clock.
-   * **Services** tab: tick **Enable SSH**, *Use password authentication*.
-4. **Save**, **Yes**, and let it write and check the card (a few minutes).
+   * **Wi-Fi** (may be called *Wireless LAN*): your Wi-Fi name and password, and your
+     country. (A backup in case the cable isn't plugged in. Use the cable.)
+   * **Localisation** (or *Locale settings*): your **time zone**. This matters: the
+     schedule uses the Pi's clock.
+   * **SSH** (under *Remote access*, or the *Services* tab): turn it on, with password
+     authentication.
+4. Finish (**Save** / **Write**, then **Yes**) and let it write and check the card (a few
+   minutes).
 
 ## 2. Start the Pi
 
@@ -97,7 +101,7 @@ The rest of this page is the Raspberry Pi route.
    ```sh
    sudo apt update && sudo apt full-upgrade -y
    sudo apt install -y git
-   python3 --version        # 3.11 or newer is good
+   python3 --version        # 3.11 or newer is good (current Pi OS has 3.13)
    ```
 
 ## 3. Get the project onto the Pi
@@ -148,6 +152,12 @@ scp govee_cloud.json yourname@lights.local:~/GoveeLightsController/
 ```
 
 A file that doesn't exist just gives "No such file": that's fine, you never set that up.
+
+**One setting to check:** if you ever pinned the PC's network address (`"bind_ip"` under
+`"server"` in `govee_config.json`), that address belongs to the PC, not the Pi. On the
+Pi, open the file (`nano govee_config.json`) and set it back to `"bind_ip": ""` (or to
+the Pi's own address, from `hostname -I`). The app ignores an address that isn't the
+Pi's and says so in the log, but it's tidier to fix it.
 (The app makes the password and key files private to your user on the Pi by itself.)
 
 ## 6. Check the time zone
@@ -208,13 +218,14 @@ these differences:
 * **Step 1, password:** already done if you copied `govee_auth.json`. Otherwise run
   `python3 -m goveelights set-password` on the Pi.
 * **Step 2:** done (step 8 above).
-* **Step 3, the tunnel:** in Cloudflare → Zero Trust → Networks → Tunnels:
+* **Step 3, the tunnel:** in Cloudflare → Zero Trust → Networks → Tunnels (newer
+  dashboards may put this under Networks → **Connectors**):
   * If you already made a tunnel for the PC, open it. Otherwise create one.
   * Under the install instructions choose **Debian** and **arm64-bit** (64-bit ARM).
     Copy the commands it shows into the Pi window, one at a time. The last one looks
     like `sudo cloudflared service install eyJ...`. That starts the tunnel at every boot.
-  * **Public hostname:** `lights` on your new domain, Type **HTTP**, URL
-    `localhost:8080`.
+  * **Public hostname** (newer dashboards: **Published application routes** → **Add**):
+    `lights` on your new domain, Type **HTTP**, URL `localhost:8080`.
   * If the tunnel used to run on the PC, remove it there so Cloudflare only sends visits
     to the Pi: in an administrator PowerShell, `cloudflared.exe service uninstall`. In the
     tunnel's page in Cloudflare, only the Pi should be listed as a connector.
@@ -279,6 +290,10 @@ shows the frame times and has a switch to turn it off.
   address to use: in `govee_config.json` (`nano govee_config.json`), under `"server"`,
   set `"bind_ip": "192.168.x.y"` (the Pi's address on the lights' network, shown by
   `hostname -I`), save, then `sudo systemctl restart goveelights`.
+* **It found the lights over the cable but not over Wi-Fi (or the other way round).**
+  The app checks which networks the Pi is on once, when it starts. If one connected
+  later (say the Wi-Fi came up after the app), restart it so it looks again:
+  `sudo systemctl restart goveelights`.
 * **The schedule is an hour off, or starts at the wrong time.** Time zone: step 6.
 * **The lights flicker or fight.** Another copy of the app is running somewhere (your
   PC). Stop it (step 4).

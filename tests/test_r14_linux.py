@@ -10,6 +10,7 @@ import logging
 import os
 import socket
 import stat
+import struct
 import sys
 import tempfile
 import threading
@@ -126,6 +127,15 @@ class LinuxServiceCommandTests(unittest.TestCase):
         self.assertIn("User=alice", seen["unit"])
         self.assertEqual(ran[0][0], "install")                 # already root: no sudo
 
+    def test_print_as_root_shows_the_plan_and_a_warning(self):
+        out = []
+        with mock.patch.dict(os.environ, {"SUDO_USER": ""}), mock.patch("getpass.getuser", return_value="root"):
+            r = cli.linux_service(False, ["--print"], run=lambda c: self.fail("ran"), euid=0, write=out.append)
+        self.assertEqual(r, 0)
+        text = "\n".join(out)
+        self.assertIn("User=root", text)
+        self.assertIn("normal user", text)
+
     def test_refuses_to_run_the_service_as_root(self):
         with mock.patch.dict(os.environ, {"SUDO_USER": ""}), mock.patch("getpass.getuser", return_value="root"):
             with self.assertRaises(SystemExit) as e:
@@ -229,6 +239,30 @@ class GovernorTests(_Quiet, unittest.TestCase):
         self.assertEqual(g.fps_for(25), 25)
         self.assertEqual(g.level, 0)
 
+    def test_the_reason_names_the_real_trigger(self):
+        g = FrameGovernor()
+        self.feed(g, 48, 4)                                # 48 ms: under 50, over 90% of it
+        self.assertEqual(g.ladder[g.level], 15)
+        self.assertNotIn("more than the 50 ms", g.reason)
+        self.assertIn("close to the 50 ms", g.reason)
+
+    def test_status_does_not_reset_the_engine_thread(self):
+        g = FrameGovernor()
+        self.feed(g, 70, 10)
+        level = g.level
+        st = g.state(10)                                   # the HTTP thread, after a change to 10 fps
+        self.assertEqual(g.level, level)                   # untouched: the engine resets it itself
+        self.assertEqual(g.configured, 20.0)
+        self.assertEqual(st["fps"], 10.0)                  # what will run once the engine sees it
+        self.assertEqual(g.update(0.001, 100.0, 10), 10.0)
+
+    def test_a_ladder_shrinking_mid_step_cannot_crash(self):
+        g = FrameGovernor()
+        self.feed(g, 70, 4)
+        g.ladder, g.level = [10.0], 0                      # another thread set up a 1-step ladder
+        g._step(+1, "x")
+        self.assertEqual(g.update(0.07, 50.0, 10.0), 10.0)
+
     def test_switched_off(self):
         g = FrameGovernor(enabled=False)
         _, fps = self.feed(g, 300, 20)
@@ -274,6 +308,19 @@ class EngineGovernorTests(_Quiet, unittest.TestCase):
         self.assertEqual(e.fps, 20)               # the setting itself is untouched
         sc.cost = 0.0                             # cheap again
         self.assertTrue(self.wait_for(e, 20.0), e.governor.state())
+
+    def test_a_governor_error_does_not_stop_the_lights(self):
+        e = self.engine()
+        e.set_scene(_SlowScene(0))
+        e.governor.update = mock.Mock(side_effect=IndexError("boom"))
+        e.start(live=False)
+        self.addCleanup(e.stop, False)
+        n = e.stats["frames"]
+        end = time.monotonic() + 3
+        while e.stats["frames"] < n + 5 and time.monotonic() < end:
+            time.sleep(0.02)
+        self.assertGreaterEqual(e.stats["frames"], n + 5)
+        self.assertTrue(e._thread.is_alive())
 
     def test_tick_is_untouched(self):
         """Frames come from tick(); the governor only paces the loop, so frames rendered
@@ -398,6 +445,40 @@ class MulticastTests(unittest.TestCase):
         self.assertEqual(g._mcast_ifaces, [])
         ifs = [c[3] for c in calls if c[:3] == ("setsockopt", socket.IPPROTO_IP, socket.IP_MULTICAST_IF)]
         self.assertEqual(ifs, [socket.inet_aton("198.51.100.7")])
+
+    def test_a_bind_ip_from_another_computer_is_ignored(self):
+        # govee_config.json copied from the Windows PC with its address pinned: the Pi
+        # must start anyway (it used to crash, and systemd restarted it forever).
+        with self.assertLogs("goveelights.lan", "WARNING") as lg:
+            g, calls = self.open(["192.0.2.5", "198.51.100.7"], bind_ip="203.0.113.9")
+        self.assertEqual(g.bind_ip, "")
+        self.assertEqual(g._mcast_ifaces, ["192.0.2.5", "198.51.100.7"])   # as if it were unset
+        self.assertNotIn(socket.inet_aton("203.0.113.9"), [c[-1] for c in calls if c[0] == "setsockopt"])
+        self.assertIn("203.0.113.9", "\n".join(lg.output))
+
+    def test_a_refused_multicast_interface_falls_back(self):
+        calls = []
+        base = self.fake_socket
+
+        def fake(c):
+            s = base(c)
+            orig = s.setsockopt
+
+            def setsockopt(*a):
+                if a[:2] == (socket.IPPROTO_IP, socket.IP_MULTICAST_IF):
+                    raise OSError(99, "Cannot assign requested address")
+                orig(*a)
+            s.setsockopt = setsockopt
+            return s
+        self.fake_socket = fake
+        try:
+            with self.assertLogs("goveelights.lan", "WARNING"):
+                g, calls = self.open([], bind_ip="203.0.113.9")    # Windows / no list: can't pre-check
+        finally:
+            self.fake_socket = base
+        self.assertEqual(g.bind_ip, "")
+        anyjoin = socket.inet_aton(lan.p.SCAN_GROUP) + struct.pack("=I", socket.INADDR_ANY)
+        self.assertIn(anyjoin, [c[-1] for c in calls if c[:3] == ("setsockopt", socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP)])
 
     @unittest.skipUnless(sys.platform.startswith("linux"), "Linux only")
     def test_local_addresses(self):

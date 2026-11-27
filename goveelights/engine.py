@@ -147,7 +147,7 @@ class FrameGovernor:
             if self._over_since is None:
                 self._over_since = now
             elif now - self._over_since >= self.down_after:
-                self._step(+1, f"frames took {self.cost * 1000:.0f} ms, more than the "
+                self._step(+1, f"frames took {self.cost * 1000:.0f} ms, close to the "
                                f"{budget * 1000:.0f} ms a frame has at {fps:g} fps")
         else:
             self._over_since = None
@@ -158,11 +158,12 @@ class FrameGovernor:
                     self._step(-1, "back up: frames are cheap again")
             else:
                 self._cheap_since = None
-        return self.ladder[self.level]
+        return self.ladder[min(self.level, len(self.ladder) - 1)]
 
     def _step(self, d: int, why: str):
-        old = self.ladder[self.level]
-        self.level += d
+        top = len(self.ladder) - 1
+        old = self.ladder[min(self.level, top)]
+        self.level = max(0, min(self.level + d, top))
         self._over_since = self._cheap_since = None
         self.changes += 1
         self.last_change = time.time()
@@ -170,11 +171,18 @@ class FrameGovernor:
         log.warning("frame rate %g -> %g fps (%s)", old, self.ladder[self.level], why)
 
     def state(self, configured: float | None = None) -> dict:
-        """For /api/status: `configured` is the engine's frame-rate setting."""
-        if configured is not None:
-            self.fps_for(configured)
-        fps = self.ladder[self.level] if self.ladder and self.enabled else self.configured
-        return {"enabled": self.enabled, "configured_fps": self.configured, "fps": fps,
+        """For /api/status: `configured` is the engine's frame-rate setting. Read-only:
+        this runs on the web server's thread, and only the engine thread changes the
+        ladder (on its next frame), so a settings change can't pull it out from under it."""
+        conf = self.configured
+        if configured is not None and max(1.0, float(configured)) != conf:
+            conf = max(1.0, float(configured))      # not seen by the engine yet: it restarts at the top
+            fps = conf
+        elif self.ladder and self.enabled:
+            fps = self.ladder[min(self.level, len(self.ladder) - 1)]
+        else:
+            fps = conf
+        return {"enabled": self.enabled, "configured_fps": conf, "fps": fps,
                 "slowed": bool(self.enabled and self.level > 0), "cost_ms": round(self.cost * 1000, 1),
                 "budget_ms": round(1000.0 / fps, 1) if fps else 0.0, "changes": self.changes,
                 "last_change": round(self.last_change) if self.last_change else None, "reason": self.reason}
@@ -413,7 +421,13 @@ class Engine:
             except Exception:  # noqa: BLE001
                 log.exception("render failed")
             t1 = time.perf_counter()
-            fps = self.governor.update(t1 - t0, t1, self.fps)   # fps can change while running
+            try:
+                fps = self.governor.update(t1 - t0, t1, self.fps)   # fps can change while running
+            except Exception:  # noqa: BLE001 - pacing must never stop the lights
+                if not getattr(self, "_gov_failed", False):
+                    self._gov_failed = True
+                    log.exception("frame-rate governor failed; using the configured rate")
+                fps = self.fps
             nxt += 1.0 / max(1.0, fps)
             delay = nxt - time.perf_counter()
             if delay > 0:

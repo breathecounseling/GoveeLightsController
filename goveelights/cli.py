@@ -303,7 +303,8 @@ def linux_service(uninstall: bool, argv=(), run=None, euid: int | None = None, w
     root = Path(__file__).resolve().parent.parent
     python = sys.executable or "/usr/bin/python3"
     user = _service_user(a.user, euid)
-    if user == "root" and not a.user and not uninstall:
+    as_root = user == "root" and not a.user and not uninstall
+    if as_root and not a.dry:
         raise SystemExit("Run this as your normal user (not as root): the service runs as whoever installs it,\n"
                          "and your settings files belong to you. Or pass --user NAME.")
     unit, cmds = linux_service_plan(uninstall, user, root, python, euid)
@@ -311,6 +312,9 @@ def linux_service(uninstall: bool, argv=(), run=None, euid: int | None = None, w
     def show(c):
         return " ".join(shlex.quote(w) for w in c)
     if a.dry:
+        if as_root:
+            write("Note: run as root this would install the service as root, which is refused without --print.\n"
+                  "Run it as your normal user instead (or pass --user NAME).")
         if unit:
             write(f"--- {UNIT_PATH} (not written: --print) ---\n{unit}--- end ---")
         write("Would run:\n" + "\n".join("  " + show(c) for c in cmds))
