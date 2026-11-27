@@ -1926,6 +1926,12 @@ class Controller:
         self.build_engine()
         return res
 
+    def run_house_shape(self, mac: str) -> dict:
+        """Fourth run card: put an unplaced run back where the house layout file has it."""
+        res = addrun.use_house_shape(self.cfg, mac)
+        self.build_engine()
+        return res
+
     def remove_run(self, mac: str) -> str:
         nm = addrun.remove_run(self.cfg, mac)
         self.build_engine()

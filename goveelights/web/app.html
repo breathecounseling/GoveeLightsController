@@ -2391,16 +2391,22 @@ function frBox(b){
     <p class="help">${what}</p>
     ${b.tip_offer ? `<div class="frb" style="margin:6px 0"><p class="help" style="margin-top:0">Is this box the top of the ${esc((FOURTH.tip || {}).host || 'Peak')}? Added as "Somewhere else", it only copies the ${esc((FOURTH.tip || {}).host || 'Peak')} in some looks. As the top of the ${esc((FOURTH.tip || {}).host || 'Peak')} it lights with it in every look, picture and word.</p>
       <button class="pri" style="width:100%;min-height:52px" data-a="peaktop">Make it the top of the ${esc((FOURTH.tip || {}).host || 'Peak')}</button></div>` : ''}
+    ${b.house_shape ? `<div class="frb" style="margin:6px 0"><p class="help" style="margin-top:0">Your house layout file already knows where ${esc(b.name)} runs. Put it back there (its shape and hidden bulbs), no questions.</p>
+      <button class="pri" style="width:100%;min-height:52px" data-a="houseshape">Use its shape from the house layout</button></div>` : ''}
     <div class="fr-out"></div>
     <div class="row wrap">
       <button class="pri grow" data-a="check">Is it answering now?</button>
-      <button class="grow" data-a="add">${b.unplaced ? 'Place it' : b.in_show ? 'Change' : 'Add it to the show'}</button>
+      ${b.house_shape ? '' : `<button class="grow" data-a="add">${b.unplaced ? 'Place it' : b.in_show ? 'Change' : 'Add it to the show'}</button>`}
       ${b.in_show ? '<button class="grow" data-a="blink">Blink it</button>' + (b.unplaced ? '' : '<button class="bad grow" data-a="remove">Take it out</button>') : ''}
     </div></div>`);
   const q = a => el.querySelector(`[data-a=${a}]`);
   q('check').onclick = () => frCheck(b);
   frPaint(el, b);
-  q('add').onclick = () => frAdd(b);
+  if (q('add')) q('add').onclick = () => frAdd(b);
+  if (q('houseshape')) q('houseshape').onclick = async () => {
+    const r = await post('run/house-shape', {mac: b.mac}); if (!r) return;
+    toast(`${r.name} is back in its place on the house.`);
+    post('run/blink', {mac: b.mac}); await reloadLayout(); loadFourth(); refresh() };
   if (q('peaktop')) q('peaktop').onclick = async () => {
     const r = await post('run/peak-top', {mac: b.mac}); if (!r) return;
     toast(`${r.name}: ${r.tip.visible} bulbs on top of the ${r.tip.host}. Change it if the rows are different.`);

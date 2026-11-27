@@ -738,6 +738,8 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                         "runs": ctl.colourtest.runs()}
             if a == "run/add":
                 return {"ok": True, **ctl.add_run(b)}
+            if a == "run/house-shape":              # Fourth run: an unplaced run back to its place in house.json
+                return {"ok": True, **ctl.run_house_shape(str(b["mac"]))}
             if a == "run/peak-top":                 # Fourth run: move a "Somewhere else" run to the top of the Peak
                 return {"ok": True, **ctl.run_to_peak_top(str(b["mac"]))}
             if a == "run/remove":

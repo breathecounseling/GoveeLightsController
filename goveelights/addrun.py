@@ -261,6 +261,41 @@ def unplaced(d: dict) -> bool:
     return not d.get("added_run") and (not d.get("geometry") or bool(d.get("geometry_guess")))
 
 
+def house_entry(cfg, mac: str) -> dict | None:
+    """This box's entry in the house layout file (layouts/house.json) when it has a shape
+    there: matched by box id, else by run name. None for any other box or house."""
+    import json
+    from .config import HOUSE_LAYOUT
+    try:
+        data = json.loads(HOUSE_LAYOUT.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return None
+    devs = {m: e for m, e in (data.get("devices") or {}).items() if isinstance(e, dict)}
+    if not set(devs) & set(cfg.devices):
+        return None                                     # not this house's layout
+    e = devs.get(mac)
+    if e is None:
+        nm = (cfg.devices.get(mac) or {}).get("name")
+        e = next((x for x in devs.values() if nm and x.get("name") == nm), None)
+    return e if e and e.get("geometry") else None
+
+
+def use_house_shape(cfg, mac: str) -> dict:
+    """Put back this run's shape (and hidden bulbs, direction) from the house layout file."""
+    e = house_entry(cfg, mac)
+    if e is None:
+        raise ValueError("the house layout file has no shape for this run")
+    with cfg.lock:
+        d = cfg.device(mac)
+        d["geometry"] = copy.deepcopy(e["geometry"])
+        d.pop("geometry_guess", None)
+        for k in ("hidden", "reversed"):
+            if k in e:
+                d[k] = copy.deepcopy(e[k])
+        cfg.save()
+    return {"name": d.get("name") or mac}
+
+
 def candidates(cfg, layout=None) -> list[dict]:
     """Boxes that could become a new run: configured, but not in the show yet (no bulb
     count, or switched off), plus runs this flow added (so they can be changed or
@@ -278,7 +313,7 @@ def candidates(cfg, layout=None) -> list[dict]:
         out.append({"mac": mac, "name": d.get("name") or mac, "sku": d.get("sku") or "", "ip": d.get("ip") or "",
                     "wifi_fw": fw.get("wifiVersionSoft") or "", "pixel_count": d.get("pixel_count"),
                     "estimated_count": d.get("estimated_count"), "in_show": mac in in_show, "added": added,
-                    "unplaced": loose,
+                    "unplaced": loose, "house_shape": bool(loose and house_entry(cfg, mac)),
                     "where": d.get("location") or "", "cloud": bool((d.get("cloud") or {}).get("enabled")),
                     "joined": (d.get("added_run") or {}).get("joined"), "follows": d.get("follows"),
                     "tip": d.get("tip") if d.get("added_run") else None,
@@ -413,6 +448,8 @@ def tip_offer(cfg, layout, mac: str) -> bool:
         return False
     if not (d.get("added_run") and d.get("location") == "other") and not (unplaced(d) and not d.get("role")):
         return False
+    if not d.get("added_run") and house_entry(cfg, mac):
+        return False                                    # one of the house's own runs: it has its own place
     if any(r.extends and r.mac != mac for r in layout.runs):
         return False
     from .layout import Layout
