@@ -485,7 +485,7 @@ def answer_check(ctl, mac: str, scan_wait: float = 3.0, test_s: float = 4.0, sle
                   else "no address yet (it has never answered a scan)"})
     rt = {"step": "Realtime test (green)", "ok": None, "say": ""}
     e = ctl.engine
-    in_show = e is not None and mac in getattr(e.output, "devices", {}) and e.live
+    in_show = _driven(e, mac)
     if in_show:
         rt["say"] = "skipped: it is in the show right now (the show is driving it)"
     elif not d.get("ip"):
@@ -502,7 +502,7 @@ def answer_check(ctl, mac: str, scan_wait: float = 3.0, test_s: float = 4.0, sle
             def _release(s=s):
                 time.sleep(test_s)
                 try:
-                    if not (ctl.engine and ctl.engine.live and mac in getattr(ctl.engine.output, "devices", {})):
+                    if not _driven(ctl.engine, mac):
                         s.disable()
                 except OSError:
                     pass
@@ -540,16 +540,22 @@ def solid(ctl, mac: str, n: int, color: str) -> dict:
     """Count finder: n copies of one colour on this box only (see diag: a frame with more
     colours than bulbs is ignored, so the answer bisects the bulb count)."""
     e = ctl.engine
-    if e is not None and e.live and mac in getattr(e.output, "devices", {}):
+    if _driven(e, mac):
         raise ValueError("it is in the show right now; take it out of the show first, or use diagnostics")
     n = max(1, min(p.MAX_RAZER_COLORS, int(n)))
     s = ctl.diag.rt(mac)
     s.show([p.hex_rgb(color)] * n, gradient=False)
     return {"n": n}
 
+def _driven(e, mac: str) -> bool:
+    """The engine is sending to this box: the show, or a bulb check with the lights off."""
+    return (e is not None and mac in getattr(e.output, "devices", {})
+            and (e.live or (e.takeover is not None and e.takeover_live)))
+
+
 def release(ctl, mac: str):
     e = ctl.engine
-    if e is not None and e.live and mac in getattr(e.output, "devices", {}):
+    if _driven(e, mac):
         return
     s = ctl.diag.streamers.get(mac)
     if s is not None and s.realtime:

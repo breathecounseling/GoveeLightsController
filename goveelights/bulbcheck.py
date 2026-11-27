@@ -171,7 +171,8 @@ class BulbCheck:
         with self.lock:
             fresh = self.st is None
             now = self.clock()
-            st = self.st if not fresh else {"started": now, "live_before": e.live}
+            borrowed = fresh and self.ctl._borrowed_lights()   # on only for a colour test: they go off again
+            st = self.st if not fresh else {"started": now, "live_before": e.live and not borrowed}
             st.update(mac=mac, name=name, mode="groups", pos=0, size=GROUP, color="red", touched=now)
             self.st = st
             try:
@@ -181,18 +182,19 @@ class BulbCheck:
                     self.st = None
                 raise
             if fresh:
-                self._take()
+                self._take(borrowed)
             log.info("bulb check: %s on %s", st["mode"], name)
             return self.view()
 
-    def _take(self):
+    def _take(self, borrowed: bool = False):
         e = self.ctl.engine
-        if not e.live:
-            try:
-                e.output.start(force=True)       # the lights were off: switch them on for the check
-            except TypeError:
-                e.output.start()
-            e.takeover_live = True
+        if not e.live or borrowed:
+            if not e.live:
+                try:
+                    e.output.start(force=True)   # the lights were off: switch them on for the check
+                except TypeError:
+                    e.output.start()
+            e.takeover_live = True               # the check keeps the boxes when the borrowed lights go off
         else:
             e.takeover_live = False
         e.takeover = self.frames
