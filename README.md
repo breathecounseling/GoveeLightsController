@@ -50,8 +50,13 @@ Download the project (green *Code* button → *Download ZIP*, or `git clone`), t
 
 **Linux / Raspberry Pi**
 1. `python3 --version` (3.10+; Raspberry Pi OS Bookworm has 3.11).
-2. In the project folder: `python3 -m goveelights`
+2. In the project folder: `./start.sh` (or `python3 -m goveelights`)
 3. With a firewall on: `sudo ufw allow 4002/udp && sudo ufw allow 8080/tcp`.
+4. To start it at every boot: `python3 -m goveelights install-service`.
+
+A small always-on box at home (a Raspberry Pi or an old mini PC) is the best home for
+the app: the lights keep their schedule and you can reach them from anywhere, even when
+your laptop is away. Step by step: [docs/RASPBERRY_PI.md](docs/RASPBERRY_PI.md).
 
 Then open the address it prints (for example `http://192.168.1.50:8080/`) on your phone.
 To keep it running after a reboot, see [docs/SERVICE.md](docs/SERVICE.md) (Windows task,

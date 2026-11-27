@@ -538,6 +538,8 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
   <div class="card">
     <h2>Output</h2>
     <div class="knob"><label>Frame rate</label><select id="fps" onchange="post('settings',{fps:+this.value})"><option>10</option><option>15</option><option>20</option><option>25</option><option>30</option></select><span></span></div>
+    <p class="help" id="govInfo"></p>
+    <label class="row"><input type="checkbox" id="govEn" onchange="post('settings',{auto_fps:this.checked})"> <span>Slow down automatically if this computer can't keep up (20 → 15 → 12 fps, back up when it can)</span></label>
     <div class="knob"><label>Gamma</label><input id="gamma" type="range" min="1" max="2.8" step="0.1"><output id="oGamma"></output></div>
     <p class="help">Gamma 1.0 = off; ~2.2 if mid colours look washed out on the bulbs.</p>
     <label class="row" style="margin-top:8px"><input type="checkbox" id="dthEn" onchange="post('settings',{dither:this.checked})"> <span>Smooth dim fades (tiny flicker between brightness steps hides banding)</span></label>
@@ -853,9 +855,17 @@ async function refresh(){
   $('oBpm').textContent = Math.round(s.master.bpm);
   setKnob('kSync','oSync', s.audio_offset_ms ?? 70, v => (+v > 0 ? '+' : '') + Math.round(v) + 'ms');
   if (document.activeElement !== $('fps')) setSel($('fps'), String(Math.round(s.fps)));
+  const gv = s.governor;
+  if (gv) {
+    $('govEn').checked = !!gv.enabled;
+    const gi = gv.slowed ? `Running at ${gv.fps} fps instead of ${gv.configured_fps}: ${gv.reason}.`
+      : `Each frame takes about ${gv.cost_ms} ms (${gv.budget_ms} ms available at ${gv.fps} fps).`;
+    if ($('govInfo').textContent !== gi) $('govInfo').textContent = gi;
+  }
   setKnob('gamma','oGamma', s.gamma, v => (+v).toFixed(1));
   const b = [];
   if (s.interrupt) b.push(`<div class="banner">Playing <b>${esc(s.interrupt.label)}</b> ${s.interrupt.left < 86400 ? `(${fmtS(s.interrupt.left)} left), then back to what was on` : '(looping until you end it)'}. <button class="sm" onclick="post('interrupt/end').then(refresh)">End now</button></div>`);
+  if (s.governor && s.governor.slowed) b.push(`<div class="banner" style="background:#1e293b;border-color:var(--line)">This computer is busy: the lights run at ${s.governor.fps} fps instead of ${s.governor.configured_fps} until it catches up (More → Output).</div>`);
   if (s.dim && s.dim < 0.99) b.push(`<div class="banner" style="background:#1e293b;border-color:var(--line)">Late-night dimming: ${Math.round(s.dim*100)}%</div>`);
   const sick = Object.entries(s.health||{}).filter(([,h]) => h.paused);
   if (sick.length) b.push(`<div class="banner">Self-healing paused for ${esc(sick.map(x=>x[0]).join(', '))}: its status keeps changing on its own. Worth a bug report (include the Diagnostics page).</div>`);

@@ -16,7 +16,7 @@ from urllib.parse import parse_qs, urlparse
 
 from .auth import COOKIE, Auth
 from .color import hex_to_rgb
-from .config import Config
+from .config import Config, make_private
 from .controller import Controller, PresetStore, migrate_presets
 from .diag_server import Server, build_report, lan_ips
 from .effects import EFFECTS, GROUP_ORDER
@@ -953,6 +953,7 @@ def main(argv=None):
     winconsole.disable_quickedit()             # a click in the console must not freeze logging
     winconsole.fine_sleep()
     cfg = Config(a.config) if a.config else Config()
+    make_private(Path(cfg.path).parent)        # copied from Windows: secrets readable by everyone
     port = a.port or cfg.data["server"].get("port", 8080)
     try:
         srv = Server((cfg.data["server"].get("host", "0.0.0.0"), port), BaseHTTPRequestHandler)

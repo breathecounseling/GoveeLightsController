@@ -41,6 +41,28 @@ def write_json(path: Path, data, mode: int = 0o644, retries: int = 10, **dump_kw
         raise
 
 
+PRIVATE_FILES = ("govee_auth.json", "govee_cloud.json")
+
+
+def make_private(folder: Path, names=PRIVATE_FILES) -> list[str]:
+    """chmod 600 the password/session and API-key files if they are readable by other
+    users, which happens when they were copied over from a Windows PC (a USB stick,
+    scp, a zip). Linux and macOS only; returns the names it changed."""
+    if os.name == "nt":
+        return []
+    fixed = []
+    for n in names:
+        f = Path(folder) / n
+        try:
+            if f.stat().st_mode & 0o077:
+                os.chmod(f, 0o600)
+                fixed.append(n)
+        except OSError:
+            continue
+    if fixed:
+        log.info("made %s readable by this user only", ", ".join(fixed))
+    return fixed
+
 DEFAULTS = {
     "server": {"host": "0.0.0.0", "port": 8080, "bind_ip": ""},
     "manual_ips": [],

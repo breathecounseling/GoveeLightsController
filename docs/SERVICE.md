@@ -22,22 +22,54 @@ The log is `goveelights.log` in the project folder.
 
 ## Linux (systemd), e.g. a Raspberry Pi
 
-1. Copy the example unit and edit `User`, `WorkingDirectory` and the paths in
-   `ExecStart`:
+A step-by-step guide for setting up a Pi from nothing is in
+[RASPBERRY_PI.md](RASPBERRY_PI.md).
 
-   ```sh
-   sudo cp docs/examples/goveelights.service /etc/systemd/system/
-   sudo nano /etc/systemd/system/goveelights.service
-   ```
-2. Start it and enable it at boot:
+As your normal user (not with `sudo` in front), in the project folder:
 
-   ```sh
-   sudo systemctl daemon-reload
-   sudo systemctl enable --now goveelights
-   journalctl -u goveelights -f        # watch it start
-   ```
-3. If a firewall is on (`ufw`), allow the lights' replies and the web page from your
-   home network: `sudo ufw allow 4002/udp` and `sudo ufw allow 8080/tcp`.
+```sh
+python3 -m goveelights install-service --print   # optional: show what it will do, change nothing
+python3 -m goveelights install-service           # asks for your password once (sudo)
+```
+
+This writes `/etc/systemd/system/goveelights.service` and starts it. The service:
+
+* starts at boot, before anyone logs in, once the network is up;
+* runs as you, in the project folder, with the same Python you ran the command with
+  (a `.venv` works too);
+* restarts 10 seconds after it stops for any reason;
+* on stop, hands the lights back to the Govee app (like Ctrl+C).
+
+It prints the commands it runs and where to look afterwards:
+
+```sh
+journalctl -u goveelights -f              # watch the log live (Ctrl+C stops watching, not the app)
+journalctl -u goveelights --since today   # today's log
+systemctl status goveelights              # is it running?
+sudo systemctl restart goveelights        # after an update or a settings-file change
+python3 -m goveelights uninstall-service  # remove it (stops the app; no longer starts at boot)
+```
+
+Running `install-service` again is safe: it rewrites the unit and restarts the app.
+`--user NAME` runs it as someone else. If you'd rather write the unit by hand, start from
+[examples/goveelights.service](examples/goveelights.service).
+
+* **Time zone:** the schedule (sunset, lights-off time) uses the computer's own clock.
+  Check with `timedatectl`; fix with `sudo timedatectl set-timezone America/Chicago`
+  (your zone: `timedatectl list-timezones`). Restart the service after changing it.
+* **Firewall:** Raspberry Pi OS has none switched on. If you turned on `ufw`, allow the
+  lights' replies and the web page: `sudo ufw allow 4002/udp` and `sudo ufw allow 8080/tcp`.
+* **Ethernet and Wi-Fi both connected:** the app looks for the lights on both. If it
+  still finds none, pin it to one: set `"bind_ip"` under `"server"` in
+  `govee_config.json` to the Pi's address on the lights' network (`hostname -I`), then
+  `sudo systemctl restart goveelights`. (The service starts the app with no extra
+  options, so `--bind-ip` only helps when you start it by hand.) An address that isn't
+  this computer's (say, copied from the PC) is ignored with a warning in the log.
+* **A network that connects after the app started** (Wi-Fi coming up late) isn't
+  searched until the app restarts: `sudo systemctl restart goveelights`.
+* **A slow computer:** if frames take longer than the 50 ms they have at 20 fps, the app
+  steps down to 15, then 12 fps by itself and back up when it can (More → Output shows
+  it). `python3 tools/bench.py` times every preset on your house.
 
 ## macOS (launchd)
 
@@ -66,4 +98,5 @@ Stop it with `launchctl unload ~/Library/LaunchAgents/goveelights.plist`.
 ```sh
 python3 -m goveelights serve              # Ctrl+C stops it and hands the lights back to the Govee app
 python3 -m goveelights serve --port 8090 --config ~/lights/govee_config.json
+./start.sh                                # Linux / Pi / macOS: the same as start.bat on Windows
 ```
