@@ -319,8 +319,8 @@ GOLDEN = {
     "snowy-evening": "333df0b24dd242f7", "sparkler-tree": "aca2bfd4e73486ab", "spooky-tree": "b92a98a3645bd590",
     "spring-garden": "0846728047a61b59", "st-patricks": "73dca68fed9217b8", "starry-night": "483540bdeb7b3f4a",
     "starry-night-sleigh": "bd044c94a3adc6e1", "summer-evening": "4575d9be84675000", "summer-fireflies": "92dfe1ab07328710",
-    "text-go-broncos": "27d73a56ecffbcb4", "text-happy-new-year": "1792a91a8f560a80", "text-merry-christmas": "89233f44b73906cf",
-    "text-scoreboard": "f0e95fdf8e72fba1", "thanksgiving-harvest": "5f48e3f08efddd0d", "tree-lighting-ceremony": "2e58b83472fbf20f",
+    "text-go-broncos": "89ea5df916923cce", "text-happy-new-year": "766614aa409ffc9d", "text-merry-christmas": "9af456bed0e80bca",
+    "text-scoreboard": "27498bdeb9bbb032", "thanksgiving-harvest": "5f48e3f08efddd0d", "tree-lighting-ceremony": "2e58b83472fbf20f",
     "twin-coasters": "40681a32a8acca37", "valentines-glow": "91b7608c852602d3", "valentines-hearts": "331604c472d3ecb6",
     "warm-white": "e1ba6a0b3f40d0a7", "winter-elegance": "34c6cbd5c3efbb07", "winter-sparkle": "1f2989c4db1a7dd2",
 }

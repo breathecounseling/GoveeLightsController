@@ -47,8 +47,9 @@ def celebration(kind: str, colors: list[str]) -> tuple[dict, float]:
 
 
 def scoreboard_scene(game: dict | None) -> dict:
-    """The live score on the zigzag (the text effect's "score" source, which shows the
-    broadcast-delayed score) with the eaves chasing in the team's colours."""
+    """The live score on the Peak, one big letter at a time (peak_text's "score" source,
+    which shows the broadcast-delayed score; our side in the team's colour) with the eaves
+    chasing in the team's colours."""
     game = game if isinstance(game, dict) else {}
     cols = []
     for x in game.get("colors") or []:
@@ -63,10 +64,10 @@ def scoreboard_scene(game: dict | None) -> dict:
     return {"name": "Scoreboard", "layers": [
         {"effect": "chase", "target": ["Eaves", "Lower roofline"],
          "params": {"colors": cols, "spacing": 4, "width": 2, "speed": 3, "axis": "strip"}},
-        {"effect": "text", "target": "Peak",
+        {"effect": "peak_text", "target": "Peak",
          "params": {"source": "score", "text": f"GO {team}!" if team else "GAME ON!", "colors": ["#ffffff"],
-                    "color_mode": "solid", "speed": 5.5, "sparkle": 0.1, "border": "twinkle",
-                    "border_color": cols[1], "score_detail": True}}]}
+                    "color_mode": "solid", "mode": "single", "hold": 0.6, "transition": "cut", "pause": 1.6,
+                    "border_color": cols[1], "score_detail": False}}]}
 
 
 def countdown_scene(target: float, count_s: int, digits_s: int, colors=None) -> dict:

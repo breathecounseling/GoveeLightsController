@@ -835,6 +835,25 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
             if a == "settings":
                 ctl.settings(b)
                 return {"ok": True}
+            if a == "text":                         # Play -> Words on the Peak
+                from . import textgen
+                sc = textgen.scene(b)
+                act = str(b.get("action", "scene"))
+                res = {"ok": True, "scene": sc, "skipped": textgen.unsupported(b.get("text", ""))}
+                if act == "preview":
+                    m = ctl.engine.master
+                    look = {"palette": m.get("palette", ""), "hue": m.get("hue", 0.0)}
+                    res.update(textgen.preview(sc, ctl.engine.layout, look, seconds=textgen.length(sc) + 0.5,
+                                               palettes=ctl.user_palettes))
+                elif act == "play":
+                    ctl.play_scene(sc, {"kind": "scene", "name": sc["name"]}, fade=0.5)
+                    if b.get("live"):
+                        ctl.set_live(True)
+                elif act == "save":
+                    res["id"] = ctl.presets.save(sc)
+                elif act != "scene":
+                    raise ValueError(f"unknown action {act!r}")
+                return res
             if a == "preset/save":
                 return {"ok": True, "id": ctl.presets.save(b["scene"], b.get("id"))}
             if a == "preset/delete":

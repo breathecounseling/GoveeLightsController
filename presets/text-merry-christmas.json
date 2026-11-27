@@ -1,25 +1,70 @@
 {
   "name": "Merry Christmas",
-  "tags": ["Holiday", "Text"],
+  "tags": [
+    "Holiday",
+    "Text"
+  ],
   "layers": [
     {
       "effect": "candy_cane",
-      "target": ["North wall", "Front eave", "South wall", "South gable", "Lower roofline"],
-      "params": {"colors": ["#ff0a0a", "#00b828"], "width": 4, "blend": 0, "speed": 1},
-      "fx": [{"type": "glitter", "params": {"density": 0.35, "base": 0.8, "decay": 0.25}}]
+      "target": [
+        "North wall",
+        "Front eave",
+        "South wall",
+        "South gable",
+        "Lower roofline"
+      ],
+      "params": {
+        "colors": [
+          "#ff0a0a",
+          "#00b828"
+        ],
+        "width": 4,
+        "blend": 0,
+        "speed": 1
+      },
+      "fx": [
+        {
+          "type": "glitter",
+          "params": {
+            "density": 0.35,
+            "base": 0.8,
+            "decay": 0.25
+          }
+        }
+      ]
     },
     {
-      "effect": "text",
+      "effect": "peak_text",
       "target": "Peak",
-      "params": {"text": "MERRY XMAS", "colors": ["#fff0c0"], "background": "#700006",
-                 "color_mode": "solid", "speed": 5.5, "sparkle": 0.3, "border": "twinkle",
-                 "border_color": "#ffb000"}
+      "params": {
+        "text": "MERRY XMAS",
+        "mode": "single",
+        "colors": [
+          "#ff1a1a",
+          "#00d040"
+        ],
+        "color_mode": "letters",
+        "hold": 0.75,
+        "transition": "fade",
+        "pause": 1.8,
+        "border_color": "#ffb000"
+      }
     },
     {
       "effect": "glitter",
       "target": "Front gable outline",
-      "params": {"colors": ["#ffa800", "#ffb820"], "level": 0.8, "shimmer": 0.2, "density": 0.25,
-                 "length": 12, "speed": 0}
+      "params": {
+        "colors": [
+          "#ffa800",
+          "#ffb820"
+        ],
+        "level": 0.8,
+        "shimmer": 0.2,
+        "density": 0.25,
+        "length": 12,
+        "speed": 0
+      }
     }
   ]
 }
