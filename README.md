@@ -273,8 +273,15 @@ what is below what). They are plug-ins in `goveelights/effects_ext/`:
   crackle. Includes a finale mode.
   **Snow that piles up:** flakes land on whatever is below them, so the porch and flat eaves
   slowly fill with snow (and melt if you want).
-* **Scrolling text** on the zigzag (5-row pixel font, anti-aliased scrolling). The source can
-  be your own text, the clock, the live game score or "N days to Christmas".
+* **Words on the Peak** (Play → *Words on the Peak*): type a phrase, choose **Single letter**
+  (one big letter at a time, filling the gable: the easiest to read from the street) or
+  **Marquee**, pick colours and a speed, see it on the phone, then *Play now* or *Save as preset*.
+  The letters and numbers are drawn for the Peak's honeycomb of bulbs (every row half a bulb
+  across from the one below); the eaves flash or chase with each letter and the porch washes
+  the wall in its colour. The built-in text presets and the game-day score use it; the source
+  can also be the clock, the live score or "N days to Christmas".
+* **Scrolling text** (the older effect, kept for your own presets) on the zigzag (5-row pixel
+  font, anti-aliased scrolling).
 * **Sky at dusk:** colours the house like the sky at this moment (the real sun position at
   your location), then settles into night colours. **Depth cascade** FX makes any layer fall from the roof to the porch or
   ripple from the apex. **Mirror at the apex** FX mirrors any layer around the gable peak.

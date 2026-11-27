@@ -4,6 +4,7 @@
     python3 tools/contact_sheet.py --show "Thanksgiving tonight" --out /tmp/thanksgiving
         [--layout layouts/examples/gable-house.json] [--extra-run 100] [--fps 20] [--cols 2]
         [--tip 12] [--tip-flip] [--tip-rows 7,4,1]
+        [--focus Peak --zoom-only --honeycomb --street-aspect] [--labels "a,b,c"]
 
 Each preset is rendered at the real frame rate from t = 0 (effects with memory evolve as
 they would live) and snapshotted at --times seconds. --show renders every cue's preset at
@@ -79,12 +80,12 @@ def honeycomb_positions(L: Layout) -> dict:
     return out
 
 
-def svg(L: Layout, cols, W=470, box=None, r=2.6, pos=None):
-    """The house (or the part of it inside box = (x0, x1, y0, y1)) as dots."""
+def svg(L: Layout, cols, W=470, box=None, r=2.6, pos=None, yex=1.6):
+    """The house (or the part of it inside box = (x0, x1, y0, y1)) as dots. yex stretches
+    heights (1.6 reads well for the whole house; the close-up can use --street-aspect)."""
     pad = 8
     x0, x1, y0, y1 = box or (L.minx, L.maxx, L.miny, L.maxy)
     sx = (W - 2 * pad) / max(1e-6, x1 - x0)
-    yex = 1.6
     H = int((y1 - y0) * sx * yex + 2 * pad)
 
     def rgb(c):
@@ -100,6 +101,24 @@ def svg(L: Layout, cols, W=470, box=None, r=2.6, pos=None):
             dots.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r * 2.1:.1f}" fill="{rgb(c)}" opacity="0.28"/>')
         dots.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r}" fill="{rgb(c) if max(c) > 0.01 else "#1a1f27"}"/>')
     return f'<svg width="{W}" height="{H}" style="background:#04060a;display:block">{"".join(dots)}</svg>'
+
+
+STREET_ROW = 0.69          # row spacing / bulb spacing on the Peak in the owner's night photos
+
+
+def street_yex(L: Layout, ii) -> float:
+    """The height stretch that draws the zigzag's rows STREET_ROW bulb spacings apart."""
+    from goveelights import geometry as geo
+    px = L.pixels
+    rows = geo._rows_by_reversal(px, [i for i in ii if not getattr(px[i], "ext", False)]) or []
+    rows = [sorted(r, key=lambda i: px[i].x) for r in rows if len(r) > 1]
+    if len(rows) < 2:
+        return 1.6
+    ys = sorted(sum(px[i].y for i in r) / len(r) for r in rows)
+    dy = (ys[-1] - ys[0]) / (len(ys) - 1)
+    dx = sorted(abs(px[b].x - px[a].x) for r in rows for a, b in zip(r, r[1:]))
+    dx = dx[len(dx) // 2]
+    return max(0.2, STREET_ROW * dx / max(1e-6, dy))
 
 
 def main(argv=None):
@@ -118,6 +137,9 @@ def main(argv=None):
     ap.add_argument("--honeycomb", action="store_true",
                     help="draw the Peak's rows offset half a bulb each, as they are on the house")
     ap.add_argument("--zoom-only", action="store_true", help="with --focus: only the close-up")
+    ap.add_argument("--street-aspect", action="store_true",
+                    help="draw the close-up with the Peak's proportions as seen from the street (the "
+                         "owner's photos: rows about 0.7 of a bulb spacing apart), not stretched tall")
     ap.add_argument("--labels", default="", help="comma-separated captions, one per frame, instead of 'preset · t'")
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
@@ -150,11 +172,12 @@ def main(argv=None):
             box = (min(px[i].x for i in ii) - 1, max(px[i].x for i in ii) + 1,
                    min(px[i].y for i in ii) - 0.5, max(px[i].y for i in ii) + 0.5)
     pos = honeycomb_positions(L) if a.honeycomb else None
+    yz = street_yex(L, L.indices(a.focus)) if box and a.street_aspect else 1.6
     caps = [c for c in a.labels.split(",")] if a.labels else []
     cells = []
     for label, pid, ts in jobs:
         for t, cols in frames(pid, L, ts, a.fps):
-            zoom = svg(L, cols, box=box, r=7, pos=pos) if box else ""
+            zoom = svg(L, cols, box=box, r=4 if a.street_aspect else 7, pos=pos, yex=yz) if box else ""
             whole = "" if (a.zoom_only and box) else svg(L, cols, pos=pos)
             cap = caps[len(cells)] if len(cells) < len(caps) else f"{label} · t={t:g}s"
             cells.append(f'<div><div class="l">{cap}</div>{whole}{zoom}</div>')

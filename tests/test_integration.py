@@ -365,9 +365,9 @@ class ScoreboardTests(unittest.TestCase):
         self.assertTrue(ctl.interrupt.get("scoreboard"))
         self.assertTrue(ctl.playing["name"].startswith("Scoreboard"))
         layers = {l.effect: l for l in ctl.engine.scene.layers}
-        self.assertIn("text", layers)
-        self.assertEqual(layers["text"].params["source"], "score")
-        self.assertEqual(layers["text"].target, "Peak")
+        self.assertIn("peak_text", layers)                # the score one big letter at a time
+        self.assertEqual(layers["peak_text"].params["source"], "score")
+        self.assertEqual(layers["peak_text"].target, "Peak")
         self.live_tick(r, 22)
         self.assertIsNone(ctl.interrupt)
         self.assertEqual(ctl.playing["id"], "warm-white")

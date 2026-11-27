@@ -102,8 +102,8 @@ class DeadBulbLayout(unittest.TestCase):
         k = peak.pixels[len(peak.pixels) // 2].local
         L = layout_with({"Peak": {k}})
         d = preset("text-give-thanks")
-        d["layers"] = [ly for ly in d["layers"] if ly["effect"] == "text"]
-        d["layers"][0]["params"]["sparkle"] = 0      # glints pick bulbs by number, which shifts past a dead one
+        d["layers"] = [ly for ly in d["layers"] if ly["effect"] in ("text", "peak_text")]
+        self.assertEqual(d["layers"][0]["effect"], "peak_text")      # the honeycomb font (no glints)
         a, b = Scene.from_dict(copy.deepcopy(d)), Scene.from_dict(copy.deepcopy(d))
         for step in range(15):
             ca, cb = by_phys(L0, a.render(step / 5, L0)), by_phys(L, b.render(step / 5, L))

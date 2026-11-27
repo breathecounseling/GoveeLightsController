@@ -298,6 +298,20 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
 .hostage .scr{position:absolute;left:0;top:0;width:100%;height:100%;border-radius:6px;overflow:hidden;background:#000;box-shadow:0 0 0 2px #2c3542,0 0 18px #0008}
 .hostage .scr img{display:block;width:100%;height:100%}
 .hostage .scr.px img{image-rendering:pixelated}
+/* Words on the Peak */
+#txtCard .txin{display:flex;gap:8px;align-items:center}
+#txtCard input[type=text]{font-size:18px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;min-height:44px}
+#txtCard .seg button{min-height:44px}
+#txtCard .seg button small{display:block;font-weight:400;font-size:11px;color:var(--dim)}
+#txtCard .chips .chip{min-height:44px;display:flex;align-items:center;gap:6px}
+#txtCard .chip i{display:inline-block;width:12px;height:12px;border-radius:50%}
+#txtPv{display:block;width:100%;height:120px;background:#04060a;border-radius:10px;margin:8px 0 4px}
+#txtCard .acts{display:flex;gap:8px;margin-top:8px}
+#txtCard .acts button{flex:1;min-height:44px}
+#txtSkip{color:#fbbf24}
+.huechip{display:flex;align-items:center;gap:8px;margin-top:8px;background:#3b2a0a;border:1px solid #a16207;border-radius:12px;padding:6px 6px 6px 12px;font-size:13px}
+.huechip span{flex:1}
+.huechip button{min-height:44px}
 </style>
 </head>
 <body>
@@ -332,8 +346,19 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
       <div class="row" style="gap:10px;margin-top:2px"><button class="sm" id="listenBtn" onclick="listenToggle()" aria-pressed="false" title="Listen to the music with this phone's microphone and keep the lights on the beat">🎤 Listen</button><p id="listenNote" class="grow">Lights follow the music this phone hears</p></div>
       <div class="knob" id="syncRow" title="If the lights trail the music, move this right; if they run ahead, move it left"><label>Sync offset</label><input id="kSync" type="range" min="-100" max="300" step="10"><output id="oSync"></output></div>
     </div>
+    <div class="huechip" id="hueChip" hidden><span>Colours shifted (hue <b id="hueDeg">0°</b>): reds can look pink</span><button class="sm" id="hueReset" onclick="hueReset()">Reset</button></div>
     <div class="grp" style="margin-top:8px">Restyle with a palette</div>
     <div id="palChips" class="chips"></div>
+  </div>
+  <div class="card" id="txtCard">
+    <h2><span class="sp">Words on the Peak</span><span class="dim" style="font-size:12px;font-weight:400">type, preview, play</span></h2>
+    <div class="txin"><input type="text" id="txtIn" maxlength="60" placeholder="GO BRONCOS" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Words to show on the Peak"></div>
+    <p class="help" id="txtHint">Letters A–Z, numbers 0–9, ! ? - + . , ' : &amp; # / and &lt;3 for a heart. <span id="txtSkip"></span></p>
+    <div class="seg" id="txtMode"><button data-v="single" class="on">Single letter<small>easiest to read</small></button><button data-v="marquee">Marquee<small>scrolls across</small></button></div>
+    <div class="chips" id="txtCols"></div>
+    <div class="knob" style="margin-top:6px"><label id="txtSpdL">Letter time</label><input id="txtSpd" type="range" min="0.3" max="2" step="0.05" value="0.7" aria-label="Letter time"><output id="txtSpdO">0.7 s</output></div>
+    <canvas id="txtPv" aria-label="Preview of the Peak"></canvas>
+    <div class="acts"><button class="pri" id="txtPlay" onclick="txtGo('play')">▶ Play now</button><button id="txtSave" onclick="txtGo('save')">Save as preset</button></div>
   </div>
   <div class="card">
     <h2><span class="sp">Performance pad</span><span class="dim" style="font-size:12px;font-weight:400">purple = hold</span></h2>
@@ -807,7 +832,7 @@ async function refresh(){
   $('evoBtn').classList.toggle('pri', !!p && p.kind === 'evolve'); $('evoBtn').style.display = p && (p.kind === 'preset' || p.kind === 'evolve') ? '' : 'none';
   setKnob('kBri','oBri', s.brightness, v => Math.round(v*100)+'%');
   setKnob('kSpd','oSpd', s.master.speed, v => (+v).toFixed(2)+'×');
-  setKnob('kHue','oHue', s.master.hue, v => Math.round(v*360)+'°');
+  setKnob('kHue','oHue', s.master.hue, v => Math.round(v*360)+'°'); hueChip(s);
   $('oBpm').textContent = Math.round(s.master.bpm);
   setKnob('kSync','oSync', s.audio_offset_ms ?? 70, v => (+v > 0 ? '+' : '') + Math.round(v) + 'ms');
   if (document.activeElement !== $('fps')) setSel($('fps'), String(Math.round(s.fps)));
@@ -1910,6 +1935,89 @@ async function decodeMapVideo(blob, T, progress = () => {}){
   const shown = blobs.filter(b => b.ok || (b.amp||0) >= 0.45 * ref);
   return {points: Object.values(best).map(b => [b.id, +b.x.toFixed(1), +b.y.toFixed(1), +b.conf.toFixed(2)]), blobs: shown, noise: blobs.length - shown.length, w: W, h: H, on: onImg};
 }
+// ------------------------------------------------------------- Words on the Peak
+/* Type a phrase, pick Single letter (one big letter at a time, the easiest to read from the street)
+   or Marquee, a colour set and a speed; the preview is the server's real render of the Peak from the
+   first letter. Play now puts it on (live, unless the owner chose phone only); Save keeps it as a preset. */
+const TXT_COLS = [
+  {n:'Christmas', c:['#ff1a1a','#00d040'], m:'letters'}, {n:'Broncos', c:['#ff4f00','#1040ff'], m:'letters'},
+  {n:'Warm white', c:['#ffd9a0'], m:'solid'}, {n:'Gold', c:['#ffb000','#fff0c0'], m:'letters'},
+  {n:'Red', c:['#ff1a1a'], m:'solid'}, {n:'Blue', c:['#1a50ff'], m:'solid'}, {n:'Rainbow', c:['#ff0000','#00ff00','#0000ff'], m:'rainbow'}];
+const TX = {mode: store.get('txtMode', 'single'), col: +store.get('txtCol', 0) || 0, hold: 0.7, speed: 4, pv: null, k: 0, seq: 0};
+function txtOpts(){ const c = TX_COL(); return {text: $('txtIn').value, mode: TX.mode, colors: c.c, color_mode: c.m, hold: TX.hold, speed: TX.speed} }
+function TX_COL(){ return TXT_COLS[TX.col] || TXT_COLS[0] }
+function txtUI(){
+  document.querySelectorAll('#txtMode button').forEach(b => b.classList.toggle('on', b.dataset.v === TX.mode));
+  const r = $('txtSpd'), single = TX.mode === 'single';
+  $('txtSpdL').textContent = single ? 'Letter time' : 'Speed'; r.setAttribute('aria-label', $('txtSpdL').textContent);
+  if (single){ r.min = 0.3; r.max = 2; r.step = 0.05; r.value = TX.hold; $('txtSpdO').textContent = (+TX.hold).toFixed(2).replace(/0$/,'') + ' s' }
+  else { r.min = 1; r.max = 10; r.step = 0.5; r.value = TX.speed; $('txtSpdO').textContent = (+TX.speed) + '/s' }
+  document.querySelectorAll('#txtCols .chip').forEach((b, k) => b.classList.toggle('on', k === TX.col));
+}
+function txtInit(){
+  $('txtCols').innerHTML = TXT_COLS.map((c, k) => `<button class="chip" data-k="${k}">${c.c.map(x => `<i style="background:${x}"></i>`).join('')}${esc(c.n)}</button>`).join('');
+  $('txtCols').querySelectorAll('.chip').forEach(b => b.onclick = () => { TX.col = +b.dataset.k; store.set('txtCol', TX.col); txtUI(); txtPreview() });
+  document.querySelectorAll('#txtMode button').forEach(b => b.onclick = () => { TX.mode = b.dataset.v; store.set('txtMode', TX.mode); txtUI(); txtPreview() });
+  $('txtSpd').oninput = e => { if (TX.mode === 'single') TX.hold = +e.target.value; else TX.speed = +e.target.value; txtUI(); txtPreview() };
+  $('txtIn').value = store.get('txtText', '');
+  $('txtIn').oninput = () => { store.set('txtText', $('txtIn').value); txtPreview() };
+  $('txtIn').onkeydown = e => { if (e.key === 'Enter'){ e.preventDefault(); txtGo('play') } };
+  txtUI(); txtPreview.now();
+}
+const txtPreview = Object.assign(debounce(() => txtPreview.now(), 350), {now: async () => {
+  const seq = ++TX.seq, o = txtOpts();
+  if (!o.text.trim()){ TX.pv = null; $('txtSkip').textContent = ''; return txtDraw('') }
+  const r = await post('text', {...o, action: 'preview'});
+  if (seq !== TX.seq || !r) return;
+  TX.pv = r; TX.k = 0;
+  $('txtSkip').textContent = r.skipped && r.skipped.length ? 'Skipped: ' + r.skipped.join(' ') : '';
+}});
+/* The Peak (and the Tip) close up, with the eaves and porch around it. */
+function txtGeo(c){
+  const dpr = devicePixelRatio || 1, W = c.clientWidth, H = c.clientHeight; if (!W || !LAYOUT) return null;
+  if (c._tg && c._tg.W === W && c._tg.n === LAYOUT.pixels.length) return c._tg;
+  const peak = new Set([...(LAYOUT.runs_idx.Peak || []), ...(LAYOUT.runs_idx.Tip || [])]);
+  const core = peak.size ? [...peak] : LAYOUT.pixels.map((_, i) => i), P = LAYOUT.pixels;
+  let x0 = Math.min(...core.map(i => P[i][0])), x1 = Math.max(...core.map(i => P[i][0]));
+  let y0 = Math.min(...core.map(i => P[i][1])), y1 = Math.max(...core.map(i => P[i][1]));
+  const padX = (x1 - x0) * .08 + .5, padY = (y1 - y0) * .25 + .5; x0 -= padX; x1 += padX; y0 -= padY; y1 += padY;
+  const s = Math.min((W - 12) / Math.max(.1, x1 - x0), (H - 12) / Math.max(.1, (y1 - y0) * 1.2)), ox = (W - (x1 - x0) * s) / 2;
+  const pts = [];
+  P.forEach(([x, y], i) => { if (x >= x0 && x <= x1 && y >= y0 && y <= y1) pts.push([i, ox + (x - x0) * s, H - 6 - (y - y0) * s * 1.2]) });
+  c.width = W * dpr; c.height = H * dpr;
+  return c._tg = {W, H, dpr, pts, n: P.length, r: Math.max(1.6, Math.min(5, s * .32))};
+}
+function txtDraw(hex){
+  const c = $('txtPv'), g = txtGeo(c); if (!g) return; const x = c.getContext('2d');
+  x.setTransform(g.dpr, 0, 0, g.dpr, 0, 0); x.clearRect(0, 0, g.W, g.H);
+  for (const [i, px, py] of g.pts){ const col = hex ? hex.substr(i * 6, 6) : '', lit = col && col !== '000000';
+    if (lit){ x.globalAlpha = .25; x.fillStyle = '#' + col; x.beginPath(); x.arc(px, py, g.r * 2.2, 0, 7); x.fill(); x.globalAlpha = 1 }
+    x.fillStyle = lit ? '#' + col : '#1a2029'; x.beginPath(); x.arc(px, py, g.r, 0, 7); x.fill() }
+}
+setInterval(() => { if (document.visibilityState !== 'visible' || !$('s-play').classList.contains('on')) return;
+  const d = TX.pv; if (!d || !d.frames.length) return; const r = $('txtPv').getBoundingClientRect(); if (r.bottom < 0 || r.top > innerHeight) return;
+  txtDraw(d.frames[TX.k++ % d.frames.length]) }, 1000 / 6);
+async function txtGo(act){
+  const o = txtOpts();
+  if (!o.text.trim()){ toast('Type the words first'); $('txtIn').focus(); return }
+  if (act === 'save'){
+    const name = prompt('Name for this preset', o.text.trim().replace(/\s+/g, ' ').toLowerCase().replace(/(^|\s)\S/g, m => m.toUpperCase()));
+    if (name === null) return;
+    const r = await post('text', {...o, action: 'save', name});
+    if (r){ toast('Saved: ' + r.scene.name); loadPresets() }
+    return;
+  }
+  const r = await post('text', {...o, action: 'play', live: tapGoesLive(ST)});
+  if (r){ toast(ST.live || tapGoesLive(ST) ? 'On the house' : 'Playing on this phone'); refresh() }
+}
+/* Colours shifted: the master hue knob is off zero (reds turn pink). One tap puts it back. */
+function hueChip(s){
+  const h = ((s.master && s.master.hue) || 0) % 1, off = Math.min(h, 1 - h) > 0.004;
+  if ($('hueChip').hidden === off) $('hueChip').hidden = !off;
+  if (off) $('hueDeg').textContent = Math.round(h * 360) + '°';
+}
+async function hueReset(){ if (await post('master', {hue: 0})){ toast('Colours back to normal'); thumbs.data = {}; refresh() } }
+
 async function reloadLayout(){ LAYOUT = await get('layout'); layoutPreview(); thumbs.data = {}; mini.data = {}; document.querySelectorAll('canvas').forEach(c => c._g = null); loadPresets() }
 async function mapWizard(only){
   const el = h(`<div>
@@ -2938,7 +3046,7 @@ function hoShowJob(j){
   const e = await get('effects'); e.effects.forEach(x => EFX[x.name] = x); e.fx.forEach(x => FXD[x.name] = x); BLENDS = e.blends; SHAPES = e.shapes; BLEND_INFO = e.blend_info || {}; GROUP_ORDER = e.group_order || [];
   LAYOUT = await get('layout'); layoutPreview(); openStream();
   await loadPalettes(); PL = await get('playlists'); SCH = await get('schedule');
-  drawPad(); await loadPresets(); plSelect(); schedForm(); await loadExtras(); await refresh(); setInterval(refresh, 2000); security();
+  drawPad(); txtInit(); await loadPresets(); plSelect(); schedForm(); await loadExtras(); await refresh(); setInterval(refresh, 2000); security();
   const noMic = listenSupport(); if (noMic){ listenExplain(noMic); $('listenBtn').setAttribute('aria-disabled', 'true'); $('listenBtn').style.opacity = .55 }
   const t = store.get('tab', 'play'); if (t !== 'play') tabTo(t);
   const su = await get('setup').catch(() => null);           // first run: no boxes or no location yet

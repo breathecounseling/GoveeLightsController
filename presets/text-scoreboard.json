@@ -23,22 +23,22 @@
       }
     },
     {
-      "effect": "text",
+      "effect": "peak_text",
       "target": "Peak",
       "params": {
         "source": "score",
         "text": "GO BRONCOS!",
+        "mode": "single",
         "colors": [
-          "#ff5a00"
+          "#ff5a00",
+          "#ffffff"
         ],
-        "color_mode": "solid",
-        "speed": 3.5,
-        "sparkle": 0.15,
-        "border": "glow",
+        "color_mode": "words",
+        "hold": 0.6,
+        "transition": "cut",
+        "pause": 1.6,
         "border_color": "#2050ff",
         "score_detail": false,
-        "size": 1.8,
-        "background": "#001a60",
         "brightness": 1.0
       }
     }

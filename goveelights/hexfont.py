@@ -108,17 +108,27 @@ OVERRIDES: dict[str, dict[str, tuple[float, list]]] = {
     "big": {
         "G": (3, [[(3, 4), (1, 4), (0, 3.2), (0, 0.8), (1, 0), (2, 0), (3, 0.8), (3, 2.4), (1.6, 2.4)]]),
         "O": (3.5, [_OB]),
-        "Q": (3.5, [_OB, (0.5, [(2.2, 1.6), (3.6, -0.2)])]),
-        "S": (3, [[(3, 3.2), (2.4, 4), (1, 4), (0, 3.2), (1, 2.4), (2, 2.4), (3, 1.6), (3, 0.8), (2, 0), (1, 0),
+        "Q": (3.5, [_OB, [(2.2, 1.6), (3.8, -0.3)]]),
+        # S: rounded at both ends, its top end open on the right (a 9 and an 8 are closed
+        # there) and a hook low on the left (a 5 has a hard corner)
+        "S": (3, [[(3, 3.7), (2.4, 4), (1, 4), (0, 3.2), (1, 2.4), (2, 2.4), (3, 1.6), (3, 0.8), (2, 0), (1, 0),
                    (0, 0.8)]]),
+        # P: a bowl three rows deep (an F's bar is a row higher and open)
+        "P": (3, [[(0, 0), (0, 4), (2, 4), (3, 3.2), (3, 2.4), (2, 1.6), (0, 1.6)]]),
         "5": (3, [[(3, 4), (0, 4), (0, 2.4), (2, 2.4), (3, 1.6), (3, 0.8), (2, 0), (0, 0)]]),
-        "4": (3, [[(2.5, 0), (2.5, 4), (0, 1.6), (3, 1.6)]]),
+        # an open 4: the left stem stops at the bar, the right one runs the full height
+        "4": (3, [[(0, 4), (0, 1.6), (3, 1.6)], [(2.5, 4), (2.5, 0)]]),
+        # a slashed zero, so 0 never reads as O (which is also wider)
+        "0": (3, [[(1, 0), (2, 0), (3, 0.8), (3, 3.2), (2, 4), (1, 4), (0, 3.2), (0, 0.8), (1, 0)],
+                  (0.5, [(1.0, 1.4), (2.0, 2.6)])]),
         "8": (3, [_8B]),
         "M": (4, [[(0, 0), (0, 4)], [(4, 0), (4, 4)], (0.5, [(0, 4), (2, 1.6), (4, 4)])]),
         "N": (3, [[(0, 0), (0, 4)], [(3, 0), (3, 4)], (0.6, [(0, 4), (3, 0)])]),
         "W": (4, [[(0, 0), (0, 4)], [(4, 0), (4, 4)], (0.5, [(0, 0), (2, 2.4), (4, 0)])]),
-        "X": (3, [(0.7, [(0, 4), (3, 0)]), (0.7, [(0, 0), (3, 4)])]),
-        "K": (3, [[(0, 0), (0, 4)], (0.7, [(3, 4), (0.4, 2)]), [(0.9, 2.4), (3, 0)]]),
+        # X: slimmer where the strokes cross, full weight on the legs (never spidery)
+        "X": (3, [(0.7, [(0.75, 3), (2.25, 1)]), (0.7, [(0.75, 1), (2.25, 3)]),
+                  [(0, 4), (0.75, 3)], [(2.25, 3), (3, 4)], [(0, 0), (0.75, 1)], [(2.25, 1), (3, 0)]]),
+        "K": (3, [[(0, 0), (0, 4)], [(3, 4), (0.4, 2)], [(0.9, 2.4), (3, 0)]]),
         "Z": (3, [[(0, 4), (3, 4)], (0.7, [(3, 4), (0, 0)]), [(0, 0), (3, 0)]]),
         "2": (3, [[(0, 3.2), (1, 4), (2, 4), (3, 3.2), (3, 2.4)], (0.7, [(3, 2.4), (0, 0)]), [(0, 0), (3, 0)]]),
         "R": (3, [[(0, 0), (0, 4), (2, 4), (3, 3.2), (2, 2.4), (0, 2.4)], [(1.6, 2.4), (3, 0)]]),
@@ -243,7 +253,9 @@ def _zig_rows(layout, idx) -> tuple[list[list[int]], list[list[int]]]:
 def lattice(layout, idx) -> Lattice:
     """The target's zigzag (and the Tip on it, if any) as a honeycomb. Each row keeps
     its measured centre to the nearest half bulb, then steps by under half a bulb onto
-    the lattice (every row half a bulb across from the row below)."""
+    the lattice (every row half a bulb across from the row below). A bulb marked dead
+    (Bulb check) keeps its place in its row, so letters never shift round it."""
+    from .effects_ext.showpieces import dead_in
     px = layout.pixels
     prows, trows = _zig_rows(layout, idx)
     if not prows:
@@ -251,18 +263,26 @@ def lattice(layout, idx) -> Lattice:
     rows = prows + trows
     dx = sorted(px[b].x - px[a].x for r in rows for a, b in zip(r, r[1:]) if px[b].x - px[a].x > 1e-6)
     pitch = dx[len(dx) // 2] if dx else 1.0
-    base = rows[0]
-    c0 = (px[base[0]].x + px[base[-1]].x) / 2
+    # every row's bulbs as x positions, dead ones included (None in place of an index)
+    ys = [sum(px[i].y for i in r) / len(r) for r in rows]
+    full = [[(px[i].x, i) for i in r] for r in rows]
+    for x, y in dead_in(layout, [i for r in rows for i in r]):
+        k = min(range(len(rows)), key=lambda k: abs(ys[k] - y))
+        full[k].append((x, None))
+    full = [sorted(r, key=lambda v: v[0]) for r in full]
+    base = full[0]
+    c0 = (base[0][0] + base[-1][0]) / 2
     par0 = ((len(base) - 1) / 2) % 1.0
     lat = Lattice(peak_rows=len(prows))
-    for r, row in enumerate(rows):
+    for r, row in enumerate(full):
         n = len(row)
-        cx = (px[row[0]].x + px[row[-1]].x) / 2
+        cx = (row[0][0] + row[-1][0]) / 2
         lean = (cx - c0) / pitch
         centre = round(lean * 2) / 2                 # measured centre, to half a bulb
         xs = _snap([j - (n - 1) / 2 + centre for j in range(n)], (par0 + 0.5 * r) % 1.0, lean)
-        lat.rows.append(list(zip(row, xs)))
-        lat.cells.extend((i, x, r) for i, x in zip(row, xs))
+        live = [(i, x) for (_, i), x in zip(row, xs) if i is not None]
+        lat.rows.append(live)
+        lat.cells.extend((i, x, r) for i, x in live)
     lat.tip = [i for r in trows for i in r]
     return lat
 

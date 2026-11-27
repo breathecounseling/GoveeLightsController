@@ -95,6 +95,29 @@ class Glyphs(unittest.TestCase):
     def test_text_is_normalised(self):
         self.assertEqual(hexfont.normalise("Go Broncos! <3 ~"), "GO BRONCOS! ♥ ")
 
+    def test_big_glyphs_differ_by_five_bulbs_or_more(self):
+        # one letter at a time, so any two must differ clearly; the weak pairs of the first
+        # draft (O/0, S/5, S/8, S/9, F/P, O/Q) are well apart now
+        R = {ch: set(hexfont.render_big(self.lat, ch)) for ch in ALNUM}
+        worst = min((len(R[a] ^ R[b]), a, b) for k, a in enumerate(ALNUM) for b in ALNUM[k + 1:])
+        self.assertGreaterEqual(worst[0], 5, worst)
+        self.assertGreaterEqual(len(R["O"] ^ R["0"]), 3)
+        self.assertGreaterEqual(len(R["S"] ^ R["5"]), 6)
+
+    def test_x_legs_and_k_arm_are_full_weight(self):
+        for ch in "XK":
+            cov = hexfont.render_big(self.lat, ch)
+            for r in (0, 1, 4, 5):                  # two bulbs a stroke on the outer rows
+                n = sum(1 for i, _ in self.lat.rows[r] if i in cov)
+                self.assertGreaterEqual(n, 4, (ch, r))
+
+    def test_four_has_a_full_height_right_stem(self):
+        cov = hexfont.render_big(self.lat, "4")
+        top = [x for i, x in self.lat.rows[5] if i in cov]
+        bottom = [x for i, x in self.lat.rows[0] if i in cov]
+        self.assertTrue(top and bottom)
+        self.assertGreater(max(top), min(top) + 2)            # the open top: both stems reach it
+
 
 class PeakText(unittest.TestCase):
     def scene(self, **params):
@@ -104,7 +127,7 @@ class PeakText(unittest.TestCase):
     def test_letter_mode_shows_one_letter_at_a_time(self):
         L = house()
         lat = hexfont.lattice(L, L.indices("Peak"))
-        frames = render(self.scene(mode="letter", hold=1.0, pause=1.0), L, frames=60, fps=20)
+        frames = render(self.scene(mode="single", hold=1.0, pause=1.0), L, frames=60, fps=20)
         peak = [i for i, _, _ in lat.cells]
         g = hexfont.render_big(lat, "G")
         lit = {i for i in peak if max(frames[10][i]) > 0.5}
