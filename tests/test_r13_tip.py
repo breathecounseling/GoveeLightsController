@@ -235,7 +235,7 @@ TIP_GOLDEN = {
     "fill-the-peak": "294ecbe6f4b1e82c", "fireworks": "350c00e20ed3d0b6", "gift-wrap": "8001f342e8845cf7",
     "glitter-ball": "655ef72718b2deb4", "golden-shimmer": "f10b106a30cce3c1", "golden-tree": "0bf8677143a6f96a",
     "grand-finale": "43c110aeebcdf19e", "halloween": "b186e0ad86f1c62c", "halloween-haunted": "af0594033b8001b1",
-    "halloween-pumpkin": "f4e9772670a20c1e", "heartbeat-from-the-apex": "e64381aa0982055b", "icicles": "7fd33f2a5986c30a",
+    "halloween-pumpkin": "c284e80289ebf78e", "heartbeat-from-the-apex": "e64381aa0982055b", "icicles": "7fd33f2a5986c30a",
     "icy-tree": "0207106c80dd9e81", "july-4th-fireworks": "2991e7fc6198fa36", "july-4th-flag": "ca932b00191d622f",
     "lighthouse": "7e9ae3d1d3a57b77", "mirror-comets": "08ee50dc017b2871", "music-pulse": "96522b8b2cc0b0f9",
     "northern-lights": "ecdbafd936dfdd69", "paparazzi": "7fad842081535208", "party-beat": "0f4db2764cbd30e3",

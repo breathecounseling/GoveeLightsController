@@ -309,7 +309,7 @@ GOLDEN = {
     "fill-the-peak": "e39100c20bb25c8b", "fireworks": "83aa641b1b7982aa", "gift-wrap": "07fac9462cc89daa",
     "glitter-ball": "d1379fd3e4f61c4d", "golden-shimmer": "866c978f5f241539", "golden-tree": "cbe12e013d0af857",
     "grand-finale": "fd8767520e2af06c", "halloween": "81aa637816c21e25", "halloween-haunted": "1d755c9bccdbdebe",
-    "halloween-pumpkin": "b9df3ce7680a2c95", "heartbeat-from-the-apex": "b72b08c7b14826e6", "icicles": "acc10149538988ca",
+    "halloween-pumpkin": "055211255226b218", "heartbeat-from-the-apex": "b72b08c7b14826e6", "icicles": "acc10149538988ca",
     "icy-tree": "ebfb0b7cc4baceab", "july-4th-fireworks": "d6443d53c2049cb8", "july-4th-flag": "ce79fbd2bacdebc3",
     "lighthouse": "7dbcb66c74344131", "mirror-comets": "84d46c6e87664aa2", "music-pulse": "2aeed425ae2e8ee6",
     "northern-lights": "86546e9f6dd272b1", "paparazzi": "8eb42517655dba1a", "party-beat": "7d00ef1c888c3f86",
