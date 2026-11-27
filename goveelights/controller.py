@@ -239,6 +239,9 @@ def migrate_presets(store: PresetStore, root: Path | None = None) -> list[str]:
     return moved
 
 
+
+STROBE_HOLD_RATE = 2.5        # flashes/s for a latched pad strobe (a tap's 3 s burst stays at 12)
+
 class Controller:
     CLOUD_THREAD = True                             # the cloud output's own thread (tests pump it by hand)
 
@@ -1003,8 +1006,11 @@ class Controller:
                                            "wash": 3, "comet": 4}.get(action, 3))
         spec = {
             "flash": ({"layers": [{"effect": "solid", "params": {"color": "#ffffff"}}]}, "add", 1.0, 0.35),
+            # a tap is a 3 s burst; a latched strobe flashes slowly (STROBE_HOLD_RATE): a whole
+            # house flashing 3-30 times a second for minutes is a seizure risk and distracts drivers
             "strobe": ({"layers": [{"effect": "solid", "params": {"color": "#ffffff"},
-                                    "fx": [{"type": "strobe", "params": {"rate": 12, "duty": 0.35}}]}]}, "add", 1.0, 0),
+                                    "fx": [{"type": "strobe", "params": {"rate": STROBE_HOLD_RATE if hold else 12,
+                                                                         "duty": 0.35}}]}]}, "add", 1.0, 0),
             "sparkle": ({"layers": [{"effect": "sparkle", "params": {"rate": 40, "decay": 0.2}}]}, "add", 1.0, 0),
             "fireworks": ({"layers": [{"effect": "bursts", "params": {"interval": 0.4, "life": 1.5}}]}, "lighten", 1.0, 0),
             "wash": ({"layers": [{"effect": "solid", "params": {"color": color}}]}, "normal", 0.9, 1.2),
