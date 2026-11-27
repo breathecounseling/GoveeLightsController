@@ -22,8 +22,9 @@ gain, and is folded into "calibration" the first time the run is calibrated here
 
 Fade compensation: a long run loses a little voltage along its length, so its far end
 (the last bulb, away from the box) can look dimmer than the start. With fade f the first
-bulb is dimmed by f, falling linearly to no change at the last bulb, so the run looks
-even end to end.
+bulb is dimmed by f, falling linearly to no change at the last bulb (the run's last bulb
+that is not hidden: a run with unused bulbs on the end evens out up to its last lit one),
+so the run looks even end to end.
 """
 from __future__ import annotations
 
@@ -182,6 +183,9 @@ def pixel_gains(layout) -> tuple[list | None, list | None]:
         mult = gam = None
     else:
         runs = {r.mac: r for r in layout.runs}
+        # the fade runs out at the run's last bulb that is not hidden (a dead one still
+        # counts, so marking it never changes the others)
+        far = {r.mac: max([k for k in range(r.count) if k not in r.hidden] or [0]) for r in layout.runs}
         mult, gam = [], []
         for p in layout.pixels:
             r = runs[p.mac]
@@ -193,7 +197,7 @@ def pixel_gains(layout) -> tuple[list | None, list | None]:
                 continue
             k = br
             if fade:
-                k *= 1.0 - fade * (1.0 - p.local / max(1, r.count - 1))
+                k *= 1.0 - fade * (1.0 - min(1.0, p.local / max(1, far[p.mac])))
             tr = tr or (1.0, 1.0, 1.0)
             mult.append((tr[0] * k, tr[1] * k, tr[2] * k))
         if all(g is None for g in gam):

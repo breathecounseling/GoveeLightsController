@@ -89,7 +89,8 @@ def _mix(a, b, w):
 
 
 # ====================================================================== the pictures
-# each takes (X, Y, i, T, P, g) and returns a colour; g carries per-frame values
+# each takes (X, Y, i, T, P, g) and returns a colour; i is the bulb's stable seed (Pixel.si,
+# its place as if no bulb were marked dead), g carries per-frame values
 
 def _wreath(X, Y, i, T, P, g):
     bg = _sc(NIGHT, 0.5)
@@ -458,21 +459,26 @@ def peak_picture(t, ctx, P, st):
         # bottom and top rows
         px = L.pixels
         zig = cv["zig"]
-        rows: dict[int, list[int]] = {}
+        # each row as (x, bulb); a dead bulb (bulb None) still holds its place, so the
+        # picture keeps its scale and outline round it
+        rows: dict[int, list] = {}
         for i in zig:
-            rows.setdefault(round(cv["uv"][i][1] * 20), []).append(i)
-        bottom = sorted(rows.get(min(rows), []) if rows else [], key=lambda i: px[i].x)
+            rows.setdefault(round(cv["uv"][i][1] * 20), []).append((px[i].x, i))
+        for x, _, _, v in cv.get("gone", ()):
+            rows.setdefault(round(v * 20), []).append((x, None))
+        bottom = sorted(rows.get(min(rows), []) if rows else [], key=lambda e: e[0])
         if len(bottom) > 1:
-            pitch = (px[bottom[-1]].x - px[bottom[0]].x) / (len(bottom) - 1)
+            pitch = (bottom[-1][0] - bottom[0][0]) / (len(bottom) - 1)
         else:
             pitch = 1.0
-        hw = (max(px[i].x for i in zig) - min(px[i].x for i in zig)) / 2 if zig else 1.0
+        allx = [x for r in rows.values() for x, _ in r]
+        hw = (max(allx) - min(allx)) / 2 if zig else 1.0
         sx = hw / max(1e-6, abs(pitch)) if pitch else 1.0
         xy = {i: (u * sx, v * 5.0) for i, (u, v) in cv["uv"].items()}
         ends = set()
         for r in rows.values():                    # the outline: each row's two end bulbs
-            r = sorted(r, key=lambda i: px[i].x)
-            ends.update((r[0], r[-1]))
+            r = sorted(r, key=lambda e: e[0])
+            ends.update(px[i].si for _, i in (r[0], r[-1]) if i is not None)
         ax, ay = cv["apex"]
         rest = [(i, math.hypot(px[i].x - ax, (px[i].y - ay) * 0.5),
                  (px[i].y - L.miny) / max(1e-6, L.maxy - L.miny)) for i in cv["rest"]]
@@ -501,12 +507,13 @@ def peak_picture(t, ctx, P, st):
     g["joy"] = st.get("joy") or st.setdefault("joy", _word("JOY"))
 
     draw = DRAW[style]
-    for i, (X, Y) in xy.items():
-        c = draw(X, Y, i, T, P, g)
+    px = L.pixels                                  # details are seeded per bulb (si), so they
+    for i, (X, Y) in xy.items():                   # stay on their bulbs when one is marked dead
+        c = draw(X, Y, px[i].si, T, P, g)
         frame[i] = _sc(c, lvl)
     if tl > 0:
         for i, d, f in geo["rest"]:
-            frame[i] = _sc(_trim(style, i, d, f, T, g, seed), tl)
+            frame[i] = _sc(_trim(style, px[i].si, d, f, T, g, seed), tl)
     if style in ("star", "ornament") and geo["crown"]:
         for i in geo["crown"]:                     # with the Tip: the apex itself crowns the picture
             frame[i] = _sc((1.0, 0.95, 0.8) if style == "star" else GOLD, lvl)
