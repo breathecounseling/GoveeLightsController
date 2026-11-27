@@ -13,7 +13,7 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import addrun, calendar_builtin, calibrate
+from . import addrun, calendar_builtin, calibrate, colororder
 from . import evolve as evo
 from . import live, livedata, shows, tonight
 from . import shows_builtin
@@ -291,6 +291,7 @@ class Controller:
         self._stop = threading.Event()
         self.started = time.time()
         self.bulbcheck = BulbCheck(self, lambda: time.time())   # More -> Bulb check (takes over the lights for a while)
+        self.colourtest = colororder.ColourTest(self, lambda: time.time())   # "Colours look wrong?" (the same way)
         self.build_engine()
         self.diag.scan()
         threading.Thread(target=self._tick_loop, name="controller", daemon=True).start()
@@ -385,7 +386,7 @@ class Controller:
                     else:
                         self.interrupt = None             # Live off ends a show/celebration
         if not on:
-            self.bulbcheck.stop("lights off")         # it may have switched the boxes on itself
+            self._tests_stop("lights off")         # it may have switched the boxes on itself
             with self.lock:
                 self.vqueue.clear()                   # lights off: waiting picks would play unseen later
                 if self.match_state:
@@ -523,7 +524,7 @@ class Controller:
                    keep_playlist: bool = False, continuous: bool = False):
         scene = Scene.from_dict(d, self.user_palettes)
         if manual:
-            self.bulbcheck.stop("you picked something")
+            self._tests_stop("you picked something")
         with self.lock:
             if manual:
                 self._manual()
@@ -574,7 +575,7 @@ class Controller:
         if pl.get("shuffle"):
             random.shuffle(order)
         if manual:
-            self.bulbcheck.stop("you picked something")
+            self._tests_stop("you picked something")
         with self.lock:
             if manual:
                 self._manual()
@@ -618,7 +619,7 @@ class Controller:
             self.set_live(True, manual=manual)
 
     def stop(self, manual: bool = True, release: bool = True):
-        self.bulbcheck.stop("stop")
+        self._tests_stop("stop")
         with self.lock:
             if manual:
                 self._manual()
@@ -823,7 +824,7 @@ class Controller:
         if not cues:
             raise ValueError(f"show {name!r} has no cues")
         if manual:
-            self.bulbcheck.stop("you picked something")
+            self._tests_stop("you picked something")
             with self.lock:
                 self._dusk_to_program(swap_only=True)    # the show returns to the program, not the dusk sky
             self._manual()
@@ -943,8 +944,8 @@ class Controller:
             it = self.interrupt
             if it and not (it.get("scoreboard") or it.get("visitor")):
                 continue                            # a countdown or celebration: try again next tick this minute
-            if self.bulbcheck.active:
-                self.bulbcheck.stop("a show is due")    # showtime wins: the house is the show's
+            if self.bulbcheck.active or self.colourtest.active:
+                self._tests_stop("a show is due")    # showtime wins: the house is the show's
             try:
                 # only_when_on false: switch the lights on for it (and off again afterwards).
                 # A scoreboard or visitor pick stands aside (queued picks resume after the show).
@@ -1090,6 +1091,23 @@ class Controller:
             self.cfg.save()
         return self.calibrations(), note
 
+    def _tests_stop(self, why: str):
+        """End the Bulb check and the colour test (whichever is on the lights)."""
+        self.bulbcheck.stop(why)
+        self.colourtest.stop(why)
+
+    def set_color_order(self, mac: str, order: str) -> dict:
+        """More -> Match the runs: set a run's colour order directly (for people who know
+        their wiring). Takes effect on the next frame; nothing else changes."""
+        o = colororder.check(order)
+        with self.cfg.lock:
+            if mac not in self.cfg.devices or self.engine.layout.run(mac) is None:
+                raise ValueError("that run isn't in the show")
+            colororder.set_order(self.cfg.devices[mac], o)
+            self.cfg.save()
+        log.info("colour order of %s set to %s", self.cfg.devices[mac].get("name", mac), o)
+        return {"mac": mac, "order": o, "label": colororder.label(o), "say": colororder.say(o)}
+
     def match(self, action: str, color: str | None = None) -> dict:
         """POST /api/match: one test colour on every run at once, over whatever is playing.
         It is an overlay, so the scene underneath keeps running and ending the test brings
@@ -1118,6 +1136,8 @@ class Controller:
             if st is None and (self.interrupt or {}).get("show"):
                 raise ValueError("A show is playing. Try again when it ends.")
             key = color if color in calibrate.SWATCHES else (st or {}).get("color", "warm")
+            if st is None and self.colourtest.active:
+                self.colourtest.stop("match test")
             if st is None:
                 if not e.live and not any(d.get("ip") or (d.get("cloud") or {}).get("enabled")
                                           for d in self.cfg.devices.values() if d.get("pixel_count")):
@@ -1688,7 +1708,7 @@ class Controller:
     # --------------------------------------------------------- mapping
     def map_start(self, level: float = 0.35) -> dict:
         from .effects import MAP_BITS, MAP_OFF, MAP_ON, MAP_SLOT, map_cycle
-        self.bulbcheck.stop("camera mapping")
+        self._tests_stop("camera mapping")
         with self.lock:
             if self.map_state is None:
                 ms = self.match_state
@@ -1879,6 +1899,12 @@ class Controller:
         self.build_engine()
         return res
 
+    def run_to_peak_top(self, mac: str) -> dict:
+        """Fourth run card: "Make it the top of the Peak" for a run added as "Somewhere else"."""
+        res = addrun.to_peak_top(self.cfg, self.engine.layout, mac)
+        self.build_engine()
+        return res
+
     def remove_run(self, mac: str) -> str:
         nm = addrun.remove_run(self.cfg, mac)
         self.build_engine()
@@ -1928,7 +1954,7 @@ class Controller:
 
     # ------------------------------------------------------ diagnostics
     def enter_diag(self):
-        self.bulbcheck.stop("diagnostics")
+        self._tests_stop("diagnostics")
         if not self.diag_active:
             self.diag_active = True
             with self.lock:
@@ -1987,6 +2013,7 @@ class Controller:
             self._evolve_tick(now)
             self._match_tick(now)
         self.bulbcheck.tick(now)
+        self.colourtest.tick(now)
         self._events_tick()
         self._showtimes_tick()
 
@@ -2264,6 +2291,7 @@ class Controller:
             "interrupt": ({"label": it.get("label"), "left": max(0, round(it["until"] - time.time()))} if it else None),
             "mapping": bool(self.map_state), "weather": self.weather, "overlays": list(e.overlays),
             "bulb_check": self.bulbcheck.view(),
+            "colour_test": self.colourtest.view(),
             "games": self.games, "dim": round(e.dim, 2),
             "match": ({"color": (self.match_state or {}).get("color")} if self.match_state else None),
             "show": ((it or {}).get("show") or {}).get("name"),
@@ -2281,6 +2309,7 @@ class Controller:
                       "kind": self.cfg.devices.get(r.mac, {}).get("kind", "govee"),
                       "cloud": bool((self.cfg.devices.get(r.mac, {}).get("cloud") or {}).get("enabled")),
                       "added": bool(self.cfg.devices.get(r.mac, {}).get("added_run")),
+                      "color_order": colororder.of(self.cfg.devices.get(r.mac)),
                       "ip": self.cfg.devices[r.mac].get("ip")} for r in e.layout.runs],
             "devices_without_count": [d.get("name") for d in self.cfg.devices.values() if not d.get("pixel_count")],
             "cloud": self.cloud_state() if self.cloud_out is not None else None,

@@ -10,6 +10,7 @@ import threading
 import time
 from typing import Protocol, Sequence
 
+from . import colororder
 from .lan import GoveeLan
 from .streamer import Streamer
 
@@ -92,6 +93,8 @@ class GoveeRazerOutput:
             self._retrying.discard(mac)
 
     def send_frame(self, run_id: str, pixels: Sequence[RGB]):
+        # the box's colour order (colororder.py): the very last step, after calibration
+        pixels = colororder.apply(colororder.of(self.devices.get(run_id)), pixels)
         key = tuple(pixels)
         now = time.monotonic()
         due = self._retry_at.get(run_id)
@@ -190,6 +193,7 @@ class WledDdpOutput:
         self._last.clear()
 
     def send_frame(self, run_id: str, pixels: Sequence[RGB]):
+        pixels = colororder.apply(colororder.of(self.devices.get(run_id)), pixels)
         key = tuple(pixels)
         now = time.monotonic()
         if self._last.get(run_id) == key and now - self._last_t.get(run_id, 0) < self.refresh_s:

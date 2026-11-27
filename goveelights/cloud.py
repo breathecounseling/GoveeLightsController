@@ -37,6 +37,7 @@ from datetime import date
 from pathlib import Path
 from typing import Callable, Sequence
 
+from . import colororder
 from .config import write_json
 from .layout import dead_bulbs
 
@@ -332,6 +333,7 @@ class CloudRunOutput:
         d = self.devices.get(run_id)
         if d is None:
             return
+        pixels = colororder.apply(colororder.of(d), pixels)   # the box's colour order: last step
         segs = self._segments(d)
         hidden = self._hidden.get(run_id)
         if hidden is None:

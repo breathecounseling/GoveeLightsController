@@ -98,6 +98,25 @@ section{display:none}section.on{display:block}
 .mtr summary{display:flex;align-items:center;font-size:13px;color:var(--dim);cursor:pointer}
 .mtr .knob{grid-template-columns:84px 1fr 44px}
 .mtend{margin-top:4px}
+/* Colours look wrong? (colour order) */
+.ctw .pri.wide,.ctin .wide{width:100%;min-height:56px;font-size:17px;font-weight:700}
+.ctin{border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:12px;background:var(--p2)}
+.cto{display:flex;align-items:center;gap:8px;margin:6px 0;flex-wrap:wrap}
+.cto b{flex:1 1 90px}.cto small{color:var(--dim);font-size:12px;flex:1 1 100%}
+.cto select{min-height:44px;flex:none}
+.ctw{text-align:center}
+.ctw .big{font-size:24px;font-weight:800;margin:4px 0 2px}
+.ctw .help{text-align:left}
+.ctw .ctq{border:1px solid var(--line);border-radius:12px;padding:10px;margin:10px 0;background:var(--p2);text-align:left}
+.ctw .ctq .q{font-weight:700;font-size:17px;margin-bottom:8px}
+.ctw .cta{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ctw .cta button{min-height:60px;font-size:18px;font-weight:700}
+.ctw .cta button.on{outline:3px solid var(--blue);background:#1e3a5f}
+.ctw .wide{width:100%;min-height:60px;font-size:17px;margin:6px 0}
+.ctw .ba{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
+.ctw .ba button{min-height:64px;font-size:18px;font-weight:700}
+.ctw .ba button.on{outline:3px solid var(--blue);background:#1e3a5f}
+.ctw .res{text-align:left;font-size:14px;margin:6px 0}
 /* cards */
 .card{background:var(--p1);border:1px solid var(--line);border-radius:var(--r);padding:12px;margin-bottom:12px}
 h2{font-size:15px;margin:2px 0 10px;display:flex;align-items:center;gap:8px}
@@ -469,6 +488,7 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
     <div class="row" style="margin-bottom:8px"><button class="grow" onclick="bcStart('all','sweep')">Colour test: all runs</button></div>
     <div id="bcRuns"><p class="help">Loading…</p></div>
     <p class="help">Bulbs marked broken stay dark. Chases, words and the sleigh run straight past them, so the show has no gaps, and pictures keep their shape. Clear the mark once the bulb is replaced.</p>
+    <p class="help">A whole run the wrong colour (every red pinkish, orange pink, blue green)? That's not a bulb: <button class="sm" id="bcToCt" onclick="jumpTo('colours')">Colours look wrong?</button></p>
   </div>
   <div class="card fr" id="fourthCard">
     <h2>Fourth run</h2>
@@ -521,6 +541,14 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
   <div class="card mt" id="matchCard">
     <h2>Match the runs</h2>
     <p class="help">Runs of different ages can show the same colour a little differently. Pick a colour to show it on every run at once, look from the street, then nudge any run that looks off. Your changes apply to every look and show.</p>
+    <div class="ctin" id="ctCard">
+      <button class="pri wide" id="ctGo" onclick="ctStart()">Colours look wrong?</button>
+      <p class="help">Reds look pink, orange looks pink, or blue looks green or cyan? Some boxes read red, green and blue in a different order. This test asks you two questions per run from the street and fixes it. Takes a minute.</p>
+      <details id="ctSet"><summary class="dim">Colour order of each run</summary>
+        <div id="ctOrders"></div>
+        <p class="help">For people who know their wiring: R-G-B is normal. "Reset all runs" below doesn't change this: it's how the box is wired, not a taste.</p>
+      </details>
+    </div>
     <div class="mtsw" id="mtSw"></div>
     <div class="mtbar" id="mtBar"></div>
     <p class="help" id="mtNote"></p>
@@ -1726,7 +1754,7 @@ function drawTonight(){
 }
 /* Where each check's fix lives: [tab, Shows segment, an element inside the card to show]. */
 const JUMPS = {sched:['shows','sched','scEn'], showtimes:['shows','shows','stList'], shows:['shows','shows','shSel'], lists:['shows','lists','plSel'],
-  visitor:['shows','live','vEn'], weather:['shows','live','wEn'], game:['shows','live','gEn'], map:['more','','mapCard'], security:['more','','secCard'], devices:['more','','devInfo'], fourth:['more','','fourthCard']};
+  visitor:['shows','live','vEn'], weather:['shows','live','wEn'], game:['shows','live','gEn'], map:['more','','mapCard'], security:['more','','secCard'], devices:['more','','devInfo'], fourth:['more','','fourthCard'], colours:['more','','ctCard']};
 function jumpTo(j){
   if (j === 'house') return post('layout/house', {}).then(r => { if (!r) return;
     toast(r.changed && r.changed.length ? 'Added from the house layout: ' + r.changed.join(', ') : 'Nothing to add: check the light box names in Devices'); loadTonight() });
@@ -2336,6 +2364,8 @@ function frBox(b){
   const el = h(`<div class="frb" data-mac="${esc(b.mac)}">
     <div class="row"><b class="grow">${esc(b.name)}</b><span class="dim">${esc(b.sku)}${b.wifi_fw ? ' · Wi-Fi fw ' + esc(b.wifi_fw) : ''}</span></div>
     <p class="help">${what}</p>
+    ${b.tip_offer ? `<div class="frb" style="margin:6px 0"><p class="help" style="margin-top:0">Is this box the top of the ${esc((FOURTH.tip || {}).host || 'Peak')}? Added as "Somewhere else", it only copies the ${esc((FOURTH.tip || {}).host || 'Peak')} in some looks. As the top of the ${esc((FOURTH.tip || {}).host || 'Peak')} it lights with it in every look, picture and word.</p>
+      <button class="pri" style="width:100%;min-height:52px" data-a="peaktop">Make it the top of the ${esc((FOURTH.tip || {}).host || 'Peak')}</button></div>` : ''}
     <div class="fr-out"></div>
     <div class="row wrap">
       <button class="pri grow" data-a="check">Is it answering now?</button>
@@ -2346,6 +2376,10 @@ function frBox(b){
   q('check').onclick = () => frCheck(b);
   frPaint(el, b);
   q('add').onclick = () => frAdd(b);
+  if (q('peaktop')) q('peaktop').onclick = async () => {
+    const r = await post('run/peak-top', {mac: b.mac}); if (!r) return;
+    toast(`${r.name}: ${r.tip.visible} bulbs on top of the ${r.tip.host}. Change it if the rows are different.`);
+    post('run/blink', {mac: b.mac}); await reloadLayout(); loadFourth(); refresh() };
   if (b.in_show){
     q('blink').onclick = async () => { const r = await post('run/blink', {mac: b.mac}); if (r) toast(r.message) };
     q('remove').onclick = async () => { if (!confirm(`Take ${b.name} out of the show? The other runs are not changed.`)) return;
@@ -2580,6 +2614,7 @@ async function matchCal(body){
 function matchResetAll(){ if (confirm('Put every run back to how it came?')) matchCal({reset:'all'}) }
 function drawMatch(force){
   const box = $('mtRuns'); if (!box || !ST.runs) return;
+  drawCtOrders();
   if (!force && ST.match === null && MT.on && Date.now() - (MT.t || 0) > 5000) matchEnded();   // ended on the server (a show began, timed out)
   if (ST.match && !MT.on && $('s-more').classList.contains('on')) MT.on = ST.match.color;   // opened on a second phone (only shown: never ended from here unless this phone taps a colour)
   if (!force) ST.runs.forEach(r => { if (r.cal) MT.cal[r.mac] = r.cal });
@@ -2640,6 +2675,92 @@ function drawMatch(force){
 window.addEventListener('pagehide', () => { if (!MT.mine && !MT.starting) return; MT.on = null; MT.mine = false;   // leaving the app ends the test this phone started
   if (MT.starting) MT.cancel = true;                 // (and one still starting, should the page come back)
   fetch('/api/match', {method:'POST', keepalive:true, headers:{'Content-Type':'application/json','X-Requested-With':'lights'}, body:'{"action":"stop"}'}).catch(()=>{}) });
+
+/* More -> Match the runs -> "Colours look wrong?": the colour order of each run. The test
+   lights every run with the first raw colour byte, then the second; what the owner sees on
+   each run gives its order (goveelights/colororder.py). The preview always shows the
+   intended colours, so the answers come from the street, not the screen. */
+let CT = null, ctTimer = 0;
+const CT_ORD = ['RGB','RBG','GRB','GBR','BRG','BGR'];
+const ctLab = o => (o || 'RGB').split('').join('-');
+const ctSay = o => ({RGB:'normal', RBG:'green/blue swapped', GRB:'red/green swapped', BGR:'red/blue swapped'})[o || 'RGB'] || 'colours rotated';
+function drawCtOrders(){
+  const box = $('ctOrders'); if (!box || !ST.runs) return;
+  const sig = JSON.stringify(ST.runs.map(r => [r.mac, r.name, r.color_order]));
+  if (box._sig === sig) return; box._sig = sig;
+  box.innerHTML = ST.runs.map(r => `<div class="cto"><b>${esc(r.name)}</b>
+    <select data-mac="${esc(r.mac)}" aria-label="Colour order of ${esc(r.name)}">${CT_ORD.map(o => `<option value="${o}" ${o === (r.color_order || 'RGB') ? 'selected' : ''}>${ctLab(o)}</option>`).join('')}</select>
+    <small>Colour order: ${ctLab(r.color_order)} (${(r.color_order || 'RGB') === 'RGB' ? 'normal' : 'fixed: ' + ctSay(r.color_order)})</small></div>`).join('');
+  box.querySelectorAll('select').forEach(s => s.onchange = async () => {
+    const r = await post('colours/order', {mac: s.dataset.mac, order: s.value});
+    if (r) toast(`Colour order ${r.label}: ${r.say}`); refresh() });
+}
+async function ctStart(){
+  const r = await post('colours/test', {action: 'start'}); if (!r) return;
+  CT = r; ctOpen(); refresh();
+}
+async function ctAct(action, extra = {}){
+  const r = await post('colours/test', {action, ...extra});
+  if (r){ CT = r; ctDraw() }
+  return r;
+}
+async function ctStop(){
+  await post('colours/test', {action: 'stop'});
+  CT = null; clearInterval(ctTimer); closeSheet(); toast('The house is back to what was playing'); refresh();
+}
+function ctOpen(){
+  openSheet('Colours look wrong?', h('<div class="ctw" id="ctWiz"></div>'));
+  ctDraw();
+  clearInterval(ctTimer);
+  ctTimer = setInterval(async () => {
+    if (!document.getElementById('ctWiz') || !$('sheet').classList.contains('on')){ clearInterval(ctTimer); return }
+    const r = await get('colours').catch(() => null); if (!r) return;
+    if (!r.test && CT && CT.test){ CT = {test: null, runs: r.runs}; ctDraw(); clearInterval(ctTimer) }
+  }, 5000);
+}
+function ctDraw(){
+  const el = document.getElementById('ctWiz'); if (!el) return;
+  const v = CT && CT.test, runs = (CT && CT.runs) || [];
+  if (!v){ el.innerHTML = `<p class="big">Done</p><p class="help">The colour test has ended and the house is back to what was playing.</p><button class="pri wide" data-a="close">Close</button>`;
+    el.querySelector('[data-a=close]').onclick = () => closeSheet(); return }
+  const names = {red: 'Red', green: 'Green', blue: 'Blue', other: 'Other / off'};
+  const left = v.left != null ? `Gives the house back after ${Math.max(1, Math.round(v.left / 60))} min without a tap.` : '';
+  let body = '';
+  if (v.step !== 'compare'){
+    const n = {red: 1, green: 2, blue: 3}[v.step];
+    body = `<div class="dim">${n < 3 ? `Question ${n} of 2` : 'Check (optional)'}</div>
+      <div class="big">${n === 1 ? 'First test colour' : n === 2 ? 'Second test colour' : 'Third test colour'}</div>
+      <p class="help">Every run is showing one plain colour. Look at the house itself (not the phone: the picture here always shows the right colours) and tap what you see on each run.</p>
+      ${runs.map(r => { const a = (v.answers[r.mac] || {})[v.step];
+        return `<div class="ctq"><div class="q">What colour is ${esc(r.name)}?</div><div class="cta">${Object.keys(names).map(c =>
+          `<button data-mac="${esc(r.mac)}" data-saw="${c}" class="${a === c ? 'on' : ''}">${names[c]}</button>`).join('')}</div></div>` }).join('')}
+      ${n === 1 ? '<button class="wide pri" data-a="next">Next: the second colour ›</button>'
+        : n === 2 ? '<button class="wide pri" data-a="finish">Fix it and show me</button><button class="wide" data-a="check">Check with a third colour first</button>'
+        : '<button class="wide pri" data-a="finish">Fix it and show me</button>'}`;
+  } else {
+    const res = runs.map(r => { const o = v.result[r.mac], was = v.before[r.mac] || 'RGB', bad = v.problems[r.mac];
+      return `<p class="res"><b>${esc(r.name)}</b>: ${bad ? `<span class="warn">${esc(bad)}</span>`
+        : o === undefined ? 'left as it was' : o === was ? `already right (${ctLab(o)})`
+        : `colour order ${ctLab(o)} (fixed: ${ctSay(o)}), was ${ctLab(was)}`}</p>` }).join('');
+    body = `<div class="big">Before and after</div>
+      <p class="help">The house shows orange and blue stripes, like a Broncos game. Switch between how it looked before and how it looks now.</p>
+      <div class="ba"><button data-w="before" class="${v.showing === 'before' ? 'on' : ''}">Before</button><button data-w="after" class="${v.showing !== 'before' ? 'on' : ''}">After</button></div>
+      ${res}
+      <p class="help">Saved: every look and show uses it from now on. Still pinkish reds everywhere? Bulbs with a strong blue can make warm colours look pink: try "A bit warmer" for that run below.</p>
+      <button class="wide" data-a="again">Start the test again</button>
+      <button class="wide" data-a="undo">Undo: put the old colour orders back</button>`;
+  }
+  el.innerHTML = body + `<button class="wide pri" data-a="done">Done: give the house back</button><p class="help" style="text-align:center">${left}</p>`;
+  const on = (a, f) => { const b = el.querySelector(`[data-a=${a}]`); if (b) b.onclick = f };
+  el.querySelectorAll('[data-saw]').forEach(b => b.onclick = () => ctAct('answer', {mac: b.dataset.mac, saw: b.dataset.saw}));
+  el.querySelectorAll('[data-w]').forEach(b => b.onclick = () => ctAct('show', {which: b.dataset.w}));
+  on('next', () => ctAct('step', {to: 'green'}));
+  on('check', () => ctAct('step', {to: 'blue'}));
+  on('finish', async () => { if (await ctAct('finish')) refresh() });
+  on('again', () => ctAct('start'));
+  on('undo', async () => { if (await ctAct('undo')){ toast('Old colour orders back'); refresh() } });
+  on('done', ctStop);
+}
 
 // ------------------------------------------------------------- security
 async function security(){

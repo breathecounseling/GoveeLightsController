@@ -29,6 +29,7 @@ import logging
 import threading
 import time
 
+from . import colororder
 from . import protocol as p
 
 log = logging.getLogger(__name__)
@@ -53,7 +54,7 @@ LOCATIONS = {
 }
 _PREV_KEYS = ("name", "pixel_count", "order", "geometry", "geometry_guess", "hidden", "enabled", "role",
               "location", "cloud", "reversed", "follows", "dead", "rehung", "extends", "tip",
-              "calibration", "trim")
+              "calibration", "trim", "color_order")
 
 # The Tip's rows, from its bulb 0: what the owner's landmarks give (Nov 2026). Bulb 0 is
 # "Left (South) corner bottom row", 6 "Right (North) corner 2nd row" (read as the NORTH
@@ -272,6 +273,8 @@ def candidates(cfg, layout=None) -> list[dict]:
                     "where": d.get("location") or "", "cloud": bool((d.get("cloud") or {}).get("enabled")),
                     "joined": (d.get("added_run") or {}).get("joined"), "follows": d.get("follows"),
                     "tip": d.get("tip") if d.get("added_run") else None,
+                    "tip_offer": tip_offer(cfg, layout, mac),
+                    "color_order": d.get("color_order") or "RGB",
                     "last_check": ((d.get("diag") or {}).get("answer_check") or {}).get("value")})
     return out
 
@@ -340,9 +343,14 @@ def add_run(cfg, layout, mac: str, count, where: str, name: str = "", join: str 
         host = zigzag_host(base) if tip else None
         if tip and host is None:                    # (checked before an earlier add is undone)
             raise ValueError("this house has no zigzag (Peak) for it to continue")
+        keep_order = d.get("color_order")          # wiring: a Change keeps it (Take it out restores it)
         if d.get("added_run"):                      # changing an earlier add: start from before it
             _undo(cfg, mac, d, save=False)
         prev = {k: copy.deepcopy(d[k]) for k in _PREV_KEYS if k in d}
+        if keep_order:
+            d["color_order"] = keep_order
+        else:
+            d.pop("color_order", None)
         auto = cfg.auto_name(mac, d) or not d.get("name")
         nm = _unique(name or (loc["name"] if auto else d.get("name")), taken)
         d.update({"name": nm, "pixel_count": count, "enabled": True, "role": loc["role"], "location": where,
@@ -385,6 +393,39 @@ def add_run(cfg, layout, mac: str, count, where: str, name: str = "", join: str 
     if tip:
         out["tip"] = {"visible": tip["visible"], "flip": tip["flip"], "rows": tip["rows"], "host": host.name}
     return out
+
+
+def tip_offer(cfg, layout, mac: str) -> bool:
+    """Offer "Make it the top of the Peak" on this box's card: it was added as "Somewhere
+    else" (the old way to add the Tip, e.g. copying the Peak), the house has a zigzag for
+    it to continue and nothing else continues it yet."""
+    d = cfg.devices.get(mac) or {}
+    if not d.get("added_run") or d.get("location") != "other" or layout is None:
+        return False
+    if any(r.extends and r.mac != mac for r in layout.runs):
+        return False
+    from .layout import Layout
+    base = Layout(copy_runs(layout, {mac})) if mac in {r.mac for r in layout.runs} else layout
+    return zigzag_host(base) is not None
+
+
+def to_peak_top(cfg, layout, mac: str) -> dict:
+    """One tap: move a run added as "Somewhere else" to "Top of the Peak", keeping its bulb
+    count, its name (a default "Run 4" becomes "Tip"), how it's driven and its colour order;
+    the visible bulbs, rows and end are the Tip defaults (change them with Change)."""
+    d = cfg.device(mac)
+    if not d.get("added_run"):
+        raise ValueError("only runs added with 'Add it to the show' can be moved here")
+    count = int(d.get("pixel_count") or 0)
+    if count < 1:
+        raise ValueError("it has no bulb count yet")
+    name = d.get("name") or ""
+    if name == LOCATIONS["other"]["name"]:
+        name = LOCATIONS["peak top"]["name"]
+    c = d.get("cloud") or {}
+    cloud = c.get("enabled")
+    return add_run(cfg, layout, mac, count, "peak top", name=name, output="cloud" if cloud else "lan",
+                   cloud={"sku": c.get("sku"), "device": c.get("device"), "segments": c.get("segments")} if cloud else None)
 
 
 def gable_zones(zones: list[dict], host) -> list[str]:
@@ -495,7 +536,7 @@ def answer_check(ctl, mac: str, scan_wait: float = 3.0, test_s: float = 4.0, sle
         try:
             s = diag.streamer(mac)
             s.enable()
-            s.show([(0, 255, 0)], gradient=False)
+            s.show([colororder.apply_px(colororder.of(d), (0, 255, 0))], gradient=False)
             rt["say"] = ("sent: is the run green now? (answer below)" if status_ok else
                          "sent, but a box that ignores the status command ignores this too")
             rt["ok"] = None if status_ok else False
@@ -545,7 +586,7 @@ def solid(ctl, mac: str, n: int, color: str) -> dict:
         raise ValueError("it is in the show right now; take it out of the show first, or use diagnostics")
     n = max(1, min(p.MAX_RAZER_COLORS, int(n)))
     s = ctl.diag.rt(mac)
-    s.show([p.hex_rgb(color)] * n, gradient=False)
+    s.show([colororder.apply_px(colororder.of(ctl.cfg.devices.get(mac)), p.hex_rgb(color))] * n, gradient=False)
     return {"n": n}
 
 def _driven(e, mac: str) -> bool:

@@ -174,6 +174,9 @@ class BulbCheck:
         if self.st is None and self.ctl.match_state:
             with self.ctl.lock:                   # a colour test ends first: it would release the boxes under the walk
                 self.ctl._end_match()
+        ct = getattr(self.ctl, "colourtest", None)
+        if ct is not None and ct.active:
+            ct.stop("bulb check")                 # one test on the lights at a time
         with self.lock:
             fresh = self.st is None
             now = self.clock()

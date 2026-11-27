@@ -124,6 +124,42 @@ the very last step before the frame is sent, after the global brightness and lat
 dimming. A run you never touched sends exactly what it did before. **Reset all runs**
 puts everything back. An older `"trim"` setting is read as the gain.
 
+### Colours look wrong? (colour order)
+
+If reds look **pink**, orange looks pink and blue looks green or cyan (a Broncos game in
+pink and cyan instead of orange and blue), the box is most likely reading red, green and
+blue in a different order than the app sends them. That is wiring, not taste, so it is
+fixed per run: More → *Match the runs* → **Colours look wrong?** (also linked from the
+Bulb check card).
+
+1. Every run shows one plain test colour. Look at the house (not the phone: the picture in
+   the app always shows the colours the show means) and tap, for each run, **Red**,
+   **Green**, **Blue** or **Other / off**.
+2. **Next: the second colour**, same question. From the two answers the app knows the
+   order (the third colour follows); **Check with a third colour first** is an optional
+   check, and an answer that doesn't add up leaves that run alone and says so.
+3. **Fix it and show me** saves it and shows orange and blue stripes on every run. Switch
+   **Before / After** to see the difference from the street. **Undo** puts the old orders
+   back; **Done** gives the house back to what was playing.
+
+It takes over the lights the way the Bulb check does: the show carries on underneath and
+comes back when you tap Done, switch the lights off, stop, pick something, or after 4
+minutes without a tap, and it won't start while a show is playing. Lights that were off
+switch on for the test and off again after it.
+
+Know your wiring already? Open **Colour order of each run** in the same card and pick it
+(R-G-B is normal; R-B-G is green and blue swapped, G-R-B red and green, B-G-R red and
+blue). It is stored per box as `"color_order"` (RGB, RBG, GRB, GBR, BRG or BGR) and applied
+at the very last step of everything sent to that box: the show's frames, the Govee cloud's
+colours, WLED, and the test colours in the Fourth run card and diagnostics. A box without
+it sends exactly what it always did. **Reset all runs** does not change it (wiring, not
+taste); *Take it out* on an added run puts it back as it was before the run was added, and
+*Change* keeps it.
+
+Palettes are editable too (More → **Palettes**, and the colours of a preset in Create),
+but pink reds *everywhere* are almost never the palette: it is the colour order, or bulbs
+whose blue is strong (then "A bit warmer" for that run helps). Run the test first.
+
 ## Presets on your house
 
 The built-in presets were designed on a house with runs and zones called *Peak* (a zigzag

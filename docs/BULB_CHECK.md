@@ -30,6 +30,11 @@ tap **It works now: clear the mark**, or tap its chip under the run (*Bulb 12 âœ
 then white. A bulb with a broken colour channel stands out: dark in one colour, pinkish or
 yellowish in white, or the wrong colour altogether. Then walk that run to get its number.
 
+A **whole run** the wrong colour (every red pinkish, orange pink, blue green or cyan) is not
+a bulb: it is the box's colour order. Tap **Colours look wrong?** at the bottom of the
+card (it opens *Match the runs*): two questions per run from the street fix it; see the
+README, *Colours look wrong? (colour order)*.
+
 ## What happens to the show
 
 * While the check runs it has the lights; everything else (the schedule, the rotation, a

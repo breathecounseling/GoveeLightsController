@@ -24,7 +24,7 @@ from .fx import FX
 from .modulation import SHAPES, SOURCES
 from .palettes import BUILTIN, all_palettes, categories
 from .scene import BLEND_INFO, BLENDS
-from . import addrun, calendar_builtin
+from . import addrun, calendar_builtin, colororder
 from .cloud import CloudError
 from . import firstrun
 from . import tonight
@@ -291,6 +291,9 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
                     return self._json(ctl.layout_info())
                 if path == "/api/fourth":             # More -> Fourth run (never the API key itself)
                     return self._json(ctl.fourth_state())
+                if path == "/api/colours":            # Match the runs -> Colours look wrong?
+                    return self._json({"runs": ctl.colourtest.runs(), "test": ctl.colourtest.view(),
+                                       "orders": list(colororder.ORDERS)})
                 if path == "/api/bulbs":              # More -> Bulb check: runs, marked bulbs, the walk
                     return self._json({"runs": ctl.bulbcheck.runs(), "check": ctl.bulbcheck.view(),
                                        "idle_s": ctl.bulbcheck.IDLE_S})
@@ -557,8 +560,33 @@ def make_handler(ctl: Controller, on_quit, auth: Auth):
             if a == "bulbs/rehung":                 # mark / clear a re-hung section
                 return {"ok": True, "rehung": ctl.bulbcheck.mark_rehung(str(b["mac"]), int(b["from"]), int(b["to"]),
                                                                         bool(b.get("on", True)))}
+            if a == "colours/test":                 # "Colours look wrong?": start / answer / step / finish / show / undo / stop
+                ct, act = ctl.colourtest, str(b.get("action", ""))
+                if act == "start":
+                    v = ct.start()
+                elif act == "answer":
+                    v = ct.answer(str(b["mac"]), str(b.get("saw", "")))
+                elif act == "step":
+                    v = ct.step(str(b.get("to", "")))
+                elif act == "finish":
+                    v = ct.finish()
+                elif act == "show":
+                    v = ct.show(str(b.get("which", "")))
+                elif act == "undo":
+                    v = ct.undo()
+                elif act == "stop":
+                    ct.stop("done")
+                    v = None
+                else:
+                    raise ValueError(f"unknown step {act!r}")
+                return {"ok": True, "test": v, "runs": ct.runs()}
+            if a == "colours/order":                # set one run's colour order directly
+                return {"ok": True, **ctl.set_color_order(str(b["mac"]), str(b.get("order", ""))),
+                        "runs": ctl.colourtest.runs()}
             if a == "run/add":
                 return {"ok": True, **ctl.add_run(b)}
+            if a == "run/peak-top":                 # Fourth run: move a "Somewhere else" run to the top of the Peak
+                return {"ok": True, **ctl.run_to_peak_top(str(b["mac"]))}
             if a == "run/remove":
                 return {"ok": True, "name": ctl.remove_run(str(b["mac"]))}
             if a == "run/blink":

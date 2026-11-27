@@ -13,6 +13,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from . import colororder
 from . import protocol as p
 from .auth import Auth
 from . import winconsole
@@ -80,6 +81,13 @@ class App:
         if not s.realtime:
             s.enable()
         return s
+
+    def fix(self, mac: str, rgb, raw: bool = False):
+        """A test colour as this box must receive it (its colour order, colororder.py), so
+        the tests here show the colour you picked; raw=True sends the bytes as they are."""
+        if raw:
+            return tuple(rgb)
+        return colororder.apply_px(colororder.of(self.cfg.devices.get(mac)), rgb)
 
     def n_for(self, mac: str, n=None) -> int:
         if n:
@@ -200,7 +208,7 @@ class App:
             return {"ok": True}
         if path == "solid":                       # n copies of one colour
             s = self.rt(mac)
-            rgb = p.hex_rgb(b.get("color", "#00ff00"))
+            rgb = self.fix(mac, p.hex_rgb(b.get("color", "#00ff00")), b.get("raw"))
             n = self.n_for(mac, b.get("n")) if b.get("n") else 1
             s.show([rgb] * n, gradient=False)
             return {"ok": True, "n": n}
@@ -209,7 +217,7 @@ class App:
             n = self.n_for(mac, b.get("n"))
             idx = int(b.get("index", 0))
             frame = [BLACK] * n
-            on = p.hex_rgb(b.get("color", "#00ff00"))
+            on = self.fix(mac, p.hex_rgb(b.get("color", "#00ff00")), b.get("raw"))
             for k in range(int(b.get("width", 1))):
                 if 0 <= idx + k < n:
                     frame[idx + k] = on
@@ -217,7 +225,7 @@ class App:
             return {"ok": True, "n": n, "index": idx, "in_range": 0 <= idx < n}
         if path == "gradient_test":
             s = self.rt(mac)
-            cols = [p.hex_rgb(c) for c in b.get("colors", ["#ff0000", "#0000ff"])]
+            cols = [self.fix(mac, p.hex_rgb(c), b.get("raw")) for c in b.get("colors", ["#ff0000", "#0000ff"])]
             s.show(cols, gradient=bool(b.get("gradient", True)))
             return {"ok": True}
         if path == "landmark":
@@ -234,7 +242,7 @@ class App:
         if path == "chase":
             s = self.rt(mac)
             n = self.n_for(mac, b.get("n"))
-            col = p.hex_rgb(b.get("color", "#ffffff"))
+            col = self.fix(mac, p.hex_rgb(b.get("color", "#ffffff")), b.get("raw"))
 
             def anim(i, n=n, col=col):
                 f = [BLACK] * n
@@ -254,11 +262,12 @@ class App:
             s.set_keepalive(0)
             if not s.realtime:
                 s.enable()
-            s.show([p.hex_rgb(b.get("color", "#ff00ff"))] * self.n_for(mac))
+            s.show([self.fix(mac, p.hex_rgb(b.get("color", "#ff00ff")), b.get("raw"))] * self.n_for(mac))
             return {"ok": True}
         if path == "colorwc":
             ip = self.cfg.device(mac)["ip"]
-            self.lan.send(ip, p.colorwc_msg(p.hex_rgb(b.get("color", "#000000")), int(b.get("kelvin", 0))))
+            self.lan.send(ip, p.colorwc_msg(self.fix(mac, p.hex_rgb(b.get("color", "#000000")), b.get("raw")),
+                                            int(b.get("kelvin", 0))))
             s = self.streamers.get(mac)
             if s:                                  # observed on H805A: this exits realtime
                 s.stop_anim()
@@ -278,8 +287,8 @@ class App:
         if path == "finger_sketch":               # ptReal fallback (experimental)
             dev = self.cfg.device(mac)
             idx = int(b.get("index", 0))
-            col = p.hex_rgb(b.get("color", "#00ff00"))
-            bg = p.hex_rgb(b.get("background", "#000000"))
+            col = self.fix(mac, p.hex_rgb(b.get("color", "#00ff00")), b.get("raw"))
+            bg = self.fix(mac, p.hex_rgb(b.get("background", "#000000")), b.get("raw"))
             pk = p.finger_sketch_packets([(col, [idx])], background=bg) + [p.FINGER_SKETCH_ACTIVATE]
             self.lan.send(dev["ip"], p.ptreal_msg(pk))
             return {"ok": True, "packets": [x.hex() for x in pk]}

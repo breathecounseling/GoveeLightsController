@@ -54,6 +54,40 @@ gable's triangle in every Peak preset, picture, word and tree (details in FOURTH
 until you add it in the app (the with-Tip frames are checked in tests/test_r13_tip.py). If it never answers on the LAN, paste a Govee API key there and add it with
 *Govee cloud (slow)*. Nothing changes for the show until you add it.
 
+## Pink reds, a pink-and-cyan Broncos game: colour order
+
+Nov 2026, watching the real lights: "a lot of your reds are pink; Broncos came out cyan and
+pink instead of blue and orange". The Broncos preset is #ff4a00 orange and #2050ff blue;
+orange -> pink and blue -> cyan is exactly what a box that swaps green and blue (R-B-G)
+makes of them. Diagnostics earlier only showed that Peak and Accent take RGB frames, not
+RGBW ("red/green/blue/off pattern: misparsed, RGB only"); not which byte is which. Whether
+it is every box or only some (the Tip H705E is new; the H805As may differ) is what the test
+finds out:
+
+* More → *Match the runs* → **Colours look wrong?**: two questions per run from the street
+  (what colour is it?), then **Fix it and show me** shows orange/blue stripes with
+  **Before / After**. Saved per box as `"color_order"`; nothing else changes. Also a small
+  picker per run under *Colour order of each run*. Reset in Match the runs leaves it alone.
+* Palettes (More → *Palettes*) and a preset's colours (Create) can be edited, but don't
+  start there: pink reds everywhere are the colour order or the bulbs' strong blue
+  ("A bit warmer" on that run), not the palettes.
+* Not yet known: whether the Govee app's own colour command (colorwc, used only in
+  diagnostics here) is affected the same way on these boxes; the app applies the same order
+  to it. If the Govee app shows correct colours but our test needs R-B-G, that's the
+  realtime (razer) path only, which is what the show uses anyway.
+
+## Tip lit only in some looks
+
+"Not all the effects are using the tip box but some are": on the pushed version the Tip was
+added as **Somewhere else** copying the Peak. That way it only borrows the Peak's colours in
+presets that leave it dark, and whole-house effects light it as a straight line at the
+bottom of the house (so it looks unrelated to the gable). The Fourth run card now shows
+**Make it the top of the Peak** on such a box: one tap moves it to *Top of the Peak* (same
+bulb count, name and colour order; 12 visible bulbs in rows 7, 4, 1; *Change* to adjust).
+After that every built-in preset that lights the Peak lights the Tip too
+(tests/test_r13_tip_presets.py checks all of them; none leaves it dark), and it is part of
+*Zigzag top half*, *Whole front gable* and *Whole front*.
+
 ## After a repair: Bulb check
 
 More → *Bulb check* in the app (details in [BULB_CHECK.md](BULB_CHECK.md)): walk each run

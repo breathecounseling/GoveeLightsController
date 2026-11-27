@@ -113,6 +113,11 @@ If the Tip is wired differently, change the row numbers in the sheet (*Change* o
 or `TIP_ROWS` in `goveelights/addrun.py`; nothing else depends on them. Camera mapping can
 still measure it afterwards like any other run.
 
+Added it earlier as **Somewhere else** (copying the Peak)? Then it lights only in some
+looks. Its card shows **Make it the top of the Peak**: one tap moves it there, keeping its
+bulb count, name, how it's driven and its colour order (a default name "Run 4" becomes
+"Tip"); *Change* adjusts the rows afterwards.
+
 Effects that run along a strip (comets, scanners, mirrors, the glints' glow) also carry on
 from Peak bulb 107 into Tip bulb 0, so they climb on up to the point instead of starting
 over on the Tip's 12 bulbs.
