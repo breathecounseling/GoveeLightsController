@@ -23,6 +23,7 @@ from typing import Any, Callable
 
 from .color import (BLACK, Color, clamp, fbm2, hash01, hex_to_rgb, hsv, lerp, palette, scale)
 from .layout import Pixel
+from . import bignum
 
 
 @dataclass
@@ -691,42 +692,64 @@ def picture(t, p, P):
     return c
 
 
-@effect("countdown", "Countdown", [
+@frame_effect("countdown", "Countdown", [
     Param("target", "number", 0, "Target time (unix seconds; 0 = demo loop)"),
     Param("colors", "colors", ["#ffffff", "#ffd000", "#ff2050"], help="digits, eaves fill, final flash"),
     Param("seconds", "int", 10, "Count the last (s)", 3, 99, 1),
     Param("part", "choice", "digits", options=["digits", "fill"],
           help="digits: big numbers (target the Peak); fill: a bar that fills up (target the eaves)"),
 ], "Counts down to a moment: big digits on the zigzag while the eaves fill up, then a flash at zero.")
-def countdown(t, p, P):
+def countdown(t, ctx, P, st):
+    L, idx = ctx.layout, ctx.idx
+    px = L.pixels
+    frame = [BLACK] * len(px)
     tgt = P["target"]
     remaining = (tgt - _time.time()) if tgt else (P["seconds"] - (t % (P["seconds"] + 2)))
-    cols = P["colors"]
+    cols = P["colors"] or ["#ffffff"]
     if remaining <= 0:                              # the moment: white flash fading over 2 s
-        return scale(cols[-1], max(0.0, 1 + remaining / 2.0))
+        c = scale(cols[-1], max(0.0, 1 + remaining / 2.0))
+        for i in idx:
+            frame[i] = c
+        return frame
     if P["part"] == "digits":
         n = int(math.ceil(remaining))
         if n > P["seconds"]:
-            return scale(cols[0], 0.08)
-        bmp = text_bitmap(str(n))
-        ch = pic_sample(bmp, p.rnx, p.rny, min(1.0, len(bmp[0]) / 9))
-        frac = remaining - math.floor(remaining)    # each digit fades as its second passes
-        return scale(cols[0], 0.6 + 0.4 * frac) if ch != "." else BLACK
+            c = scale(cols[0], 0.08)
+            for i in idx:
+                frame[i] = c
+            return frame
+        # each number lands at full brightness and settles a little as its second passes
+        frac = remaining - math.floor(remaining) or 1.0
+        c = scale(cols[0], 0.8 + 0.2 * frac ** 2)
+        for i in bignum.cells(L, idx, str(n)):
+            frame[i] = c
+        tick = cols[1 % len(cols)]                  # with the Tip: its apex ticks each second
+        for i in bignum.crown(L, idx):
+            frame[i] = scale(tick, 0.15 + 0.85 * frac ** 3)
+        return frame
     fill = 1 - min(1.0, remaining / max(1, P["seconds"]))
-    return cols[1 % len(cols)] if p.ru <= fill else scale(cols[1 % len(cols)], 0.05)
+    on, off = cols[1 % len(cols)], scale(cols[1 % len(cols)], 0.05)
+    for i in idx:
+        frame[i] = on if px[i].ru <= fill else off
+    return frame
 
 
-@effect("digits", "Number", [
+@frame_effect("digits", "Number", [
     Param("value", "int", 24, "Number", 0, 99, 1),
-    Param("colors", "colors", ["#ffffff"]),
+    Param("colors", "colors", ["#ffffff"], help="the number; a second colour for the star on the Tip"),
     Param("pulse", "number", 0.3, "Pulse", 0, 1, 0.05),
 ], "A number on the zigzag (e.g. days to go). Target the Peak.")
-def digits(t, p, P):
-    bmp = text_bitmap(str(P["value"]))
-    ch = pic_sample(bmp, p.rnx, p.rny, min(1.0, len(bmp[0]) / 9))
-    if ch == ".":
-        return BLACK
-    return scale(P["colors"][0], 1 - P["pulse"] * (0.5 - 0.5 * math.cos(2 * math.pi * t / 1.5)))
+def digits(t, ctx, P, st):
+    L, idx = ctx.layout, ctx.idx
+    frame = [BLACK] * len(L.pixels)
+    cols = P["colors"] or ["#ffffff"]
+    v = 1 - P["pulse"] * (0.5 - 0.5 * math.cos(2 * math.pi * t / 1.5))
+    c = scale(cols[0], v)
+    for i in bignum.cells(L, idx, str(int(P["value"]))):
+        frame[i] = c
+    for i in bignum.crown(L, idx):                  # with the Tip: a little star on the apex
+        frame[i] = scale(cols[1 % len(cols)], 0.55 + 0.45 * v)
+    return frame
 
 
 # ------------------------------------------------------------ weather overlays

@@ -28,7 +28,7 @@ import math
 import random
 import time as _time
 
-from .. import font
+from .. import bignum
 from .. import geometry as geo
 from ..color import BLACK, hash01, lerp
 from ..effects import EFFECTS, Param, frame_effect
@@ -978,9 +978,15 @@ def ball_drop(t, ctx, P, st):
             g, _ = glint(i, clock, 0.08, 0.05, 0.4, seed, 1)
             c = lerp(gcol, WARM_WHITE, 0.6 * g)
             _add(frame, i, c, lvl + 0.5 * g)
+        counting = phase == "drop" and P["countdown"] == "digits"
+        nsec = max(1, math.ceil(r - 1e-9)) if counting else 0
+        if phase == "drop":
+            # the sky first, kept off the number and the bulbs around it: a dark margin
+            # so the digits read against it
+            _bd_wait_sky(frame, st, px, P, clock, seed, 0.3, stars=False,
+                         skip=_bd_digit_clear(st, ctx.layout, nsec) if counting else None)
         # the countdown on the zigzag
-        if phase == "drop" and P["countdown"] == "digits":
-            nsec = max(1, math.ceil(r - 1e-9))
+        if counting:
             _bd_digit(frame, st, ctx, P, nsec, r)
         elif phase == "drop" and P["countdown"] == "rows":
             dc = P["digit_color"]
@@ -991,8 +997,6 @@ def ball_drop(t, ctx, P, st):
                     _add(frame, i, dc, v)
         elif phase == "wait":
             _bd_wait_sky(frame, st, px, P, clock, seed, 1.0)
-        if phase == "drop":
-            _bd_wait_sky(frame, st, px, P, clock, seed, 0.3, stars=False)
         size = 1.0
         ws = P.get("wait_size", 1.0)
         if phase == "wait":
@@ -1001,8 +1005,9 @@ def ball_drop(t, ctx, P, st):
             size = 1.0 + (ws - 1.0) * (1.0 - _smooth(N - r))
         if phase == "wait" and P["mode"] == "clock" and r < N + 60:
             size += 0.15 * math.sin(clock * 6.3)   # the last minute: the waiting ball pulses
-        _bd_ball(frame, st, L, P, clock, cx, by, size, _bd_show(r) if phase == "drop" and
-                 P["countdown"] == "digits" else 0.0)
+        _bd_ball(frame, st, L, P, clock, cx, by, size, _bd_show(r) if counting else 0.0,
+                 keep=_bd_digit_keep(st, ctx.layout, nsec) if counting else None,
+                 margin=_bd_digit_clear(st, ctx.layout, nsec) if counting else None)
 
     # ---------------------------------------------------------- sparks (with afterglow)
     fresh = [BLACK] * n
@@ -1043,14 +1048,16 @@ def _bd_wait_level(P, p, i, clock, seed) -> float:
     return lvl
 
 
-def _bd_wait_sky(frame, st, px, P, clock, seed, k, stars=True):
+def _bd_wait_sky(frame, st, px, P, clock, seed, k, stars=True, skip=None):
     """The zigzag behind the waiting ball: the sky colour with a slow shimmer down the rows,
-    and a few silver stars."""
+    and a few silver stars (no sky on the bulbs in skip)."""
     sky = P["sky_color"]
     lit = any(sky)
     if lit:
         for r, row in enumerate(st["rows"]):
             for i in row:
+                if skip and i in skip:
+                    continue
                 s = 0.7 + 0.3 * math.sin(clock * 1.1 - r * 0.7 + hash01(i, seed, 5) * 1.5)
                 _add(frame, i, sky, k * s)
     if not stars:
@@ -1070,9 +1077,15 @@ def _bd_show(r: float) -> float:
     return _smooth((f - 0.35) / 0.2)
 
 
-def _bd_ball(frame, st, L, P, clock, x, y, size=1.0, show=0.0):
+MARGIN_CORE = 0.4   # the ball core's ceiling on a number's dark margin
+
+
+def _bd_ball(frame, st, L, P, clock, x, y, size=1.0, show=0.0, keep=None, margin=None):
     """The crystal ball: white-hot core, faceted gold / ice glints, a soft halo.
-    show > 0 (a countdown number on stage): smaller, without the dark ring."""
+    show > 0 (a countdown number on stage): smaller, without the dark ring. The dark ring
+    leaves the bulbs in keep (the number's) alone, so the ball never dims a digit; on the
+    number's dark margin (margin minus keep) the core only glows faintly, so it never
+    lights a blob beside a stroke that would read as part of the digit."""
     R = 1.15 * size * (1.0 - 0.3 * show)
     ring = 0.6 * (1.0 - show)
     halo = 0.22 * (1.0 - show)
@@ -1106,12 +1119,14 @@ def _bd_ball(frame, st, L, P, clock, x, y, size=1.0, show=0.0):
             edge = _smooth((R - d) / 0.45)
             a = frame[i]
             w = edge
+            if margin and i in margin and not (keep and i in keep):
+                w = min(w, MARGIN_CORE / b)            # faint: the margin stays dark
             frame[i] = (a[0] * (1 - w) + c[0] * b * w, a[1] * (1 - w) + c[1] * b * w,
                         a[2] * (1 - w) + c[2] * b * w)
         else:
             q = 1.0 - (d - R) / 1.4
             a = frame[i]
-            k = 1.0 - ring * q                        # a dark ring sets the ball off the digits
+            k = 1.0 if keep and i in keep else 1.0 - ring * q   # a dark ring sets the ball off
             hq = halo * q * q
             frame[i] = (a[0] * k + hq, a[1] * k + 0.75 * hq, a[2] * k + 0.3 * hq)
     # the star bulbs: glow with the ball while it waits, dim once it has left
@@ -1121,53 +1136,48 @@ def _bd_ball(frame, st, L, P, clock, x, y, size=1.0, show=0.0):
             _add(frame, i, GOLD, 0.25)
 
 
-def _bd_digit_cells(st, px, nsec: int) -> list:
-    """[(bulb, weight)] lighting the number on the zigzag's text rows (the bottom five),
-    centred, as bold as fits. Digits stand still, so they are drawn crisply: each bulb
-    by how much of its own footprint lit font columns cover."""
-    key = ("cells", nsec)
-    cache = st["txt"]
-    out = cache.get(key)
-    if out is not None:
-        return out
-    rows = st["rows"][:font.ROWS]
-    bm = font.layout(str(nsec))
-    out = []
-    if rows and bm.width:
-        nr = len(rows)
-        dx = sorted(px[b].x - px[a].x for r in rows for a, b in zip(r, r[1:]) if px[b].x - px[a].x > 1e-6)
-        pitch = max(0.2, min(2.0, dx[len(dx) // 2])) if dx else 1.0
-        top = rows[-1]
-        avail = px[top[-1]].x - px[top[0]].x + pitch
-        cw = max(0.3, min(2.0 * pitch, avail / bm.width))
-        x0 = st["cx"] - bm.width * cw / 2
-        h = pitch / 2
-        for k, row in enumerate(rows):
-            gr = font.ROWS - 1 - (round(k * (font.ROWS - 1) / (nr - 1)) if nr > 1 else 2)
-            for i in row:
-                x = px[i].x
-                cov = 0.0
-                lo, hi = (x - h - x0) / cw, (x + h - x0) / cw
-                c = max(0, math.floor(lo))
-                while c < hi and c < bm.width:
-                    if bm.cols[c] >> gr & 1:
-                        cov += min(hi, c + 1) - max(lo, c)
-                    c += 1
-                w = _smooth(cov * cw / pitch * 1.4 - 0.2)
-                if w > 0.02:
-                    out.append((i, w))
-    if len(cache) > 128:
-        cache.clear()
-    cache[key] = out
+def _bd_number(st, layout, nsec: int) -> tuple:
+    """(cells, keep, clear) for one number of the countdown, worked out once and cached in
+    its own dict (st["dg"]: at most 60 numbers, so nothing is ever evicted mid-drop).
+    cells: [(bulb, weight)] lighting the number bulb for bulb in the big-number font
+    (bignum.py: all six rows of the Peak, the Tip left to the ball); keep: those bulbs;
+    clear: keep plus every bulb next to them (the dark margin the sky leaves off)."""
+    cache = st.setdefault("dg", {})
+    out = cache.get(nsec)
+    if out is None:
+        if len(cache) >= 256:
+            cache.clear()
+        cells = list(bignum.cells(layout, st["zig"], str(nsec)).items())
+        keep = frozenset(i for i, _ in cells)
+        px = layout.pixels
+        clear = set(keep)
+        for i in keep:
+            clear.update(j for j, _ in geo.near(layout, px[i].x, px[i].y, 0.95))
+        out = cache[nsec] = (cells, keep, frozenset(clear))
     return out
 
 
+def _bd_digit_cells(st, layout, nsec: int) -> list:
+    """[(bulb, weight)] lighting the number on the zigzag."""
+    return _bd_number(st, layout, nsec)[0]
+
+
+def _bd_digit_keep(st, layout, nsec: int) -> frozenset:
+    """The number's own bulbs."""
+    return _bd_number(st, layout, nsec)[1]
+
+
+def _bd_digit_clear(st, layout, nsec: int) -> frozenset:
+    """The number's bulbs and every bulb next to them: kept clear of the sky."""
+    return _bd_number(st, layout, nsec)[2]
+
+
 def _bd_digit(frame, st, ctx, P, nsec, r):
-    cells = _bd_digit_cells(st, ctx.layout.pixels, nsec)
-    k = 0.3 + 0.7 * _bd_show(r)                       # each new number lands bright, then dims
+    cells = _bd_digit_cells(st, ctx.layout, nsec)
+    k = 0.6 + 0.4 * _bd_show(r)                       # each new number lands bright, then settles
     dc = P["digit_color"]
-    for i, w in cells:
-        _add(frame, i, dc, w * k)
+    for i, w in cells:                               # the number replaces the sky behind it
+        frame[i] = lerp(BLACK, dc, w * k)
 
 
 def _bd_boom(frame, st, ctx, P, since, fade):

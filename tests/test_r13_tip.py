@@ -221,7 +221,7 @@ class _FixedDT(_dt.datetime):
 # the pictures' crown move up, or the strip is 12 bulbs longer (effects that run along it).
 TIP_GOLDEN = {
     "advent-calendar": "65027b5347400bd8", "apex-ripples": "880eff34785c59c9", "ball-drop-at-midnight": "8a22628a34bcd00e",
-    "ball-drop-preview-loop": "a17ab911d18945dd", "breathing-comets": "a3a8bef3c3e3ac6a", "broncos-game-day": "909e7e3613cb8481",
+    "ball-drop-preview-loop": "1a9163b0c12dfd22", "breathing-comets": "a3a8bef3c3e3ac6a", "broncos-game-day": "909e7e3613cb8481",
     "candy-cane": "5e2363004f4e511d", "champagne-fizz": "4859f951a5cf63c6", "christmas-tree": "fab6681e34c6e510",
     "christmas-twinkle": "c9e9b8b992164b14", "comets": "c7cf23e55a210d3b", "diamond-glitter": "d7d587adcdf79946",
     "dusk-demo": "67b9c39628124cbd", "dusk-to-night": "8d77cfd04e66bcd4", "easter-pastels": "2886ea70aa07eef4",

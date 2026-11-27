@@ -301,7 +301,7 @@ FROZEN = 1796940000.0
 # date at 2026-12-10, TZ America/Denver, the house location published to the dusk sky).
 GOLDEN = {
     "advent-calendar": "72e71ceca625d939", "apex-ripples": "45c811f2ec4b9762", "ball-drop-at-midnight": "b35d50bf09ab7fdb",
-    "ball-drop-preview-loop": "4726ab3965e9a61d", "breathing-comets": "55c866657d25dcaf", "broncos-game-day": "4464c19356fec30b",
+    "ball-drop-preview-loop": "e2029bc03a39544b", "breathing-comets": "55c866657d25dcaf", "broncos-game-day": "4464c19356fec30b",
     "candy-cane": "12065aab5f091df5", "champagne-fizz": "5c0539e4fdac60a4", "christmas-tree": "ee03b0f3e02a3541",
     "christmas-twinkle": "be037db674f1bdc7", "comets": "dc5e84a72ec270f5", "diamond-glitter": "def4c8ac75428c33",
     "dusk-demo": "8092ba8f36d0972a", "dusk-to-night": "71ac91fec4beeaf4", "easter-pastels": "e908d0cd21767783",
