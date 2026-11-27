@@ -211,6 +211,55 @@ class BigNumberTests(unittest.TestCase):
                         checked += 1
             self.assertGreater(checked, 20)
 
+    def test_the_ball_core_stays_off_the_margin(self):
+        """The ball crossing the number may light its own digit bulbs, but only dimly the
+        dark margin around them, so no stray blob reads as part of a stroke."""
+        for L in (self.L, self.T):
+            px = L.pixels
+            idx = L.indices("Peak")
+            own = {i for r in bignum.zigzag(L, idx)[0] for i in r}
+            seen = 0
+            for P, st, cols, n in self.ball_drop_frames(L):
+                on = set(bignum.cells(L, idx, str(n)))
+                margin = (wn._bd_digit_clear(st, L, n) - on) & own
+                stray = [i for i in margin if max(cols[i]) > 0.5]
+                self.assertEqual(stray, [], (n, L is self.T))
+                bx, by = st["ball"]
+                core = [i for i in own if (px[i].x - bx) ** 2 + (px[i].y - by) ** 2 < 0.6]
+                if core:                                    # the ball is still seen
+                    self.assertGreater(max(max(cols[i]) for i in core), 0.3, n)
+                    seen += 1
+            self.assertGreater(seen, 20)
+
+    def test_digit_bulbs_are_worked_out_once_per_number(self):
+        """A 60 s drop: each number's bulbs, margin and keep set are computed once and
+        reused (never rebuilt per frame, never wiped partway through the drop)."""
+        calls = []
+        real = bignum.cells
+
+        def counting(layout, idx, text, *a, **k):
+            calls.append(text)
+            return real(layout, idx, text, *a, **k)
+        L = self.L
+        idx = L.indices("Peak")
+        P = EFFECTS["ball_drop"].resolve({"mode": "loop", "seconds": 60, "pause": 1})
+        st = {}
+        bignum.cells = counting
+        try:
+            keeps = {}
+            for k in range(int(61.0 / 0.1)):
+                t = k * 0.1
+                EFFECTS["ball_drop"].fn(t, Ctx(L, idx, t, 0.1 if k else 0.0), P, st)
+                if st["phase"] == "drop" and st["remaining"] > 0.6:
+                    n = max(1, -int(-st["remaining"] // 1))
+                    keep = wn._bd_digit_keep(st, L, n)
+                    self.assertIsInstance(keep, frozenset)
+                    self.assertIs(keeps.setdefault(n, keep), keep)
+        finally:
+            bignum.cells = real
+        self.assertGreater(len(set(calls)), 50)
+        self.assertEqual(len(calls), len(set(calls)), "a number's bulbs were recomputed")
+
 
 if __name__ == "__main__":
     unittest.main()

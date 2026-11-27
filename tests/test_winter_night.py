@@ -310,7 +310,7 @@ class BallDropTests(unittest.TestCase):
         for k in range(int(5.1 / 0.05) + 1):
             step("ball_drop", L, idx, P, st, k * 0.05, 0.05 if k else 0.0)
         self.assertEqual(st["phase"], "drop")
-        self.assertIn(("cells", 7), st["txt"])        # 6.9 s to go at t = 5.1: shows 7
+        self.assertIn(7, st["dg"])                    # 6.9 s to go at t = 5.1: shows 7
 
     def clock_phase(self, offset, params=None):
         midnight = dt.datetime(2027, 1, 1, 0, 0, 0).timestamp()

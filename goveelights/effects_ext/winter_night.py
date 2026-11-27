@@ -1006,7 +1006,8 @@ def ball_drop(t, ctx, P, st):
         if phase == "wait" and P["mode"] == "clock" and r < N + 60:
             size += 0.15 * math.sin(clock * 6.3)   # the last minute: the waiting ball pulses
         _bd_ball(frame, st, L, P, clock, cx, by, size, _bd_show(r) if counting else 0.0,
-                 keep={i for i, _ in _bd_digit_cells(st, ctx.layout, nsec)} if counting else None)
+                 keep=_bd_digit_keep(st, ctx.layout, nsec) if counting else None,
+                 margin=_bd_digit_clear(st, ctx.layout, nsec) if counting else None)
 
     # ---------------------------------------------------------- sparks (with afterglow)
     fresh = [BLACK] * n
@@ -1076,10 +1077,15 @@ def _bd_show(r: float) -> float:
     return _smooth((f - 0.35) / 0.2)
 
 
-def _bd_ball(frame, st, L, P, clock, x, y, size=1.0, show=0.0, keep=None):
+MARGIN_CORE = 0.4   # the ball core's ceiling on a number's dark margin
+
+
+def _bd_ball(frame, st, L, P, clock, x, y, size=1.0, show=0.0, keep=None, margin=None):
     """The crystal ball: white-hot core, faceted gold / ice glints, a soft halo.
     show > 0 (a countdown number on stage): smaller, without the dark ring. The dark ring
-    leaves the bulbs in keep (the number's) alone, so the ball never dims a digit."""
+    leaves the bulbs in keep (the number's) alone, so the ball never dims a digit; on the
+    number's dark margin (margin minus keep) the core only glows faintly, so it never
+    lights a blob beside a stroke that would read as part of the digit."""
     R = 1.15 * size * (1.0 - 0.3 * show)
     ring = 0.6 * (1.0 - show)
     halo = 0.22 * (1.0 - show)
@@ -1113,6 +1119,8 @@ def _bd_ball(frame, st, L, P, clock, x, y, size=1.0, show=0.0, keep=None):
             edge = _smooth((R - d) / 0.45)
             a = frame[i]
             w = edge
+            if margin and i in margin and not (keep and i in keep):
+                w = min(w, MARGIN_CORE / b)            # faint: the margin stays dark
             frame[i] = (a[0] * (1 - w) + c[0] * b * w, a[1] * (1 - w) + c[1] * b * w,
                         a[2] * (1 - w) + c[2] * b * w)
         else:
@@ -1128,33 +1136,40 @@ def _bd_ball(frame, st, L, P, clock, x, y, size=1.0, show=0.0, keep=None):
             _add(frame, i, GOLD, 0.25)
 
 
-def _bd_digit_cells(st, layout, nsec: int) -> list:
-    """[(bulb, weight)] lighting the number on the zigzag, bulb for bulb in the big-number
-    font (bignum.py: all six rows of the Peak, the Tip left to the ball)."""
-    key = ("cells", nsec)
-    cache = st["txt"]
-    out = cache.get(key)
+def _bd_number(st, layout, nsec: int) -> tuple:
+    """(cells, keep, clear) for one number of the countdown, worked out once and cached in
+    its own dict (st["dg"]: at most 60 numbers, so nothing is ever evicted mid-drop).
+    cells: [(bulb, weight)] lighting the number bulb for bulb in the big-number font
+    (bignum.py: all six rows of the Peak, the Tip left to the ball); keep: those bulbs;
+    clear: keep plus every bulb next to them (the dark margin the sky leaves off)."""
+    cache = st.setdefault("dg", {})
+    out = cache.get(nsec)
     if out is None:
-        if len(cache) > 128:
+        if len(cache) >= 256:
             cache.clear()
-        out = cache[key] = list(bignum.cells(layout, st["zig"], str(nsec)).items())
-    return out
-
-
-def _bd_digit_clear(st, layout, nsec: int) -> set:
-    """The number's bulbs and every bulb next to them: kept clear of the sky."""
-    key = ("clear", nsec)
-    cache = st["txt"]
-    out = cache.get(key)
-    if out is None:
+        cells = list(bignum.cells(layout, st["zig"], str(nsec)).items())
+        keep = frozenset(i for i, _ in cells)
         px = layout.pixels
-        out = set()
-        for i, _ in _bd_digit_cells(st, layout, nsec):
-            out.update(j for j, _ in geo.near(layout, px[i].x, px[i].y, 0.95))
-        if len(cache) > 128:
-            cache.clear()
-        cache[key] = out
+        clear = set(keep)
+        for i in keep:
+            clear.update(j for j, _ in geo.near(layout, px[i].x, px[i].y, 0.95))
+        out = cache[nsec] = (cells, keep, frozenset(clear))
     return out
+
+
+def _bd_digit_cells(st, layout, nsec: int) -> list:
+    """[(bulb, weight)] lighting the number on the zigzag."""
+    return _bd_number(st, layout, nsec)[0]
+
+
+def _bd_digit_keep(st, layout, nsec: int) -> frozenset:
+    """The number's own bulbs."""
+    return _bd_number(st, layout, nsec)[1]
+
+
+def _bd_digit_clear(st, layout, nsec: int) -> frozenset:
+    """The number's bulbs and every bulb next to them: kept clear of the sky."""
+    return _bd_number(st, layout, nsec)[2]
 
 
 def _bd_digit(frame, st, ctx, P, nsec, r):
