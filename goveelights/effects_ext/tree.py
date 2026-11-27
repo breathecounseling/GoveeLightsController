@@ -229,10 +229,12 @@ TREE_PARAMS = [
           help="the Peak round the tree; a clean black margin always hugs the tree"),
     Param("sky_level", "number", 0.06, "Night sky brightness", 0, 0.5, 0.01,
           help="keep it low: the tree reads best as a bright shape on a dark gable; 0 = black"),
-    Param("sky_twinkle", "number", 0.05, "Far stars", 0, 1, 0.01,
+    Param("sky_twinkle", "number", 0.02, "Far stars", 0, 1, 0.01,
           help="faint stars twinkling in the sky round the tree (glints per bulb per second)"),
     Param("spread", "number", 1.0, "Tier step", 0, 3, 0.5,
-          help="how far each tier of boughs steps out past the one above (bulbs each side)"),
+          help="how far each tier of boughs steps out past the one above (bulbs each side); "
+               "the honeycomb rows sit half a bulb apart, so a half step only shows on some "
+               "layouts (on the Peak without the Tip 1 and 1.5 draw the same tree)"),
     Param("seed", "int", 7, "Seed", 0, 9999, 1, help="which bulbs are ornaments, and the sparkle pattern"),
 ]
 
@@ -679,7 +681,7 @@ def _tree_hex(t, ctx, P, state, plan) -> list:
         else:
             c = (sk[0] * skl, sk[1] * skl, sk[2] * skl)
             if skt > 0:
-                g = glint(sid[i], clock, skt, 0.4, 1.0, seed + 5, 1)[0] * 0.3
+                g = glint(sid[i], clock, skt, 0.4, 1.0, seed + 5, 1)[0] * 0.15
                 if g > 0:
                     c = (c[0] + (0.8 - c[0]) * g, c[1] + (0.85 - c[1]) * g, c[2] + (1.0 - c[2]) * g)
         if sparking and hash01(sid[i], flick, seed, 6) > 0.7:   # only a sprinkle: the sky stays dark
@@ -787,6 +789,10 @@ def _tree_hex(t, ctx, P, state, plan) -> list:
     gl, glv = P["glow"], P["glow_level"]
     glow_on = max(glow_on, P["pre_glow"])
     halo = P["halo"]
+    if not plan["tip"]:
+        # without the Tip the outline's apex sits right over the tree's small star: a full
+        # halo there glows bigger than the star itself and reads as a second, floating star
+        halo *= 0.4
     flash = P["ignite_flash"] * envelope(ignite, 0.04, 0.5) if 0 <= ignite < 4 else 0.0
     for i in plan["rest"]:
         v = glv * (0.85 + 0.15 * wobble(sid[i], clock, 0.3, seed))

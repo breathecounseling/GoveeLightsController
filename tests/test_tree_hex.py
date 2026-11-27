@@ -304,5 +304,81 @@ class Render(unittest.TestCase):
                     self.assertTrue(all(0.0 <= x <= 1.0 for c in cols for x in c), (prm.name, v))
 
 
+class StreetLegibility(unittest.TestCase):
+    """Review follow-ups: one star, a quiet sky, a fuller tree without the Tip, no ember bar."""
+
+    def test_one_star_without_the_tip(self):
+        # the outline's apex sits right over the small star: its halo must stay well under
+        # the star, or it reads as a second star floating above the tree
+        L = house()
+        idx = L.indices("Whole front gable")
+        p = T.tree_plan(L, idx)
+        for clock in (6.0, 12.0, 20.0):
+            out = call(L, idx, {"intro": 0, "burst_every": 0}, clock=clock)
+            star = min(lum(out[i]) for i in p["star"])
+            near = [lum(out[i]) for i in p["rest"] if p["dist"][i] < 3.5]
+            self.assertTrue(near)
+            self.assertLess(max(near), 0.3, clock)
+            self.assertLess(max(near), star * 0.4, clock)
+
+    def test_tip_keeps_the_full_halo(self):
+        L = house(tip=True)
+        idx = L.indices("Whole front gable")
+        p = T.tree_plan(L, idx)
+        out = call(L, idx, {"intro": 0, "burst_every": 0}, clock=12.0)
+        self.assertGreater(max(lum(out[i]) for i in p["rest"] if p["dist"][i] < 1.0), 0.45)
+
+    def test_far_stars_are_faint_and_few(self):
+        self.assertEqual(EFFECTS["tree"].resolve({})["sky_twinkle"], 0.02)
+        L = house()
+        idx = L.indices("Whole front gable")
+        p = T.tree_plan(L, idx)
+        st, peak, lit = {}, 0.0, 0
+        for k in range(400):
+            out = call(L, idx, {"intro": 0, "burst_every": 0}, st, clock=10 + k * 0.05)
+            sky = [lum(out[i]) for i in p["sky"]]
+            peak = max(peak, max(sky))
+            lit += sum(1 for v in sky if v > 0.08)
+        self.assertLess(peak, 0.2)
+        self.assertLess(lit / 400, 2.0)
+
+    def test_christmas_and_golden_fill_the_gable_without_the_tip(self):
+        for pid in ("christmas-tree", "golden-tree"):
+            tl = [la for la in preset(pid)["layers"] if la["effect"] == "tree"][0]
+            self.assertEqual(tl["params"].get("spread"), 2.0, pid)
+        L = house()
+        p = T.tree_plan(L, L.indices("Whole front gable"), 2.0)
+        hc = p["hc"]
+        widths = {}
+        for i in p["leaf"]:
+            widths.setdefault(hc.of(i).r, []).append(hc.of(i).x)
+        self.assertEqual([len(widths[r]) for r in sorted(widths)], [10, 9, 4, 3])
+        for r, xs in widths.items():
+            self.assertGreaterEqual(min(xs) - hc.row(r)[0].x, 3)
+
+    def test_spread_help_owns_up_to_half_steps(self):
+        prm = {q.name: q for q in EFFECTS["tree"].params}["spread"]
+        self.assertIn("half", prm.help)
+        L = house()
+        idx = L.indices("Whole front gable")
+        self.assertEqual(sorted(T.tree_plan(L, idx, 1.0)["leaf"]), sorted(T.tree_plan(L, idx, 1.5)["leaf"]))
+
+    def test_sparkler_embers_do_not_pile_up_on_the_bottom_row(self):
+        for tip in (False, True):
+            L = house(tip)
+            p = T.tree_plan(L, L.indices("Whole front gable"))
+            row0 = [c.i for c in p["hc"].row(0) if c.i is not None and c.i not in p["trunk"]]
+            sc = Scene.from_dict(preset("sparkler-tree"))
+            bright = sky = n = 0
+            for k in range(600):
+                f = sc.render(k * 0.05, L)
+                if k >= 200:
+                    bright += sum(1 for i in row0 if lum(f[i]) > 0.4)
+                    sky += sum(1 for i in p["sky"] if lum(f[i]) > 0.3)
+                    n += 1
+            self.assertLess(bright / n, 2.5, tip)
+            self.assertLess(sky / n, 9.0, tip)
+
+
 if __name__ == "__main__":
     unittest.main()
