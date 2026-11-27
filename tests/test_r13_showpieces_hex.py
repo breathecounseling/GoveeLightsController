@@ -83,7 +83,8 @@ class HoneycombShowpieces(unittest.TestCase):
         hc = hx.get(L, L.indices("Whole front gable"))
         plan = sp._turkey_plan(hc, 7)
         kinds = [p[0] for p in plan.values()]
-        self.assertGreaterEqual(kinds.count("head"), 3)
+        self.assertGreaterEqual(kinds.count("head"), 4)
+        self.assertGreaterEqual(kinds.count("wattle"), 2)
         self.assertGreaterEqual(kinds.count("wattle"), 1)
         self.assertGreaterEqual(kinds.count("body"), 10)
         self.assertGreaterEqual(kinds.count("gap"), 12)
@@ -173,6 +174,62 @@ class HoneycombShowpieces(unittest.TestCase):
             self.assertEqual(a[i], b[i])
         self.assertNotEqual([a[c.i] for c in hc.cells if c.i is not None], [b[c.i] for c in hc.cells if c.i is not None])
         self.assertTrue(all(max(a[i]) > 0.1 for i in off))
+
+    def test_sunset_comes_back_after_it_sets(self):
+        # an Ambient preset runs for hours: long after the first sunset the Peak must still
+        # carry a bright, shaped picture most of the time (not a dim wash for good)
+        d = preset("harvest-sunset")
+        sink = d["layers"][-1]["params"]["sink"]
+        for tip in (False, True):
+            L = owner(tip=tip)
+            hc = hx.get(L, list(range(L.n)))
+            sc = Scene.from_dict(d)
+            sc.render(0.0, L)
+            good = total = 0
+            for k in range(int(2 * sink * 4), int(3.5 * sink * 4)):
+                cols = sc.render(k / 4, L)
+                total += 1
+                bright = sum(1 for c in hc.cells if c.i is not None and max(cols[c.i]) > 0.5)
+                dark = sum(1 for c in hc.cells if c.i is not None and max(cols[c.i]) < 0.05)
+                if bright >= 10 and dark >= 4:
+                    good += 1
+            with self.subTest(tip=tip):
+                self.assertGreater(good / total, 0.7, (good, total))
+            at = Scene.from_dict(d)
+            at.render(0.0, L)
+            cols = at.render(2 * sink, L)
+            with self.subTest(tip=tip, t=2 * sink):
+                self.assertGreaterEqual(sum(1 for c in hc.cells if c.i is not None and max(cols[c.i]) > 0.5), 10)
+
+    def test_falling_star_peak_keeps_calm_stars_between_falls(self):
+        for pid in ("falling-star", "hail-mary"):
+            for tip in (False, True):
+                L = owner(tip=tip)
+                hc = hx.get(L, list(range(L.n)))
+                sc = Scene.from_dict(preset(pid))
+                lit = 0
+                n = 400
+                for k in range(n):
+                    cols = sc.render(k / 20, L)
+                    if sum(1 for c in hc.cells if c.i is not None and max(cols[c.i]) > 0.1) >= 4:
+                        lit += 1
+                with self.subTest(preset=pid, tip=tip):
+                    self.assertGreater(lit / n, 0.95)
+        L = owner()
+        hc = hx.get(L, list(range(L.n)))
+        calm = sp._calm_stars(hc, 3, 1.0)
+        self.assertGreaterEqual(len(calm), 5)
+        self.assertTrue(all(sp._hex_dist(a, b) >= 3 for a in calm for b in calm if a is not b))
+        cols = frames({"layers": [{"effect": "falling_star", "params": {"every": 120}}]}, L, 10)[-1]
+        on = [c for c in hc.cells if c.i is not None and max(cols[c.i]) > 0.02]
+        self.assertTrue(on and all(max(cols[c.i]) <= 0.26 for c in on), "dim, calm stars")
+        cols = frames({"layers": [{"effect": "falling_star", "params": {"every": 120, "stars": 0}}]}, L, 10)[-1]
+        self.assertTrue(all(max(cols[c.i]) < 0.02 for c in hc.cells if c.i is not None), "stars 0: black")
+
+    def test_candy_cane_hub_stands_apart_from_the_red(self):
+        p = [ly for ly in preset("candy-cane-chase")["layers"] if ly["effect"] == "fan"][0]["params"]
+        self.assertNotEqual(p["hub"].lower(), p["colors"][0].lower())
+        self.assertGreater(int(p["hub"][3:5], 16), 0xc0, "a pale hub, not another red")
 
     def test_dead_bulbs_do_not_shift_the_pictures(self):
         L, Ld = owner(), owner(dead=DEAD)

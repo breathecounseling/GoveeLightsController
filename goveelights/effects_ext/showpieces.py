@@ -252,12 +252,15 @@ def fan(t, ctx, P, st):
         st["polar_key"] = id(cv)
 
     hc = hx.get(L, idx)
+    fade = 1.0
+    if hc is not None and style == "sunset":
+        age, fade = _sunset_loop(age, P)              # on the Peak the sun sets again and again
     if hc is not None and style == "turkey":
         _turkey_hex(frame, hc, st, P, clock, age, opened, cols, nf, lvl, seed)
     elif style == "turkey":
         _turkey(frame, cv, polar, P, clock, age, opened, cols, nf, lvl, seed)
     elif hc is not None and style == "sunset":
-        _sunset_hex(frame, hc, st, P, clock, age, lvl, seed)
+        _sunset_hex(frame, hc, st, P, clock, age, lvl * fade, seed)
     elif hc is not None:
         _sunburst_hex(frame, hc, st, P, clock, opened, cols, nf, lvl, seed)
     elif style == "sunset":
@@ -276,7 +279,7 @@ def fan(t, ctx, P, st):
             w = 0.8 + 0.2 * wobble(cv["si"][i], clock, 0.25, seed)
             if style == "sunset":                    # the outline carries on the sky around the zigzag
                 f = (px[i].y - cv["y0"]) / cv["H"]
-                frame[i] = _scale(_sky(max(0.0, f), after), min(1.0, gv * 1.4) * w)
+                frame[i] = _scale(_sky(max(0.0, f), after), min(1.0, gv * 1.4) * w * (0.5 + 0.5 * fade))
                 continue
             d = math.hypot(px[i].x - ax, px[i].y - ay)
             v = gv * w * (1.0 + 0.6 * max(0.0, 1 - d / 8))
@@ -350,6 +353,30 @@ def _sunset_phase(age: float, P) -> tuple[float, float]:
     sink = max(1.0, P["sink"])
     sun_v = 0.5 - 1.0 * _smooth(age / sink)                   # the sun's centre, in canvas heights
     return sun_v, _smooth((age - sink * 0.75) / (sink * 0.4))  # the afterglow takes over
+
+
+SUNSET_FADE, SUNSET_GAP = 3.0, 1.5
+
+
+def _sunset_loop(age: float, P) -> tuple[float, float]:
+    """The honeycomb sunset repeats: once the sun is down and the afterglow has had a moment
+    the picture fades to dark, then the sun comes back high in the sky. Returns the age into
+    the current sunset and a brightness fade (1 = full)."""
+    sink = max(1.0, P["sink"])
+    end = sink * 1.05
+    cyc = end + SUNSET_FADE + SUNSET_GAP
+    a = age % cyc
+    if a < end:
+        fade = 1.0
+    elif a < end + SUNSET_FADE:
+        fade = 1.0 - _smooth((a - end) / SUNSET_FADE)
+    else:
+        fade = 0.0
+    if age >= cyc and a < 2.0:                       # every later sunset fades in
+        fade = min(fade, _smooth(a / 2.0))
+    if a >= end:
+        a = end                                      # hold the last picture while it fades
+    return a, fade
 
 
 def _sunset(frame, cv, polar, P, clock, age, lvl, seed):
@@ -475,7 +502,7 @@ def _art(text: str) -> hx.Sprite:
 
 # the turkey in front of its fan; '.' is the dark ring that sets it off the feathers
 TURKEY = _art("""
-       . . .
+       . H .
       . H H .
      . . H . .
   . B B W B B .
@@ -708,6 +735,16 @@ def falling_star(t, ctx, P, st):
         frame[i] = BLACK if i in peak else sky
     clock = ctx.clock
     seed = P["seed"]
+    if hc is not None and P["stars"] > 0:
+        # a few calm, dim stars on the Peak so the centrepiece is never just black between
+        # falls: single bulbs, well apart, breathing gently (the streak still stands out)
+        skey = (id(hc), seed, P["stars"])
+        if st.get("calm_key") != skey:
+            st["calm_key"], st["calm"] = skey, _calm_stars(hc, seed, min(1.0, P["stars"]))
+        for k, c in enumerate(st["calm"]):
+            if c.i is not None and c.i in hc.allowed:
+                w = 0.15 + 0.1 * (0.5 + 0.5 * math.sin(clock * 0.7 + k * 2.39))
+                frame[c.i] = _scale((0.8, 0.88, 1.0), w)
     if st.get("seed") != seed or "rng" not in st:
         st["seed"], st["rng"] = seed, random.Random(seed * 4421 + 17)
     rng = st["rng"]
@@ -853,6 +890,28 @@ def falling_star(t, ctx, P, st):
         # a white-hot core in the star's own colour (white added onto an orange tail is pink)
         geo.splat(frame, L, head[0], head[1], lerp(P["head"], (1.0, 1.0, 1.0), 0.4), 0.9, off, mode="max")
     return _clamp(frame, idx)
+
+
+def _hex_dist(a, b) -> int:
+    """Steps between two cells on the honeycomb (doubled columns)."""
+    dr, dd = abs(a.r - b.r), abs(a.d - b.d)
+    return dr + max(0, (dd - dr) // 2)
+
+
+def _calm_stars(hc, seed: int, amount: float) -> list:
+    """Cells for the calm star field: about one in fourteen (fewer for a small amount), at least three
+    steps apart, chosen from every cell (dead ones too) so a dead bulb shifts nothing."""
+    rng = random.Random(seed * 7919 + 101)
+    cells = sorted(hc.cells, key=lambda c: c.key)
+    rng.shuffle(cells)
+    want = max(1, int(round(len(cells) / 14 * (0.6 + 0.4 * amount))))
+    out = []
+    for c in cells:
+        if len(out) >= want:
+            break
+        if all(_hex_dist(c, o) >= 3 for o in out):
+            out.append(c)
+    return out
 
 
 def _fs_diagonal(hc, side: int, rng) -> list:

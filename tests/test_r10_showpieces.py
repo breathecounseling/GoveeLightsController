@@ -160,11 +160,15 @@ class Pictures(unittest.TestCase):
         fr = render(d, self.L, 600)
         cv = showpieces.canvas(self.L, self.L.indices("Peak"))
         hot = lambda cols: [v for i, (u, v) in cv["uv"].items() if min(cols[i][0], cols[i][1]) > 0.6]  # noqa: E731
-        early, late = hot(fr[20]), hot(fr[-1])
+        # on the Peak's honeycomb the sunset repeats (sink * 1.05, a fade, a short dark gap):
+        # look at the end of the first one, then check the sun is back
+        end = int(20 * 1.05 * 20)
+        early, late = hot(fr[20]), hot(fr[end])
         self.assertTrue(early)
         self.assertGreater(sum(early) / len(early), sum(late) / len(late) if late else -1)
         top = [i for i, (u, v) in cv["uv"].items() if v > 0.9]
-        self.assertTrue(all(fr[-1][i][2] > fr[-1][i][1] for i in top), "violet at the top of the sky")
+        self.assertTrue(all(fr[end][i][2] > fr[end][i][1] for i in top), "violet at the top of the sky")
+        self.assertTrue(hot(fr[-1]), "the sun comes back")
 
     def test_smooth_enough_for_real_bulbs(self):
         """Ambient looks change gently from frame to frame at 20 fps (no flicker)."""
