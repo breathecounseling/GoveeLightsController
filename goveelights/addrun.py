@@ -254,6 +254,13 @@ def _unique(name: str, taken: set[str], own: str | None = None) -> str:
         k += 1
     return f"{name} {k}"
 
+def unplaced(d: dict) -> bool:
+    """A box in the show with no place on the house yet (no mapped or typed shape, or only
+    a placeholder guess): e.g. one that got its bulb count in diagnostics, not through
+    "Add it to the show". The layout parks it on a line under the house."""
+    return not d.get("added_run") and (not d.get("geometry") or bool(d.get("geometry_guess")))
+
+
 def candidates(cfg, layout=None) -> list[dict]:
     """Boxes that could become a new run: configured, but not in the show yet (no bulb
     count, or switched off), plus runs this flow added (so they can be changed or
@@ -264,12 +271,14 @@ def candidates(cfg, layout=None) -> list[dict]:
         if d.get("kind", "govee") != "govee":
             continue
         added = bool(d.get("added_run"))
-        if mac in in_show and not added:
+        loose = mac in in_show and not added and unplaced(d)
+        if mac in in_show and not added and not loose:
             continue
         fw = d.get("firmware") or {}
         out.append({"mac": mac, "name": d.get("name") or mac, "sku": d.get("sku") or "", "ip": d.get("ip") or "",
                     "wifi_fw": fw.get("wifiVersionSoft") or "", "pixel_count": d.get("pixel_count"),
                     "estimated_count": d.get("estimated_count"), "in_show": mac in in_show, "added": added,
+                    "unplaced": loose,
                     "where": d.get("location") or "", "cloud": bool((d.get("cloud") or {}).get("enabled")),
                     "joined": (d.get("added_run") or {}).get("joined"), "follows": d.get("follows"),
                     "tip": d.get("tip") if d.get("added_run") else None,
@@ -332,7 +341,7 @@ def add_run(cfg, layout, mac: str, count, where: str, name: str = "", join: str 
         if d.get("kind", "govee") != "govee":
             raise ValueError("only Govee boxes are added here (WLED has its own button)")
         others = {m: x for m, x in cfg.devices.items() if m != mac}
-        if layout is not None and mac in {r.mac for r in layout.runs} and not d.get("added_run"):
+        if layout is not None and mac in {r.mac for r in layout.runs} and not d.get("added_run") and not unplaced(d):
             raise ValueError(f"{d.get('name') or mac} is already part of the show")
         taken = {x.get("name") for x in others.values() if x.get("name")} | {z["name"] for z in zones}
         # the layout without this box: its outline and the end of the strip
@@ -400,7 +409,9 @@ def tip_offer(cfg, layout, mac: str) -> bool:
     else" (the old way to add the Tip, e.g. copying the Peak), the house has a zigzag for
     it to continue and nothing else continues it yet."""
     d = cfg.devices.get(mac) or {}
-    if not d.get("added_run") or d.get("location") != "other" or layout is None:
+    if layout is None:
+        return False
+    if not (d.get("added_run") and d.get("location") == "other") and not (unplaced(d) and not d.get("role")):
         return False
     if any(r.extends and r.mac != mac for r in layout.runs):
         return False
@@ -414,8 +425,8 @@ def to_peak_top(cfg, layout, mac: str) -> dict:
     count, its name (a default "Run 4" becomes "Tip"), how it's driven and its colour order;
     the visible bulbs, rows and end are the Tip defaults (change them with Change)."""
     d = cfg.device(mac)
-    if not d.get("added_run"):
-        raise ValueError("only runs added with 'Add it to the show' can be moved here")
+    if not d.get("added_run") and not unplaced(d):
+        raise ValueError("only runs added with 'Add it to the show', or not placed on the house yet, can be moved here")
     count = int(d.get("pixel_count") or 0)
     if count < 1:
         raise ValueError("it has no bulb count yet")

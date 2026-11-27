@@ -2352,7 +2352,7 @@ const frLoc = id => ((FOURTH && FOURTH.locations) || []).find(l => l.id === id);
 function drawFourth(){
   const f = FOURTH, box = $('frBoxes'); if (!f || !box) return;
   box.innerHTML = '';
-  if (!f.boxes.length) box.innerHTML = '<p class="help">Every box is in the show. A box shows up here once a discovery scan finds it but it has no bulb count yet.</p>';
+  if (!f.boxes.length) box.innerHTML = '<p class="help">Every box is in the show and placed on the house. A box shows up here once a discovery scan finds it but it has no bulb count yet.</p>';
   f.boxes.forEach(b => box.appendChild(frBox(b)));
   drawCloud();
   document.querySelectorAll('#frLadder input[type=checkbox]').forEach(c => { c.checked = store.get('fr:' + c.dataset.k, '') === '1'; c.onchange = () => store.set('fr:' + c.dataset.k, c.checked ? '1' : '') });
@@ -2360,7 +2360,8 @@ function drawFourth(){
 function frBox(b){
   const loc = frLoc(b.where);
   if (b.realtime === undefined && !b.in_show && /^0\//.test((b.last_check || {}).status || '')) b.realtime = false;  // its last check
-  const what = b.in_show ? `In the show: ${b.pixel_count} bulbs${b.tip ? ` (${b.tip.visible} on the gable)` : ''}${loc ? ' · ' + esc(loc.label) : ''}${b.joined ? ' · part of ' + esc(b.joined) : ''}${b.cloud ? ' · <b class="warn">slow, Govee cloud</b>' : ''}`
+  const what = b.unplaced ? `In the show: ${b.pixel_count} bulbs, but not placed on the house yet (it's drawn on a line under it, so most looks miss it)`
+    : b.in_show ? `In the show: ${b.pixel_count} bulbs${b.tip ? ` (${b.tip.visible} on the gable)` : ''}${loc ? ' · ' + esc(loc.label) : ''}${b.joined ? ' · part of ' + esc(b.joined) : ''}${b.cloud ? ' · <b class="warn">slow, Govee cloud</b>' : ''}`
     : 'Not in the show yet' + (b.ip ? ' · ' + esc(b.ip) : ' · no address yet');
   const L = FR.last[b.mac]; if (L && L.realtime !== undefined) b.realtime = L.realtime;      // answered here earlier
   const el = h(`<div class="frb" data-mac="${esc(b.mac)}">
@@ -2371,8 +2372,8 @@ function frBox(b){
     <div class="fr-out"></div>
     <div class="row wrap">
       <button class="pri grow" data-a="check">Is it answering now?</button>
-      <button class="grow" data-a="add">${b.in_show ? 'Change' : 'Add it to the show'}</button>
-      ${b.in_show ? '<button class="grow" data-a="blink">Blink it</button><button class="bad grow" data-a="remove">Take it out</button>' : ''}
+      <button class="grow" data-a="add">${b.unplaced ? 'Place it' : b.in_show ? 'Change' : 'Add it to the show'}</button>
+      ${b.in_show ? '<button class="grow" data-a="blink">Blink it</button>' + (b.unplaced ? '' : '<button class="bad grow" data-a="remove">Take it out</button>') : ''}
     </div></div>`);
   const q = a => el.querySelector(`[data-a=${a}]`);
   q('check').onclick = () => frCheck(b);
@@ -2384,7 +2385,7 @@ function frBox(b){
     post('run/blink', {mac: b.mac}); await reloadLayout(); loadFourth(); refresh() };
   if (b.in_show){
     q('blink').onclick = async () => { const r = await post('run/blink', {mac: b.mac}); if (r) toast(r.message) };
-    q('remove').onclick = async () => { if (!confirm(`Take ${b.name} out of the show? The other runs are not changed.`)) return;
+    if (q('remove')) q('remove').onclick = async () => { if (!confirm(`Take ${b.name} out of the show? The other runs are not changed.`)) return;
       if (await post('run/remove', {mac: b.mac})) { toast('Taken out'); reloadLayout(); loadFourth(); refresh() } };
   }
   return el;
