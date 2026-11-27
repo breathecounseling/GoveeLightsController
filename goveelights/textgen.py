@@ -24,6 +24,7 @@ COLOR_MODES = ("letters", "words", "solid", "rainbow")
 MAX_LEN = 60
 TARGET = ["Peak", "Eaves", "Accent"]       # letters on the Peak; the eaves and porch keep time
 PAUSE = 1.6                                # peak_text's default pause at the end of the message
+DWELL = 0.6                                # peak_text's default stop on each marquee letter
 PREVIEW_MAX = 30.0                         # seconds of preview; a longer phrase says "first 30 s"
 _HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -57,13 +58,13 @@ def scene(opts: dict) -> dict:
 
 
 def length(scene_dict: dict) -> float:
-    """Seconds for one pass of the message (about, for the marquee)."""
-    from .effects_ext.peak_text import letter_timeline
+    """Seconds for one pass of the message, as the house plays it."""
+    from .effects_ext.peak_text import letter_timeline, marquee_cycle
     P = scene_dict["layers"][0]["params"]
     text = hexfont.normalise(P.get("text", ""))
     pause = float(P.get("pause", PAUSE))            # the house's end pause, so the phone loops with it
-    if P.get("mode") == "marquee":
-        return (hexfont.line_width(text) + 16) / float(P.get("speed", 4)) + pause
+    if P.get("mode") == "marquee":                  # the house's pass, a stop on each letter (dwell)
+        return marquee_cycle(text, float(P.get("speed", 4)), pause, float(P.get("dwell", DWELL)))
     return letter_timeline(text, float(P.get("hold", 0.7)), pause, float(P.get("gap", 0.22)),
                            float(P.get("word_gap", 0.65)))[1]
 

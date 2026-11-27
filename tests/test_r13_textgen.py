@@ -122,8 +122,9 @@ class Marquee(unittest.TestCase):
     def test_no_dim_preview_on_the_flanks(self):
         # white letters: at the start of each step (no cross-fade), a lit bulb is part of a
         # letter that is on the Peak (full), or cut by a bulb or two (0.7) - never a dim preview
-        fr = render(scene(mode="marquee", text="MERRY CHRISTMAS", colors=["#ffffff"], color_mode="solid", speed=4),
-                    self.L, frames=400, fps=FPS)
+        # (a steady scroll: dwell 0; stopped on a letter the cut neighbours fade out, below)
+        fr = render(scene(mode="marquee", text="MERRY CHRISTMAS", colors=["#ffffff"], color_mode="solid", speed=4,
+                          dwell=0), self.L, frames=400, fps=FPS)
         seen = cut = 0
         for k in range(0, 400, 5):                  # every step (4 a second)
             for i in self.peak:
@@ -235,11 +236,25 @@ class Fallback(unittest.TestCase):
 
 class Presets(unittest.TestCase):
     def test_text_presets_use_the_honeycomb_font_single(self):
+        # each word preset scrolls (owner, round 3: "they all just flash the letter without a
+        # marquee"); its "(big letters)" twin shows one big letter at a time
         for p in sorted((ROOT / "presets").glob("text-*.json")):
             d = json.loads(p.read_text())
             layers = [ly for ly in d["layers"] if ly["effect"] in ("text", "peak_text")]
             self.assertEqual([ly["effect"] for ly in layers], ["peak_text"], p.name)
-            self.assertEqual(layers[0]["params"]["mode"], "single", p.name)
+            big = p.stem.endswith("-letters")
+            self.assertEqual(layers[0]["params"]["mode"], "single" if big else "marquee", p.name)
+            if big:
+                twin = json.loads((p.parent / (p.stem[:-len("-letters")] + ".json")).read_text())
+                self.assertEqual(d["name"], twin["name"] + " (big letters)")
+                tl = [ly for ly in twin["layers"] if ly["effect"] == "peak_text"][0]
+                self.assertEqual(layers[0]["params"]["text"], tl["params"]["text"])
+                self.assertEqual([ly["effect"] for ly in d["layers"]], [ly["effect"] for ly in twin["layers"]])
+        words = {p.stem for p in (ROOT / "presets").glob("text-*.json") if not p.stem.endswith("-letters")}
+        self.assertEqual(len(words), 6)
+        for w in words:
+            self.assertTrue((ROOT / "presets" / f"{w}-letters.json").exists(), w)
+            self.assertFalse((ROOT / "presets" / f"{w}-scroll.json").exists(), w)
 
     def test_old_text_params_still_play(self):
         # a user's own preset from before keeps working with the old effect and its params
@@ -280,7 +295,21 @@ class Generator(unittest.TestCase):
         sc["layers"][0]["params"]["pause"] = 3.0
         self.assertAlmostEqual(textgen.length(sc), PT.letter_timeline("GO BRONCOS", 0.8, 3.0, 0.22, 0.65)[1])
         mq = textgen.scene({"text": "GO", "mode": "marquee", "speed": 4})
-        self.assertAlmostEqual(textgen.length(mq), (hexfont.line_width("GO") + 16) / 4 + 1.6)
+        self.assertAlmostEqual(textgen.length(mq), PT.marquee_cycle("GO", 4, 1.6, 0.6))
+
+    def test_marquee_length_is_the_house_cycle(self):
+        # review (F2): the phone looped (W + 16)/speed while the house's pass is
+        # ceil(W + Peak span + 4 + pause*speed)/speed plus a dwell per stop - ~0.75 s apart
+        L = house()
+        lat = hexfont.lattice(L, L.indices("Peak"))
+        for text in ("GO", "GO BRONCOS!", "MERRY CHRISTMAS", "HI, YOU", "<3", "DEN 21 - KC 14"):
+            for speed, pause, dwell in ((4, 1.6, 0.6), (3, 1.0, 0.0), (5, 2.5, 0.9)):
+                sc = textgen.scene({"text": text, "mode": "marquee", "speed": speed})
+                sc["layers"][0]["params"].update(pause=pause, dwell=dwell)
+                msg = hexfont.normalise(text)
+                P = {"pause": pause, "speed": float(speed)}
+                house_cyc = PT._marquee_period(lat, msg, P) / speed + dwell * len(PT.marquee_stops(lat, msg))
+                self.assertAlmostEqual(textgen.length(sc), house_cyc, places=6, msg=(text, speed, pause, dwell))
 
     def test_long_phrase_previews_thirty_seconds_and_says_so(self):
         # review: a 60-letter phrase previewed only its first 16 s (about 14 letters)

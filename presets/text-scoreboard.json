@@ -28,7 +28,7 @@
       "params": {
         "source": "score",
         "text": "GO BRONCOS!",
-        "mode": "single",
+        "mode": "marquee",
         "colors": [
           "#ff5a00",
           "#ffffff"
@@ -39,7 +39,9 @@
         "pause": 1.6,
         "border_color": "#2050ff",
         "score_detail": false,
-        "brightness": 1.0
+        "brightness": 1.0,
+        "speed": 4.0,
+        "dwell": 0.6
       }
     }
   ]

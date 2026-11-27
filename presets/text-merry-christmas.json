@@ -39,7 +39,7 @@
       "target": "Peak",
       "params": {
         "text": "MERRY XMAS",
-        "mode": "single",
+        "mode": "marquee",
         "colors": [
           "#ff1a1a",
           "#00d040"
@@ -48,7 +48,9 @@
         "hold": 0.75,
         "transition": "fade",
         "pause": 1.8,
-        "border_color": "#ffb000"
+        "border_color": "#ffb000",
+        "speed": 4.0,
+        "dwell": 0.6
       }
     },
     {

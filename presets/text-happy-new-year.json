@@ -31,7 +31,7 @@
       "target": "Peak",
       "params": {
         "text": "HAPPY NEW YEAR!",
-        "mode": "single",
+        "mode": "marquee",
         "colors": [
           "#ffc000",
           "#ffffff",
@@ -42,7 +42,9 @@
         "transition": "wipe",
         "pause": 1.6,
         "background": "#000418",
-        "border_color": "#ffb000"
+        "border_color": "#ffb000",
+        "speed": 4.0,
+        "dwell": 0.6
       }
     }
   ]

@@ -329,7 +329,8 @@ details.okl summary{font-size:12.5px;color:var(--dim);padding:10px 4px;cursor:po
 #txtCard .txin{display:flex;gap:8px;align-items:center}
 #txtCard input[type=text]{font-size:18px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;min-height:44px}
 #txtCard .seg button{min-height:44px}
-#txtCard .seg button small{display:block;font-weight:400;font-size:11px;color:var(--dim)}
+#txtCard .seg button small,.seg.two button small{display:block;font-weight:400;font-size:11px;color:var(--dim)}
+.seg.two button{min-height:44px}
 #txtCard .chips .chip{min-height:44px;display:flex;align-items:center;gap:6px}
 #txtCard .chip i{display:inline-block;width:12px;height:12px;border-radius:50%}
 #txtPv{display:block;width:100%;height:120px;background:#04060a;border-radius:10px;margin:8px 0 4px}
@@ -1408,7 +1409,10 @@ async function editCurrent(quiet){
   else { draft = {name:'New scene', brightness:1, layers:[blankLayer()]}; draftId = null }   // sent on the first edit, not on opening the tab
   norm(); sel = 0; resetHistory(); renderEditor(); if (!quiet) tabTo('create');
 }
-async function editPreset(id){ draft = await get('preset?id='+encodeURIComponent(id)); draftId = id; norm(); sel=0; resetHistory(); renderEditor(); push(); tabTo('create') }
+async function editPreset(id){ draft = await get('preset?id='+encodeURIComponent(id)); draftId = id; norm(); sel=0;
+  // a word preset opens on its words (and the Single letter / Marquee switch), not the trim under them
+  const tx = (draft.layers || []).findIndex(L => L.effect === 'peak_text'); if (tx >= 0){ sel = tx; panel = 'source' }
+  resetHistory(); renderEditor(); push(); tabTo('create') }
 function newScene(){ draft = {name:'New scene', brightness:1, layers:[blankLayer()]}; draftId = null; sel = 0; resetHistory(); renderEditor(); push() }
 function norm(){ draft.layers.forEach(L => { L.params ||= {}; L.mod ||= {}; L.fx ||= []; L.fx.forEach(u => { u.params ||= {}; u.mod ||= {} }); if (L.enabled === undefined) L.enabled = true }) }
 function loadPicker(){
@@ -1464,12 +1468,23 @@ function sourcePanel(L, card){
   const top = h(`<div><button style="width:100%;text-align:left;display:flex;align-items:center;gap:10px"><div class="sw" style="background:${swatch(L)}"></div><div class="grow"><b>${esc(g.label)}</b><div class="dim" style="font-size:12px">${esc(g.description||'')}</div></div><span class="dim">Change ›</span></button></div>`);
   top.querySelector('button').onclick = () => effectPicker(L);
   card.appendChild(top);
+  // Text on the Peak: one big letter at a time or a marquee, as a plain two-way switch at
+  // the top (not a chip deep in the list), and only the settings that mode uses below it
+  let skip = new Set();
+  if (L.effect === 'peak_text'){
+    const md = (L.params && L.params.mode) || 'single';
+    const seg = h(`<div class="seg two" id="ptMode" role="group" aria-label="Show it as"><button data-v="single">Single letter<small>one big letter at a time</small></button><button data-v="marquee">Marquee<small>scrolls across the Peak</small></button></div>`);
+    seg.querySelectorAll('button').forEach(b => { b.classList.toggle('on', b.dataset.v === md); b.setAttribute('aria-pressed', b.dataset.v === md);
+      b.onclick = () => { L.params ||= {}; if ((L.params.mode || 'single') === b.dataset.v) return; L.params.mode = b.dataset.v; changed(true) } });
+    card.appendChild(seg);
+    skip = new Set(['mode', ...(md === 'marquee' ? ['hold', 'gap', 'word_gap', 'transition'] : ['speed', 'dwell'])]);
+  }
   if (g.params.some(p => p.kind==='colors' || p.kind==='color')){
     card.appendChild(h('<div class="grp">Palette</div>'));
     card.appendChild(palettePicker(L.palette || '', p => { L.palette = p; changed(true) }, {label:'Own colours', bg: swatchOwn(L)}));
   }
   const plist = h('<div style="margin-top:6px"></div>');
-  g.params.forEach(p => { if (L.palette && (p.kind==='colors' || (p.kind==='color' && p.name!=='background'))) return; plist.appendChild(paramRow(L, p)) });
+  g.params.forEach(p => { if (skip.has(p.name)) return; if (L.palette && (p.kind==='colors' || (p.kind==='color' && p.name!=='background'))) return; plist.appendChild(paramRow(L, p)) });
   card.appendChild(plist);
 }
 function swatchOwn(L){ const g = EFX[L.effect]; let cols=[]; g.params.forEach(p => { if (p.kind==='colors') cols = cols.concat(val(L,p)); else if (p.kind==='color' && p.name!=='background') cols.push(val(L,p)) }); return cols.length ? palCss(cols) : '#333' }

@@ -1,0 +1,49 @@
+{
+  "name": "Happy New Year (big letters)",
+  "tags": [
+    "Holiday",
+    "Text",
+    "New Year"
+  ],
+  "layers": [
+    {
+      "effect": "glitter",
+      "target": [
+        "Eaves",
+        "Lower roofline"
+      ],
+      "params": {
+        "colors": [
+          "#ffb000",
+          "#ffc000",
+          "#ffa000"
+        ],
+        "sparkle": "#ffffff",
+        "level": 0.7,
+        "shimmer": 0.4,
+        "density": 0.8,
+        "length": 24,
+        "speed": 3
+      }
+    },
+    {
+      "effect": "peak_text",
+      "target": "Peak",
+      "params": {
+        "text": "HAPPY NEW YEAR!",
+        "mode": "single",
+        "colors": [
+          "#ffc000",
+          "#ffffff",
+          "#ff2050"
+        ],
+        "color_mode": "words",
+        "hold": 0.65,
+        "transition": "wipe",
+        "pause": 1.6,
+        "background": "#000418",
+        "border_color": "#ffb000"
+      }
+    }
+  ]
+}

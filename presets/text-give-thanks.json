@@ -19,7 +19,7 @@
       "target": "Peak",
       "params": {
         "text": "GIVE THANKS",
-        "mode": "single",
+        "mode": "marquee",
         "colors": [
           "#ffb000",
           "#ffe2a8"
@@ -28,7 +28,9 @@
         "hold": 0.8,
         "transition": "fade",
         "pause": 2.0,
-        "border_color": "#ff7a10"
+        "border_color": "#ff7a10",
+        "speed": 4.0,
+        "dwell": 0.6
       }
     }
   ]
