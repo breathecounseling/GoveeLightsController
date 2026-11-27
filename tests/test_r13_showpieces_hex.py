@@ -83,10 +83,10 @@ class HoneycombShowpieces(unittest.TestCase):
         hc = hx.get(L, L.indices("Whole front gable"))
         plan = sp._turkey_plan(hc, 7)
         kinds = [p[0] for p in plan.values()]
-        self.assertGreaterEqual(kinds.count("head"), 4)
-        self.assertGreaterEqual(kinds.count("wattle"), 2)
+        self.assertGreaterEqual(kinds.count("head"), 2)       # round 15: true proportions, a small head
         self.assertGreaterEqual(kinds.count("wattle"), 1)
-        self.assertGreaterEqual(kinds.count("body"), 10)
+        self.assertGreaterEqual(kinds.count("wattle"), 1)
+        self.assertGreaterEqual(kinds.count("body"), 8)
         self.assertGreaterEqual(kinds.count("gap"), 12)
         # the feathers reach the edge on both sides, mirrored
         f = {p[1] for p in plan.values() if p[0] in ("f", "tip")}

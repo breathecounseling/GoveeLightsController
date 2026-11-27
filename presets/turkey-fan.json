@@ -9,7 +9,7 @@
     {
       "effect": "fan",
       "target": "Whole front gable",
-      "params": {"style": "turkey", "colors": ["#ff1000", "#ff5a00", "#ffb000"], "body": "#7a2200", "intro": 5, "speed": 0.5, "glow": "#ffa040", "glow_level": 0.5}
+      "params": {"style": "turkey", "colors": ["#ff1000", "#ff5a00", "#ffb000"], "body": "#c85414", "head": "#b0d0ff", "intro": 5, "speed": 0.5, "glow": "#ffa040", "glow_level": 0.5}
     }
   ]
 }

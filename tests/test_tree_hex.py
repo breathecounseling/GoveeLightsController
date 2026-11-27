@@ -60,18 +60,23 @@ class Plan(unittest.TestCase):
         hc = p["hc"]
         self.assertEqual(hc.widths, [27, 23, 20, 16, 12, 10])
         cells = {i: hc.of(i) for i in p["leaf"]}
-        # the star: the top row's middle two; rays either side
+        # the star: the top row's middle two; no rays over a slender tree (round 15)
         self.assertEqual(sorted(hc.of(i).x for i in p["star"]), [-0.5, 0.5])
         self.assertTrue(all(hc.of(i).r == hc.top for i in p["star"] + p["rays"]))
-        # the trunk: the bottom row's middle three, nothing else on the bottom row is tree
-        self.assertEqual(sorted(hc.of(i).x for i in p["trunk"]), [-1.0, 0.0, 1.0])
+        self.assertEqual(p["rays"], [])
+        # the trunk: the bottom row's middle bulb under a slender tree (three under a wide
+        # one), nothing else on the bottom row is tree
+        self.assertEqual(sorted(hc.of(i).x for i in p["trunk"]), [0.0])
+        wide = T.tree_plan(L, L.indices("Whole front gable"), 2.0)
+        self.assertEqual(sorted(hc.of(i).x for i in wide["trunk"]), [-1.0, 0.0, 1.0])
+        self.assertEqual(len(wide["rays"]), 2)
         self.assertTrue(all(c.r > 0 for c in cells.values()))
-        # tiers: every row of boughs is centred, 60-degree sides within a tier, the tier
-        # below steps out
+        # every row of boughs is centred, 60-degree sides: in true proportions (round 15)
+        # the narrowest slope the lattice has, half a bulb a row
         widths = {}
         for c in cells.values():
             widths.setdefault(c.r, []).append(c.x)
-        self.assertEqual([len(widths[r]) for r in sorted(widths)], [8, 7, 4, 3])
+        self.assertEqual([len(widths[r]) for r in sorted(widths)], [4, 3, 2, 1])
         for xs in widths.values():
             self.assertAlmostEqual(min(xs), -max(xs))
         # dark sky all round: the tree never touches the gable's sides
@@ -88,8 +93,8 @@ class Plan(unittest.TestCase):
         apex = L.run("Tip").pixels[-1].i
         self.assertIn(apex, p["star"])
         self.assertEqual(len(p["star"]), 3)                   # the apex and the two under it
-        self.assertEqual(p["tiers"], 3)
-        self.assertGreater(len(p["leaf"]), 40)
+        self.assertEqual(p["tiers"], 2)                       # three rows each, the lower steps back in
+        self.assertEqual(len(p["leaf"]), 15)
         # on the Peak alone too
         q = T.tree_plan(L, L.indices("Peak"))
         self.assertIn(apex, q["star"])
@@ -103,9 +108,10 @@ class Plan(unittest.TestCase):
             self.assertIsNone(T.tree_plan(L, L.indices(target)), target)
 
     def test_ornaments_are_bold_pairs_apart(self):
+        # on a wide tree (spread): a slender one has single-bulb ornaments (test_r15_*)
         for tip in (False, True):
             L = house(tip=tip)
-            p = T.tree_plan(L, L.indices("Whole front gable"))
+            p = T.tree_plan(L, L.indices("Whole front gable"), 2.0)
             hc = p["hc"]
             for seed in range(12):
                 orn = T.hex_ornaments(p, 0.18, seed, 3)
@@ -152,7 +158,7 @@ class Render(unittest.TestCase):
             # the bottom row is the trunk and dark ground: no square block of green
             hc = p["hc"]
             lit = [c for c in hc.row(0) if lum(out[c.i]) > 0.05]
-            self.assertEqual(len(lit), 3)
+            self.assertEqual(len(lit), len(p["trunk"]))
 
     def test_star_on_the_peak_alone(self):
         for tip in (False, True):
@@ -167,12 +173,12 @@ class Render(unittest.TestCase):
     def test_garland_swag_runs_on_a_lattice_diagonal(self):
         L = house(tip=True)
         idx = L.indices("Peak")
-        p = T.tree_plan(L, idx)
         P = {**QUIET, "density": 0, "garland": "#ff0000", "body": "#00ff00", "body2": "#00ff00",
-             "garland_spacing": 30, "speed": 0}
+             "garland_spacing": 30, "speed": 0, "spread": 2.0}
+        p = T.tree_plan(L, idx, 2.0)
         out = call(L, idx, P)
         g = [p["hc"].of(i) for i in p["leaf"] if out[i][0] > 0.5]
-        self.assertGreaterEqual(len(g), 4)
+        self.assertGreaterEqual(len(g), 3)
         us = {c.x - 0.5 * c.r for c in g}
         self.assertEqual(len(us), 1, us)                     # one straight 60-degree line
         self.assertEqual(len({c.r for c in g}), len(g))      # one bulb per row
@@ -180,10 +186,13 @@ class Render(unittest.TestCase):
     def test_strand_garland_lies_along_the_tier_hems(self):
         L = house()
         idx = L.indices("Peak")
-        p = T.tree_plan(L, idx)
-        out = call(L, idx, {**QUIET, "density": 0, "garland": "#ff0000", "garland_style": "strand"})
-        rows = {p["hc"].of(i).r for i in p["leaf"] if out[i][0] > 0.3}
-        self.assertEqual(rows, {1, 3})
+        for spread in (0.0, 2.0):
+            p = T.tree_plan(L, idx, spread)
+            out = call(L, idx, {**QUIET, "density": 0, "garland": "#ff0000", "garland_style": "strand",
+                                "spread": spread})
+            rows = {p["hc"].of(i).r for i in p["leaf"] if out[i][0] > 0.3}
+            self.assertIn(1, rows, spread)                   # the hems: each tier's lowest row
+            self.assertLessEqual(rows, {1, 3}, spread)
 
     def test_intro_trunk_then_boughs_upwards_then_star(self):
         L = house(tip=True)
@@ -342,17 +351,20 @@ class StreetLegibility(unittest.TestCase):
         self.assertLess(peak, 0.2)
         self.assertLess(lit / 400, 2.0)
 
-    def test_christmas_and_golden_fill_the_gable_without_the_tip(self):
+    def test_christmas_and_golden_keep_true_proportions(self):
+        # round 15: the owner's photos show the rows hang ~0.66 of a bulb apart, so the
+        # spread-2 tree (boughs 10, 9 / 4, 3 without the Tip) was a mound ~4x wider than
+        # tall; the presets now draw the slender tree, and spread still widens it on demand
         for pid in ("christmas-tree", "golden-tree"):
             tl = [la for la in preset(pid)["layers"] if la["effect"] == "tree"][0]
-            self.assertEqual(tl["params"].get("spread"), 2.0, pid)
+            self.assertNotIn("spread", tl["params"], pid)
         L = house()
         p = T.tree_plan(L, L.indices("Whole front gable"), 2.0)
         hc = p["hc"]
         widths = {}
         for i in p["leaf"]:
             widths.setdefault(hc.of(i).r, []).append(hc.of(i).x)
-        self.assertEqual([len(widths[r]) for r in sorted(widths)], [10, 9, 4, 3])
+        self.assertEqual([len(widths[r]) for r in sorted(widths)], [8, 7, 2, 1])
         for r, xs in widths.items():
             self.assertGreaterEqual(min(xs) - hc.row(r)[0].x, 3)
 
@@ -377,7 +389,9 @@ class StreetLegibility(unittest.TestCase):
                     sky += sum(1 for i in p["sky"] if lum(f[i]) > 0.3)
                     n += 1
             self.assertLess(bright / n, 2.5, tip)
-            self.assertLess(sky / n, 9.0, tip)
+            # at most about one sky bulb in eight lit by embers at a time (the round 15
+            # slender tree leaves more of the Peak as sky)
+            self.assertLess(sky / n / len(p["sky"]), 0.13, tip)
 
 
 if __name__ == "__main__":

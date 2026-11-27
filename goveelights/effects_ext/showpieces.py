@@ -23,7 +23,11 @@ pictures are drawn for that lattice: a turkey sprite in front of feathers parted
 lines of bulbs, a sun disc with a dark ring and bold rays, sunburst wedges reaching the
 edge with dark lines between, the falling star as a bold streak down a 60-degree line
 over black, the sleigh and a crescent moon, three candles in the dark. Elsewhere (and
-round the zigzag) the free-form drawing is unchanged.
+round the zigzag) the free-form drawing is unchanged. Since round 15 they are drawn on
+hexcanvas.true(): distances measured with the rows' TRUE gap (~0.66 of a bulb spacing, as
+the owner's photos show the Peak hang), so the sun disc and the sunburst's hub are round
+on the house, and the turkey, the candles (wax and flame taller than wide) and the falling
+star's head (a round head on a one-bulb streak) are drawn standing up, not 2-3x too wide.
 
 All are @frame_effect generators: memory lives in the layer's state dict, randomness is
 hashed or comes from a random.Random kept there (deterministic for a seed and a frame
@@ -208,7 +212,10 @@ def _polar(u: float, v: float, k: float = 1.0) -> tuple[float, float]:
           help="from the outside in, mirrored on both sides; deep autumn colours read best on bulbs"),
     Param("feathers", "int", 7, "Feathers / rays", 3, 16, 1),
     Param("tip", "color", "#ffe0a0", "Feather tips", help="the pale edge at the end of every feather"),
-    Param("body", "color", "#5a1400", "Turkey body", help="a dark chestnut; bulbs show brown as deep orange"),
+    Param("body", "color", "#c85414", "Turkey body",
+          help="a bright brown amber; a dark chestnut shows on bulbs as a dim red, lost among red feathers"),
+    Param("head", "color", "#b0d0ff", "Turkey head",
+          help="a cool blue-white (as on a real turkey), so the head stands out from the warm feather tips"),
     Param("wattle", "color", "#ff0000", "Wattle"),
     Param("level", "number", 0.9, "Brightness", 0.2, 1, 0.01),
     Param("intro", "number", 4, "Opening (s)", 0, 20, 0.5,
@@ -251,7 +258,7 @@ def fan(t, ctx, P, st):
         polar = st["polar"] = {i: _polar(u, v, cv["k"]) for i, (u, v) in cv["uv"].items()}
         st["polar_key"] = id(cv)
 
-    hc = hx.get(L, idx)
+    hc = hx.true(L, idx)
     fade = 1.0
     if hc is not None and style == "sunset":
         age, fade = _sunset_loop(age, P)              # on the Peak the sun sets again and again
@@ -304,7 +311,7 @@ def _turkey(frame, cv, polar, P, clock, age, opened, cols, nf, lvl, seed):
             continue
         hd = hx * hx + hy * hy
         if hd <= 1.0:
-            frame[i] = _scale((1.0, 0.72, 0.42), lvl)
+            frame[i] = _scale(P["head"], lvl)
             continue
         if bx * bx + by * by <= 1.0 or (abs(u) < 0.08 and v < 0.6):
             sh = 0.75 + 0.25 * wobble(cv["si"][i], clock, 0.4, seed)
@@ -500,24 +507,27 @@ def _art(text: str) -> hx.Sprite:
     return hx.Sprite(text, {ch: (1.0, 1.0, 1.0) for ch in set(text) if ch not in " .\n"})
 
 
-# the turkey in front of its fan; '.' is the dark ring that sets it off the feathers
+# the turkey in front of its fan; '.' is the dark ring that sets it off the feathers.
+# Drawn in TRUE proportions (a row is ~0.66 of a bulb spacing tall on the house): a round
+# chestnut body about as wide as it is tall, the wattle at the neck and a small pale head
+# on top, so the bird stands up instead of sprawling across the gable.
 TURKEY = _art("""
-       . H .
-      . H H .
-     . . H . .
-  . B B W B B .
- . B B B W B B .
-. B B B B B B B .
+  . H H .
+   . W .
+  . B B .
+ . B B B .
+  . B B .
+   . B .
 """)
 TURKEY_TALL = _art("""
-        . . .
-       . H H .
-      . H H H .
-     . . W H . .
-  . . B W B B . .
- . B B B W B B B .
-. B B B B B B B B .
- . B B B B B B B .
+   . H H .
+    . W .
+   . B B .
+  . B B B .
+ . B B B B .
+  . B B B .
+   . B B .
+    . B .
 """)
 BIRD_PARTS = {".": "halo", "B": "body", "H": "head", "W": "wattle"}
 
@@ -574,7 +584,7 @@ def _turkey_hex(frame, hc, st, P, clock, age, opened, cols, nf, lvl, seed):
             sh = 0.85 + 0.15 * wobble(_ckey(c), clock, 0.4, seed)
             frame[c.i] = _scale(body, lvl * sh)
         elif kind == "head":
-            frame[c.i] = _scale((1.0, 0.72, 0.42), lvl)
+            frame[c.i] = _scale(P["head"], lvl)       # cool, against the warm feather tips
         elif kind == "wattle":
             frame[c.i] = _scale(wattle, lvl)
         else:
@@ -614,7 +624,7 @@ def _sunset_hex(frame, hc, st, P, clock, age, lvl, seed):
         rays.append(hx.Line([(ca * r0, cy + sa * r0), (ca * r1, cy + sa * r1)], 1.1))
     ray_sh = hx.Union(*rays)
     top = max(1, hc.top)
-    glow = 1.0 - after                                 # the rays go with the light
+    glow = (1.0 - after) ** 2                          # the rays go with the light (gone by dusk)
     for c in hc.cells:
         if c.i is None or c.i not in hc.allowed:
             continue
@@ -724,7 +734,7 @@ def falling_star(t, ctx, P, st):
         st["stars"], st["sparks"], st["fall"], st["burst"] = [], [], None, None
         # the zigzag is a honeycomb screen: there the star is drawn on the lattice, a bold
         # streak down a straight 60-degree line over black
-        hc = hx.get(L, idx)
+        hc = hx.true(L, idx)
         if hc is not None and len(hc.live()) < 12:
             hc = None
         st["hc"] = hc
@@ -934,8 +944,9 @@ def _fs_diagonal(hc, side: int, rng) -> list:
 
 
 def _fs_len(P) -> float:
-    """How many cells of the streak glow behind the head on the zigzag."""
-    return max(2.0, P["tail"] * 0.4)
+    """How many cells of the streak glow behind the head on the zigzag (the head's
+    two rows included)."""
+    return max(3.0, P["tail"] * 0.4 + 1.0)
 
 
 def _fs_streak_done(fl, s: float, sa: float, sb: float, P) -> bool:
@@ -945,8 +956,11 @@ def _fs_streak_done(fl, s: float, sa: float, sb: float, P) -> bool:
 
 
 def _fs_streak(frame, hc, fl, s: float, sa: float, sb: float, P):
-    """The star on the honeycomb: a head two bulbs wide running down the diagonal, the
-    streak behind it fading from the star's colour into the tail colour."""
+    """The star on the honeycomb, in TRUE proportions: a round head (two bulbs side by
+    side and the one between them just behind: about as tall as it is wide where the rows
+    hang ~0.66 of a bulb apart; a pair alone is a flat dash three times wider than tall)
+    running down the 60-degree diagonal, and a slender one-bulb streak behind it fading
+    from the star's colour into the tail colour."""
     keys = fl["diag"]
     nd = len(keys)
     h = (s - sa) / max(1e-6, sb - sa) * (nd - 1)     # the head, in cells down the line
@@ -960,17 +974,22 @@ def _fs_streak(frame, hc, fl, s: float, sa: float, sb: float, P):
             continue
         if bk < 0:
             w, col = 1 + bk, hot                       # the leading edge glides in
-        elif bk < 1:
-            w, col = 1.0, lerp(hot, P["head"], bk)
+        elif bk < 2:
+            w, col = 1.0, lerp(hot, P["head"], bk * 0.35)   # the head: its pair, then its crown
         else:
-            u = (bk - 1) / max(1e-6, T - 1)
+            u = (bk - 2) / max(1e-6, T - 2)
             w, col = (1 - u) ** 1.3, lerp(P["head"], P["tail_color"], min(1.0, u * 1.4))
-        for dk in (0, dd):
+        # the cell beside the line makes the head two bulbs wide; it hands over to the
+        # next pair as the head moves on (behind the head the streak is one bulb)
+        side_w = w * min(1.0, max(0.0, 1.5 - bk))
+        for dk, k in ((0, w), (dd, side_w)):
+            if k <= 0.0:
+                continue
             c = hc.cell(r, (d + dk) / 2)
             if c is None or c.i is None or c.i not in hc.allowed:
                 continue
             a = frame[c.i]
-            frame[c.i] = (max(a[0], col[0] * w), max(a[1], col[1] * w), max(a[2], col[2] * w))
+            frame[c.i] = (max(a[0], col[0] * k), max(a[1], col[1] * k), max(a[2], col[2] * k))
 
 
 # ====================================================================== sleigh tour
@@ -1196,7 +1215,7 @@ def sleigh_tour(t, ctx, P, st):
         st["allowed"] = set(idx)
         # the zigzag (if the target has it) is a honeycomb screen: a night sky with the
         # moon, and the sleigh drawn on it as it flies the top roofline
-        hc = hx.get(L, idx)
+        hc = hx.true(L, idx)
         st["hc"] = hc if hc is not None and len(hc.live()) >= 12 else None
         st["peak"] = set(st["hc"].live()) if st["hc"] else set()
         st["off"] = st["allowed"] - st["peak"]
@@ -1347,23 +1366,27 @@ def sleigh_tour(t, ctx, P, st):
 # ====================================================================== candlelight
 # candles for the honeycomb: W wax, C the flame's bright heart, F its orange edge, L / R
 # its tip, which leans slowly from one to the other (a waver, never a flicker)
+# drawn in TRUE proportions (rows ~0.66 of a bulb spacing apart on the house): without the
+# Tip the wax is 3 bulbs by 3 rows (about 3 x 2 spacings: squat), the side candles 3 x 2
+# rows; it is the whole candle, wax and flame together, that stands taller than wide
 CANDLE = _art("""
    L R
-  F C F
+    C
    C C
-W W W W W
- W W W W
-W W W W W
+  W W W
+   W W
+  W W W
 """)
 CANDLE_TALL = _art("""
+    F
    L R
-  F C F
+    C
    C C
-W W W W W
- W W W W
-W W W W W
- W W W W
-W W W W W
+  W W W
+   W W
+  W W W
+   W W
+  W W W
 """)
 CANDLE_SMALL = _art("""
  L R
@@ -1457,7 +1480,7 @@ def candlelight(t, ctx, P, st):
         st["far"] = max(st["dist"].values()) if st["dist"] else 1.0
         # the zigzag (if the target has it) shows candles in the dark; every other bulb
         # keeps its candle glow
-        hc = hx.get(L, idx)
+        hc = hx.true(L, idx)
         st["hc"] = hc if hc is not None and len(hc.live()) >= 12 else None
         st["peak"] = set(st["hc"].live()) if st["hc"] else set()
     clock = ctx.clock
