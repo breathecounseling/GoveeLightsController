@@ -36,7 +36,13 @@
     },
     {
       "effect": "presents",
-      "params": {},
+      "params": {
+        "colors": [
+          "#ff0000",
+          "#00b030",
+          "#1848ff"
+        ]
+      },
       "target": "Porch"
     },
     {

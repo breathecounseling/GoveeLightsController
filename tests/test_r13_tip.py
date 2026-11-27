@@ -157,7 +157,13 @@ class TipInTheEffects(unittest.TestCase):
             cols = [sc.render(k / 4, T) for k in range(0, 160)]
             c = cols[-1][apex]
             self.assertGreater(min(c[0], c[1]), 0.5, (pid, c))          # warm white / gold star
-            self.assertTrue(all(max(cols[-1][p.i]) > 0.02 for p in T.run("Tip").pixels), pid)
+            # the tree runs up into the Tip: its boughs and star there are lit; the Tip's
+            # outer bulbs are the dark sky beside the tree (round 13 honeycomb tree)
+            plan = tree.tree_plan(T, T.indices("Whole front gable"))
+            tip = {p.i for p in T.run("Tip").pixels}
+            drawn = tip & (set(plan["leaf"]) | set(plan["star"]))
+            self.assertGreaterEqual(len(drawn), 8, pid)
+            self.assertTrue(all(max(cols[-1][i]) > 0.2 for i in drawn), pid)
 
     def test_canvas_keeps_the_peaks_scale(self):
         T, L = tipped(), owner()

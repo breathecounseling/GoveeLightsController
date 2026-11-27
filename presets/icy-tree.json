@@ -34,24 +34,22 @@
         "level": 1.0,
         "shimmer": 0.3,
         "shade": 0.3,
-        "garland": "#c0e0ff",
+        "garland": "#ffffff",
         "garland_style": "swag",
         "garland_width": 2.0,
         "garland_spacing": 12,
         "speed": 0.8,
         "garland_sparkle": 2.0,
         "ornament_colors": [
-          "#00e0ff",
-          "#a020ff",
-          "#ffffff",
-          "#40ffd0"
+          "#a020ff"
         ],
         "density": 0.16,
         "glints": 0.25,
         "star": "#f4f8ff",
         "glow": "#2060ff",
-        "glow_level": 0.6,
-        "intro": 1.2
+        "glow_level": 0.45,
+        "intro": 1.2,
+        "sky": "#001040"
       },
       "target": "Whole front gable"
     },
@@ -60,9 +58,8 @@
       "params": {
         "colors": [
           "#0070ff",
-          "#c040ff",
-          "#00d0ff",
-          "#40ffd0"
+          "#a020ff",
+          "#ffffff"
         ],
         "ribbon": "#ffffff",
         "background": "#002080",
