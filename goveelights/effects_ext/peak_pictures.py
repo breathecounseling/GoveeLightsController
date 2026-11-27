@@ -16,13 +16,15 @@ bulbs across at the bottom and 10 at the top), with a matching trim on every oth
         present      a red present with a gold ribbon and bow that unties itself, the lid
                      lifts, gold light pours out, then it wraps itself again; trim: red and
                      gold that flashes gold when the present opens
-        star         a winter star: an icy white core with long rays that pulse outward;
-                     trim: deep blue with pulses running out from the gable
+        star         a big white-gold five-pointed star filling the gable, its icy glow
+                     pulsing outward; trim: deep blue with pulses running out from the gable
         ornament     a red bauble with a gold cap hanging from the apex, swinging gently,
                      a glint on its shine; trim: green garland with gold beads
-        rudolph      Rudolph's face with antlers, and his red nose blinking; trim: night
+        rudolph      Rudolph's face (brow, ears, eyes that blink, a tan muzzle) under
+                     branching antlers, his red nose at the bottom blinking; trim: night
                      blue with stars and a red glow that runs out with each blink
-        joy          JOY in gold on red, a shimmer passing through and a star above;
+        joy          J, O, Y in gold on red, one big letter at a time (strokes two bulbs
+                     thick), then a burst of gold glitter under a star;
                      trim: red and gold with glitter
 
 The picture is drawn in "bulb units" (X across, about one unit per bulb, 0 at the
@@ -36,7 +38,6 @@ import math
 
 from ..color import BLACK, hash01, lerp, noise2
 from ..effects import Param, frame_effect
-from ..font import GLYPHS
 from ..sparkle import glint, wobble
 from .showpieces import _apex, _clamp, canvas
 
@@ -70,6 +71,35 @@ def _box(X, Y, x0, x1, y0, y1) -> float:
     dx = max(x0 - X, X - x1)
     dy = max(y0 - Y, Y - y1)
     return max(dx, dy)
+
+
+def _seg(X, Y, ax, ay, bx, by) -> float:
+    """Distance to the segment a-b (bulb units)."""
+    dx, dy = bx - ax, by - ay
+    L2 = dx * dx + dy * dy
+    t = 0.0 if L2 <= 0 else min(1.0, max(0.0, ((X - ax) * dx + (Y - ay) * dy) / L2))
+    return math.hypot(X - ax - t * dx, Y - ay - t * dy)
+
+
+def _poly(X, Y, pts) -> float:
+    """Signed distance to a closed polygon (negative inside)."""
+    d = min(_seg(X, Y, *pts[k - 1], *pts[k]) for k in range(len(pts)))
+    inside = False
+    for k in range(len(pts)):
+        (x0, y0), (x1, y1) = pts[k - 1], pts[k]
+        if (y0 > Y) != (y1 > Y) and X < x0 + (Y - y0) * (x1 - x0) / (y1 - y0):
+            inside = not inside
+    return -d if inside else d
+
+
+def _star5(cx, cy, r, sx, inner=0.4):
+    """A five-pointed star's outline, point up, stretched sx times across."""
+    pts = []
+    for k in range(10):
+        a = math.pi / 2 + k * math.pi / 5
+        rr = r if k % 2 == 0 else r * inner
+        pts.append((cx + rr * math.cos(a) * sx, cy + rr * math.sin(a)))
+    return pts
 
 
 def _sc(c, v):
@@ -225,32 +255,29 @@ def _present(X, Y, i, T, P, g):
     return c
 
 
+# a five-pointed star drawn for the six rows (a regular one loses its feet between rows):
+# its top point on the top two rows, arms on the fourth, two legs apart on the bottom rows
+_STAR_R = [(0.0, 6.0), (1.7, 4.0), (6.6, 3.5), (3.4, 1.9), (6.4, -0.9), (0.0, 1.6)]
+STAR = _STAR_R + [(-x, y) for x, y in reversed(_STAR_R[1:-1])]
+
+
 def _star(X, Y, i, T, P, g):
-    cy = 2.07
+    # a big five-pointed star filling the gable (its top point on the top row, its arms
+    # on the middle row, its feet on the bottom row), white-gold with an icy glow and
+    # pulses of light running outward through the night round it
     bg = _sc(NIGHT, 0.6)
     tw = glint(i, T, 0.12, 0.2, 0.8, 9)[0]
-    c = _mix(bg, (0.6, 0.7, 1.0), tw * 0.6)
-    dx, dy = X, Y - cy
-    r = math.hypot(dx, dy)
-    # eight rays, each about one bulb wide: long ones across, short ones up/down and on the
-    # diagonals; a slow sway, and brightness pulses that run outward along them
-    sway = 0.06 * math.sin(T * 0.5)
-    ray = 0.0
-    for k, length in enumerate((13.0, 5.0, 6.5, 5.0, 13.0, 5.0, 6.5, 5.0)):
-        a = k * math.pi / 4 + sway
-        ca, sa = math.cos(a), math.sin(a)
-        along = dx * ca + dy * sa
-        if along <= 0:
-            continue
-        perp = abs(-dx * sa + dy * ca)
-        w = 0.75 if k % 2 == 0 else 0.6
-        v = math.exp(-(perp / w) ** 2) * max(0.0, 1 - along / length)
-        ray = max(ray, v)
-    pulse = 0.6 + 0.4 * math.cos((r - T * 2.5) * 1.1)
-    ray *= pulse
-    c = _mix(c, _mix((0.25, 0.55, 1.0), (0.95, 0.97, 1.0), min(1.0, ray * 1.8)), min(1.0, ray * 2.2))
-    core = _cov(r - 1.3 - 0.3 * math.sin(T * 1.5), 0.5)
-    return _mix(c, (1.0, 1.0, 0.95), core)
+    c = _mix(bg, (0.6, 0.7, 1.0), tw * 0.5)
+    sd = _poly(X, Y, STAR)
+    r = math.hypot(X / 2.3, Y - 2.6)
+    if sd > 0:                                           # the glow and the outward pulses
+        pulse = 0.5 + 0.5 * math.cos((r - T * 2.2) * 2.0)
+        glow = max(0.0, 1 - sd / 1.6) * (0.25 + 0.75 * pulse ** 3)
+        c = _mix(c, (0.3, 0.55, 1.0), glow * 0.6)
+    core = max(0.0, 1 - r / 1.6) * (0.5 + 0.5 * math.sin(T * 1.5))
+    body = _mix((1.0, 0.82, 0.4), (1.0, 1.0, 0.95), core + 0.25)
+    body = _mix(body, (1.0, 1.0, 1.0), glint(i, T, 0.5, 0.06, 0.5, 13)[0])
+    return _mix(c, body, _cov(sd, 0.35))
 
 
 def _ornament(X, Y, i, T, P, g):
@@ -284,63 +311,74 @@ def _ornament(X, Y, i, T, P, g):
 
 
 def _rudolph(X, Y, i, T, P, g):
+    # his face from the front: a broad brow narrowing to his muzzle, ears out to the
+    # sides, branching antlers on the top rows, and his nose at the bottom of his face
+    # (the brightest thing in the picture) blinking, its glow spilling on to his muzzle
     bg = _sc(NIGHT, 0.6)
     tw = glint(i, T, 0.12, 0.2, 0.9, 31)[0]
     c = _mix(bg, (0.8, 0.85, 1.0), tw * 0.7)
-    fur = (0.36, 0.11, 0.01)                             # dim, so the nose stands out
-    antler = (1.0, 0.78, 0.45)
-    # antlers on the top two rows: a stem from each side of his head that forks in two
+    fur = (0.5, 0.17, 0.0)
+    muzzle = (0.85, 0.5, 0.2)
+    antler = (1.0, 0.8, 0.5)
     ax = abs(X)
-    spans = [(1.9, 3.3)] if 3.8 <= Y < 4.7 else [(0.9, 1.9), (3.2, 4.6)] if Y >= 4.7 else []
-    for lo, hi in spans:
-        c = _mix(c, antler, _cov(max(lo - ax, ax - hi), 0.25))
-    head = _ell(X, Y, 0, 1.8, 4.3, 2.0)
-    ears = _ell(ax, Y, 4.2, 3.25, 1.1, 0.45)
-    c = _mix(c, fur, _cov(min(head, ears)))
-    if head < 0:
-        eyes = _ell(ax, Y, 1.5, 3.25, 0.6, 0.45)
-        c = _mix(c, (1.0, 1.0, 1.0), _cov(eyes) * (1 - g["blink"]))
-    # the nose: big, in the middle of his face; it blinks and its glow spills round it
+    horns = min(_seg(ax, Y, 1.6, 3.6, 5.5, 4.6), _seg(ax, Y, 2.5, 3.9, 1.5, 5.2),
+                _seg(ax, Y, 4.5, 4.3, 4.4, 5.2))
+    c = _mix(c, antler, _cov(horns - 0.45, 0.3))
+    head = _poly(ax, Y, [(0.0, 3.8), (3.4, 3.7), (3.7, 2.6), (2.2, 0.9), (1.6, -0.4), (0.0, -0.4)])
+    ears = _ell(ax, Y, 4.9, 3.2, 1.5, 0.45)
+    c = _mix(c, fur, _cov(min(head, ears), 0.4))
+    c = _mix(c, muzzle, _cov(_ell(X, Y, 0, 0.4, 2.3, 1.15), 0.4))
+    eyes = _ell(ax, Y, 1.6, 2.1, 0.55, 0.45)
+    c = _mix(c, (1.0, 1.0, 1.0), _cov(eyes, 0.3) * (1 - g["blink"]))
     nb = g["nose"]
-    nose = _ell(X, Y, 0, 1.4, 1.7, 0.75)
-    halo = max(0.0, 1 - math.hypot(X / 3.4, (Y - 1.4) / 1.6)) * nb
-    c = _mix(c, (1.0, 0.1, 0.05), halo * 0.35)
-    return _mix(c, _sc((1.0, 0.0, 0.0), 0.3 + 0.7 * nb), _cov(nose))
+    halo = max(0.0, 1 - math.hypot(X / 3.0, Y / 1.4)) * nb
+    c = _mix(c, (1.0, 0.15, 0.05), halo * 0.5)
+    nose = _ell(X, Y, 0, 0.1, 1.4, 0.75)
+    return _mix(c, _sc((1.0, 0.0, 0.0), 0.3 + 0.7 * nb), _cov(nose, 0.35))
+
+
+# JOY one big letter at a time (six rows are too few for three letters side by side to
+# read from the street): each letter is drawn with strokes two bulbs thick, filling the
+# gable, and the word ends with a burst of gold glitter under a star
+JOY_STEP, JOY_BURST = 2.2, 1.8
+JOY_CYCLE = 3 * JOY_STEP + JOY_BURST
+
+
+def _letter(ch, X, Y) -> float:
+    w = 0.85                                             # half the stroke width
+    if ch == "J":
+        return min(_seg(X, Y, -3.2, 4.75, 3.6, 4.75), _seg(X, Y, 1.8, 4.75, 1.8, 1.6),
+                   abs(_ell(X, Y, -0.6, 1.6, 2.4, 1.6)) + (0 if Y <= 1.6 else 9),
+                   _seg(X, Y, -3.0, 1.6, -3.0, 2.2)) - w
+    if ch == "O":
+        return abs(_ell(X, Y, 0, 2.5, 4.2, 2.5)) - w
+    return min(_seg(X, Y, -4.0, 5.0, 0, 2.3), _seg(X, Y, 4.0, 5.0, 0, 2.3),
+               _seg(X, Y, 0, 2.3, 0, -0.3)) - w
 
 
 def _joy(X, Y, i, T, P, g):
     red = (0.32, 0.0, 0.01)
     gold = (1.0, 0.62, 0.05)
-    bm = g["joy"]
-    w = len(bm[0])
-    # five rows of letters on the bottom five rows; one column per bulb, centred
-    row = 4 - int(round(min(4.0, max(0.0, Y / 4.4 * 4))))
-    c = red
-    if Y <= 4.6:
-        col = int(math.floor(X + w / 2 + 0.5 + 1e-3))   # nearest column (bulbs sit on whole X)
-        if 0 <= col < w and bm[row][col] == "#":
-            s = (X - T * 4.0) % 22.0
-            shimmer = max(0.0, 1 - abs(s - 11) / 2.2)
-            c = _mix(gold, (1.0, 0.95, 0.75), shimmer)
-    else:                                                # a little star on the top row
-        tw = 0.6 + 0.4 * math.sin(T * 2.5)
-        c = _mix(red, (1.0, 0.9, 0.6), _cov(abs(X) - 1.0, 0.4) * tw)
-    return c
+    k, u = g["joy"]
+    if k < 3:
+        # the letter wipes in from the left, a shimmer runs through it, then it fades
+        sd = _letter("JOY"[k], X, Y)
+        wipe = _sm((u * 6.0 - (X + 6.0) / 12.0) / 0.25)
+        fade = 1 - _sm((u - 0.86) / 0.14)
+        s = (X + 8.0 - u * 30.0) % 24.0
+        shimmer = max(0.0, 1 - abs(s - 12) / 2.0)
+        col = _mix(gold, (1.0, 0.95, 0.75), shimmer)
+        return _mix(red, col, _cov(sd, 0.35) * wipe * fade)
+    # the burst: gold glitter all over the gable, a star on the top rows
+    sp = glint(i, T, 3.0, 0.05, 0.35, 23)[0]
+    fade = (1 - _sm((u - 0.7) / 0.3)) * _sm(u / 0.1)
+    c = _mix(red, (1.0, 0.85, 0.4), sp * fade)
+    st = _cov(_poly(X, Y, _star5(0.0, 4.4, 1.0, 2.0)), 0.35)
+    return _mix(c, (1.0, 0.95, 0.7), st * fade)
 
 
 DRAW = {"wreath": _wreath, "snowman": _snowman, "gingerbread": _gingerbread, "present": _present,
         "star": _star, "ornament": _ornament, "rudolph": _rudolph, "joy": _joy}
-
-
-def _word(text: str) -> list[str]:
-    rows = ["", "", "", "", ""]
-    for k, ch in enumerate(text):
-        gl = GLYPHS.get(ch)
-        if not gl:
-            continue
-        for r in range(5):
-            rows[r] += ("." if k else "") + gl[r]
-    return rows
 
 
 # ====================================================================== the trims
@@ -462,7 +500,9 @@ def peak_picture(t, ctx, P, st):
     nose = max(math.exp(-((nt - 0.3) / 0.22) ** 2), 0.8 * math.exp(-((nt - 0.95) / 0.18) ** 2))
     g["nose"] = 0.25 + 0.75 * nose
     g["ripple"] = nt * 30.0
-    g["joy"] = st.get("joy") or st.setdefault("joy", _word("JOY"))
+    jt = T % JOY_CYCLE                                       # JOY: which letter, how far in
+    g["joy"] = (int(jt // JOY_STEP), (jt % JOY_STEP) / JOY_STEP) if jt < 3 * JOY_STEP \
+        else (3, (jt - 3 * JOY_STEP) / JOY_BURST)
 
     draw = DRAW[style]
     for i, (X, Y) in xy.items():
