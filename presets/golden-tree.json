@@ -41,16 +41,15 @@
         "garland_sparkle": 1.8,
         "ornament_colors": [
           "#ff0000",
-          "#c000ff",
-          "#0040ff",
-          "#ff0040"
+          "#0040ff"
         ],
         "density": 0.2,
         "glints": 0.2,
         "star": "#fff4e0",
         "glow": "#ff8000",
-        "glow_level": 0.6,
-        "intro": 1.0
+        "glow_level": 0.4,
+        "intro": 1.0,
+        "spread": 2.0
       },
       "target": "Whole front gable"
     },
@@ -59,9 +58,7 @@
       "params": {
         "colors": [
           "#ff0000",
-          "#c000ff",
-          "#0040ff",
-          "#ff0040"
+          "#0040ff"
         ],
         "ribbon": "#fff4e0"
       },

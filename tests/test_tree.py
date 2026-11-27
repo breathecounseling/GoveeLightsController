@@ -69,13 +69,18 @@ class TreeRenderTests(unittest.TestCase):
 
     def test_intro_lights_trunk_first_then_star(self):
         L = house()
-        sc = scene({"intro": 8})
-        star = [i for i in T.tree_geometry(L, L.indices("Whole front gable"))["star"]]
-        rows = __import__("goveelights.geometry", fromlist=["rows"]).rows(L, "Peak")
+        sc = scene({"intro": 8, "sky_twinkle": 0})
+        plan = T.tree_plan(L, L.indices("Whole front gable"))
+        star = plan["star"]
+        # the tree's rows on the honeycomb: the trunk, then the boughs bottom to top
+        by_row = {}
+        for i in plan["leaf"]:
+            by_row.setdefault(plan["hc"].of(i).r, []).append(i)
+        rows = [plan["trunk"]] + [by_row[r] for r in sorted(by_row)]
         first = sc.render(0.0, L)
         self.assertTrue(all(max(first[i]) == 0 for r in rows for i in r))   # dark at the start
         cols = run(sc, L, 0.05, 2.5)                                        # partway
-        bottom = sum(max(cols[i]) for i in rows[0]) / len(rows[0])
+        bottom = sum(max(cols[i]) for i in rows[1]) / len(rows[1])
         top = sum(max(cols[i]) for i in rows[-1]) / len(rows[-1])
         self.assertGreater(bottom, 0.2)
         self.assertLess(top, 0.05)
@@ -88,10 +93,8 @@ class TreeRenderTests(unittest.TestCase):
     def test_no_intro_and_body_is_green(self):
         L = house()
         cols = scene({"intro": 0, "density": 0, "garland_style": "none"}).render(5.0, L)
-        for i in L.indices("Peak"):
+        for i in T.tree_plan(L, L.indices("Whole front gable"))["leaf"]:
             r, g, b = cols[i]
-            if i in T.tree_geometry(L, L.indices("Whole front gable"))["near_star"]:
-                continue
             self.assertGreater(g, r)
             self.assertGreater(g, b)
             self.assertGreater(g, 0.15)
@@ -155,15 +158,16 @@ class TreeRenderTests(unittest.TestCase):
 
     def test_relight_cycle(self):
         L = house()
-        sc = scene({"intro": 2, "relight": 0.5})
-        body = L.indices("Peak")
+        sc = scene({"intro": 2, "relight": 0.5, "sky_twinkle": 0})
+        plan = T.tree_plan(L, L.indices("Whole front gable"))
+        body = list(plan["leaf"])
         run(sc, L, 0.0, 29.0)
         lit = sc.render(29.05, L)
         self.assertGreater(sum(max(lit[i]) for i in body) / len(body), 0.2)
         cols = run(sc, L, 29.1, 32.4)               # faded out (relight is due at 30 s)
         self.assertLess(sum(max(cols[i]) for i in body) / len(body), 0.02)
         cols = run(sc, L, 32.45, 32.9)              # relighting from the trunk: top still dark
-        top = __import__("goveelights.geometry", fromlist=["rows"]).rows(L, "Peak")[-1]
+        top = [i for i in body if plan["hc"].of(i).r >= 3]
         self.assertLess(sum(max(cols[i]) for i in top) / len(top), 0.05)
         cols = run(sc, L, 33.85, 38.0)
         self.assertGreater(sum(max(cols[i]) for i in body) / len(body), 0.2)
@@ -209,7 +213,7 @@ class ReviewFixTests(unittest.TestCase):
                 st = {}
                 for k in range(0, 64):               # up to 6.3 s; ignition at 0.82 * 8 = 6.56 s
                     out = call(self.L, self.idx, {"seed": seed}, st, clock=c0 + k * 0.1)
-                    for i in self.geo["rest"] + self.geo["star"]:
+                    for i in self.geo["rest"] + self.geo["star"] + T.tree_plan(self.L, self.idx)["star"]:
                         self.assertLess(max(out[i]), 0.02, (c0, seed, k))
 
     def test_ignition_burst_decays_smoothly_past_intro_end(self):
@@ -218,13 +222,14 @@ class ReviewFixTests(unittest.TestCase):
             for k in range(0, int(D * 100) + 60):
                 c = 50 + k * 0.01
                 out = call(self.L, self.idx, {"intro": D, "burst_every": 0}, st, clock=c)
-                s = sum(sum(out[i]) for i in self.geo["star"])
+                s = sum(sum(out[i]) for i in T.tree_plan(self.L, self.idx)["star"])
                 if prev is not None and abs(k - D * 100) <= 3:     # across the end of the intro
                     self.assertLess(abs(s - prev), 0.1, (D, k))
                 prev = s
 
     def test_ornaments_follow_tree_brightness(self):
-        orn = T.ornaments(self.L, self.geo, 0.18, 7, 6)
+        orn = T.hex_ornaments(T.tree_plan(self.L, self.idx), 0.18, 7, 2)
+        self.assertTrue(orn)
         bright = call(self.L, self.idx, {"intro": 0, "glints": 0, "level": 1.0}, {}, clock=20)
         dim = call(self.L, self.idx, {"intro": 0, "glints": 0, "level": 0.3}, {}, clock=20)
         for i in orn:
@@ -235,7 +240,7 @@ class ReviewFixTests(unittest.TestCase):
         for k in range(200):
             call(self.L, self.idx, {"density": k / 400, "seed": k}, st, clock=1 + k * 0.05)
         self.assertNotIn(("tree-orn",), [key[:1] for key in T.geometry._cache(self.L) if isinstance(key, tuple)])
-        self.assertIn("orn", st)
+        self.assertIn("horn", st)
 
     def test_presents_start_whole_at_target_edge(self):
         fx = EFFECTS["presents"]

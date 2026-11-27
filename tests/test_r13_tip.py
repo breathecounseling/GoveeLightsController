@@ -157,7 +157,13 @@ class TipInTheEffects(unittest.TestCase):
             cols = [sc.render(k / 4, T) for k in range(0, 160)]
             c = cols[-1][apex]
             self.assertGreater(min(c[0], c[1]), 0.5, (pid, c))          # warm white / gold star
-            self.assertTrue(all(max(cols[-1][p.i]) > 0.02 for p in T.run("Tip").pixels), pid)
+            # the tree runs up into the Tip: its boughs and star there are lit; the Tip's
+            # outer bulbs are the dark sky beside the tree (round 13 honeycomb tree)
+            plan = tree.tree_plan(T, T.indices("Whole front gable"))
+            tip = {p.i for p in T.run("Tip").pixels}
+            drawn = tip & (set(plan["leaf"]) | set(plan["star"]))
+            self.assertEqual(len(drawn), 6, pid)              # the star (3) and the top boughs (3)
+            self.assertTrue(all(max(cols[-1][i]) > 0.2 for i in drawn), pid)
 
     def test_canvas_keeps_the_peaks_scale(self):
         T, L = tipped(), owner()
@@ -222,15 +228,15 @@ class _FixedDT(_dt.datetime):
 TIP_GOLDEN = {
     "advent-calendar": "65027b5347400bd8", "apex-ripples": "880eff34785c59c9", "ball-drop-at-midnight": "8a22628a34bcd00e",
     "ball-drop-preview-loop": "1a9163b0c12dfd22", "breathing-comets": "a3a8bef3c3e3ac6a", "broncos-game-day": "909e7e3613cb8481",
-    "candy-cane": "5e2363004f4e511d", "champagne-fizz": "4859f951a5cf63c6", "christmas-tree": "fab6681e34c6e510",
+    "candy-cane": "5e2363004f4e511d", "champagne-fizz": "4859f951a5cf63c6", "christmas-tree": "480aa0a9e8ba32db",
     "christmas-twinkle": "c9e9b8b992164b14", "comets": "c7cf23e55a210d3b", "diamond-glitter": "d7d587adcdf79946",
     "dusk-demo": "67b9c39628124cbd", "dusk-to-night": "8d77cfd04e66bcd4", "easter-pastels": "2886ea70aa07eef4",
     "ember-falls": "e1ec65843cc41dc0", "falling-waves": "51a5f0182aa98bc5", "festive-glitter": "45682c91800ecb0e",
     "fill-the-peak": "294ecbe6f4b1e82c", "fireworks": "350c00e20ed3d0b6", "gift-wrap": "17c31b5188391dd8",
-    "glitter-ball": "655ef72718b2deb4", "golden-shimmer": "f10b106a30cce3c1", "golden-tree": "f5fd77c817a85c24",
+    "glitter-ball": "655ef72718b2deb4", "golden-shimmer": "f10b106a30cce3c1", "golden-tree": "0bf8677143a6f96a",
     "grand-finale": "43c110aeebcdf19e", "halloween": "b186e0ad86f1c62c", "halloween-haunted": "c9493744346645ba",
     "halloween-pumpkin": "547cd80050f12326", "heartbeat-from-the-apex": "e64381aa0982055b", "icicles": "7fd33f2a5986c30a",
-    "icy-tree": "d812012d017e192f", "july-4th-fireworks": "2991e7fc6198fa36", "july-4th-flag": "34d387ce53a4a8f5",
+    "icy-tree": "0207106c80dd9e81", "july-4th-fireworks": "2991e7fc6198fa36", "july-4th-flag": "34d387ce53a4a8f5",
     "lighthouse": "7e9ae3d1d3a57b77", "mirror-comets": "08ee50dc017b2871", "music-pulse": "96522b8b2cc0b0f9",
     "northern-lights": "ecdbafd936dfdd69", "paparazzi": "7fad842081535208", "party-beat": "0f4db2764cbd30e3",
     "peak-fire": "c84c2ee7bf0344c3", "peak-gingerbread": "a370febc9e563072", "peak-joy": "d2d3478b795d8bc0",

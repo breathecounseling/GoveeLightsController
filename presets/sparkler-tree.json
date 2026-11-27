@@ -8,15 +8,15 @@
       "params": {"colors": ["#ffc020", "#ffa000", "#ff7000"], "background": "#0020a0", "density": 0.3, "duration": 2.0, "seed": 19}
     },
     {
-      "effect": "gradient",
-      "target": "Peak",
-      "params": {"colors": ["#00a020", "#00c030", "#40b000", "#00c030"], "length": 6, "speed": 0.6, "axis": "y"}
+      "effect": "tree",
+      "target": "Whole front gable",
+      "params": {"body": "#00c030", "body2": "#00a020", "level": 0.8, "shimmer": 0.2, "shade": 0.2, "garland_style": "none", "density": 0, "star": "#fff4d0", "star_pulse": 0.2, "burst_every": 5, "glow": "#ffa020", "glow_level": 0.25, "halo": 0.6, "sky": "#0020a0", "sky_level": 0.05, "sky_twinkle": 0, "intro": 0}
     },
     {
       "effect": "embers",
       "target": "Whole front gable",
       "blend": "lighten",
-      "params": {"rate": 9, "spill": 0.7, "catch": 0.25, "life": 3, "glow": 0.8, "colors": ["#ffffff", "#fff0a0", "#ffc020", "#ff7000", "#ff2000"]}
+      "params": {"rate": 7, "spill": 0.7, "catch": 0.25, "life": 2, "glow": 0.8, "colors": ["#ffffff", "#fff0a0", "#ffc020", "#ff7000", "#ff2000"]}
     }
   ]
 }

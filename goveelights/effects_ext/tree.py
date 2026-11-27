@@ -1,28 +1,40 @@
-"""Christmas tree scene: the front gable's zigzag as a lit tree, the gable apex as its star.
+"""Christmas tree scene: a tree DRAWN on the Peak's honeycomb, its star on the top.
 
     tree      the whole scene (frame effect, it remembers when it was lit):
-              body + travelling garland + ornaments with glints + star on top,
-              a "lighting the tree" intro and an optional periodic relight.
+              boughs + garland + ornaments with glints + star on top, a "lighting the
+              tree" intro and an optional periodic relight.
     presents  wrapped boxes with ribbons for the porch under the tree (frame effect:
               boxes are counted from the start of the target, so they start whole).
 
-How the tree finds itself in the target
----------------------------------------
-* The tree is the part of the target that is wired as a zigzag (rows that reverse
-  direction, e.g. the Peak run). If nothing in the target is a zigzag, the whole
-  target is the tree, its rows grouped by height.
-* The star is the bulbs crowning the tree (geometry.star: on the house the gable apex,
-  Eaves bulbs 42/43). They are OUTSIDE the Peak, so target "Whole front gable"
-  (Peak + Front gable outline) to light them. If the star bulbs are not in the
-  target, the middle of the tree's top row becomes the star instead.
-* Every other target bulb (e.g. the rest of the gable outline) gets a soft warm glow,
-  brighter near the star, so the star stands out.
+How the tree is drawn (round 13: built for the triangular honeycomb screen)
+----------------------------------------------------------------------------
+The Peak's rows are offset half a bulb (a honeycomb triangle, see hexcanvas). Lighting
+it edge to edge in green only says "the gable is green", so the tree is a picture on it
+(tree_plan):
+* a tiered fir, centred on the widest rows: two-row tiers whose sides run along the
+  lattice's 60-degree lines (half a bulb in per row), each tier stepping out by
+  `spread` below the one above;
+* a night sky round it (dim, faint far stars) with a black margin hugging the tree;
+* a trunk: the middle of the bottom row, the rest of that row is dark ground;
+* the star on the top row's middle (with the Tip: the apex and the two under it), with
+  dimmer rays either side; it lights on target "Peak" alone too;
+* ornaments as bold PAIRS of side-by-side bulbs in two or three colours, well apart;
+* the garland as a swag along a lattice diagonal (or, "strand", dashes along each
+  tier's hem).
+Every per-bulb choice is seeded by the cell's lattice position, so a dead bulb never
+moves anything. The rest of the target (e.g. the gable outline) glows warmly round it,
+brightest by the star.
+
+If the target has no zigzag the whole target is lit as a tree row by row, as before
+(tree_geometry, _tree_flat).
 """
 from __future__ import annotations
 
 import math
+import zlib
 
 from .. import geometry
+from . import hexcanvas
 from ..color import BLACK, hash01, lerp
 from ..effects import Param, frame_effect, travel
 from ..sparkle import envelope, glint, wobble
@@ -174,10 +186,10 @@ TREE_PARAMS = [
           help="darker lower boughs, lighter tip, like light falling on a real tree"),
     Param("garland", "color", "#ff8c00", "Garland colour",
           help="deep gold by default, so the paler, hotter star stands apart from it"),
-    Param("garland_style", "choice", "strand", "Garland style",
+    Param("garland_style", "choice", "swag", "Garland style",
           options=["strand", "swag", "none"],
-          help="strand: runs along the wiring, row by row, back and forth; "
-               "swag: diagonal drapes across the tree; none: no garland"),
+          help="swag: drapes along the honeycomb's diagonal, creeping across the tree; "
+               "strand: a garland along the hem of each tier; none: no garland"),
     Param("garland_width", "number", 2, "Garland width (bulbs)", 0.5, 10, 0.1),
     Param("garland_spacing", "number", 20, "Garland spacing (bulbs)", 3, 120, 0.5,
           help="distance between garland strands; large = a single strand"),
@@ -185,8 +197,8 @@ TREE_PARAMS = [
           help="how fast the garland creeps along; negative reverses"),
     Param("garland_sparkle", "number", 1.2, "Garland sparkle", 0, 6, 0.1,
           help="glints per garland bulb per second"),
-    Param("ornament_colors", "colors", ["#ff0000", "#1848ff", "#ff0a78", "#e8f0ff", "#ff0000", "#a020ff"],
-          "Ornament colours"),
+    Param("ornament_colors", "colors", ["#ff0000", "#1848ff"],
+          "Ornament colours", help="two or three bold colours read best; the first three are used on the Peak"),
     Param("density", "number", 0.18, "Ornament density", 0, 0.5, 0.01,
           help="share of tree bulbs that are ornaments"),
     Param("glints", "number", 0.12, "Ornament glints per second", 0, 3, 0.01,
@@ -211,6 +223,18 @@ TREE_PARAMS = [
                "then the star ignites; 0 = no intro"),
     Param("relight", "number", 0, "Relight every (min)", 0, 120, 0.5,
           help="dim the tree and light it again with the intro; 0 = never"),
+    Param("trunk", "color", "#a03c00", "Trunk colour",
+          help="the middle of the bottom row, under the boughs"),
+    Param("sky", "color", "#0a1a60", "Night sky colour",
+          help="the Peak round the tree; a clean black margin always hugs the tree"),
+    Param("sky_level", "number", 0.06, "Night sky brightness", 0, 0.5, 0.01,
+          help="keep it low: the tree reads best as a bright shape on a dark gable; 0 = black"),
+    Param("sky_twinkle", "number", 0.02, "Far stars", 0, 1, 0.01,
+          help="faint stars twinkling in the sky round the tree (glints per bulb per second)"),
+    Param("spread", "number", 1.0, "Tier step", 0, 3, 0.5,
+          help="how far each tier of boughs steps out past the one above (bulbs each side); "
+               "the honeycomb rows sit half a bulb apart, so a half step only shows on some "
+               "layouts (on the Peak without the Tip 1 and 1.5 draw the same tree)"),
     Param("seed", "int", 7, "Seed", 0, 9999, 1, help="which bulbs are ornaments, and the sparkle pattern"),
 ]
 
@@ -240,15 +264,8 @@ def _timeline(clock: float, P: dict, state: dict) -> tuple[float | None, float]:
     return None, 1.0
 
 
-@frame_effect("tree", "Christmas tree", TREE_PARAMS,
-              "The zigzag becomes a lit Christmas tree: shimmering green boughs, a gold garland "
-              "creeping along the rows with sparkle, coloured ornaments that catch the light, and "
-              "a warm gold star on the gable apex that breathes and now and then bursts into sparks. "
-              "Starts with a tree-lighting: trunk to tip, ornaments pop on, the star ignites last. "
-              "Target 'Whole front gable' so the star (on the outline) lights too; on 'Peak' alone "
-              "the top of the tree becomes the star.",
-              group="Scenes")
-def tree(t, ctx, P, state):
+def _tree_flat(t, ctx, P, state):
+    """The tree when the target has no zigzag: every row of the target lit as boughs."""
     layout = ctx.layout
     px = layout.pixels
     n = len(px)
@@ -416,6 +433,405 @@ def tree(t, ctx, P, state):
             c = lerp(c, (1.0, 0.95, 0.85), flash)
         out[i] = _clamp01((c[0] * dim, c[1] * dim, c[2] * dim))
     return out
+
+
+# ------------------------------------------------------------------ the tree on the honeycomb
+# The Peak is a triangle of offset rows (a honeycomb). The tree is DRAWN on it: a tiered
+# silhouette with 60-degree lattice edges, black sky round it, a trunk on the bottom row
+# and a bold star on the top (the Tip's apex when there is one). Every per-bulb choice is
+# seeded by the cell's lattice key, so a dead bulb never moves the picture.
+
+def tree_plan(layout, idx: list[int], spread: float = 1.0) -> dict | None:
+    """The tree drawn on the target's honeycomb, or None when the target has no zigzag
+    (then the flat tree is used). Cached per layout, target and spread."""
+    spread = round(max(0.0, min(3.0, spread)) * 2) / 2
+    key = ("treeplan", tuple(idx), spread)
+    cache = geometry._cache(layout)
+    if key in cache:
+        return cache[key]
+    hc = hexcanvas.get(layout, idx)
+    if hc is None or hc.top < 3:
+        cache[key] = None
+        return None
+    top = hc.top
+    tip = hc.widths[-1] <= 1                       # a single apex bulb (the Tip)
+    role: dict[tuple, str] = {}
+
+    def put(r, x, what):
+        c = hc.cell(r, x)
+        if c is not None and c.key not in role:
+            role[c.key] = what
+
+    # the star: the apex (+ the two under it with the Tip), rays either side
+    if tip:
+        put(top, 0, "star")
+        put(top - 1, -0.5, "star")
+        put(top - 1, 0.5, "star")
+        put(top - 1, -1.5, "ray")
+        put(top - 1, 1.5, "ray")
+        fol_top = top - 2
+    else:
+        for c in hc.apex_cells:
+            role[c.key] = "star"
+        sx = max(abs(c.x) for c in hc.apex_cells)
+        put(top, -sx - 1, "ray")
+        put(top, sx + 1, "ray")
+        fol_top = top - 1
+    # the trunk: the middle of the bottom row (3 bulbs on a whole row, 2 on a half row)
+    for c in hc.row(0):
+        if abs(c.x) <= 1.0 + 1e-6:
+            role[c.key] = "trunk"
+    # the boughs: tiers of two rows from the bottom (three on top when the count is odd);
+    # each row half a bulb wider each side (the lattice's 60-degree edge), each tier
+    # stepping out by `spread` more
+    frows = list(range(fol_top, 0, -1))           # top first
+    sizes, k = [], len(frows)
+    while k > 0:
+        n = 3 if k == 3 else min(2, k)
+        sizes.append(n)
+        k -= n
+    sizes.reverse()
+    hw, n_r, tier_of, bottom_rows, hw_of = None, 0, {}, set(), {}
+    for t_i, n in enumerate(sizes):
+        for j in range(n):
+            r = frows[n_r]
+            n_r += 1
+            half = bool(hc.row(r)) and hc.row(r)[0].d % 2 != 0
+            if hw is None:
+                hw = 0.5 if half else 1.0
+            elif j == 0:
+                hw += 0.5 + spread
+            else:
+                hw += 0.5
+            lim = min(hw, max(abs(c.x) for c in hc.row(r)) - 1.0) if hc.row(r) else hw
+            hw_of[r] = lim
+            tier_of[r] = t_i
+            if j == n - 1:
+                bottom_rows.add(r)
+            for c in hc.row(r):
+                if abs(c.x) <= lim + 1e-6 and c.key not in role:
+                    role[c.key] = "leaf"
+    allowed = hc.allowed
+    px = layout.pixels
+    star, rays, trunk, sky = [], [], [], []
+    leaf: dict[int, tuple] = {}
+    span = max(1, fol_top - 1)
+    for c in hc.cells:
+        if c.i is None or c.i not in allowed:
+            continue
+        w = role.get(c.key, "sky")
+        if w == "star":
+            star.append(c.i)
+        elif w == "ray":
+            rays.append(c.i)
+        elif w == "trunk":
+            trunk.append(c.i)
+        elif w == "leaf":
+            h = (c.r - 1) / span
+            hwr = hw_of.get(c.r, 1.0)
+            edge = abs(c.x) >= hwr - 0.5 - 1e-6
+            leaf[c.i] = (c.r, c.x, h, tier_of.get(c.r, 0), edge, c.r in bottom_rows, c.key)
+        else:
+            sky.append(c.i)
+    # where the star shines from (layout units), for its halo and sparks
+    sc = [c for c in hc.cells if role.get(c.key) == "star"]
+    sx = sum(c.pos[0] for c in sc) / len(sc) if sc else 0.0
+    sy = sum(c.pos[1] for c in sc) / len(sc) if sc else 0.0
+    on = set(star) | set(rays) | set(trunk) | set(leaf) | set(sky)
+    rest = [i for i in idx if 0 <= i < len(px) and i not in on and hc.of(i) is None]
+    dist = {i: math.hypot(px[i].x - sx, px[i].y - sy) for i in idx if 0 <= i < len(px)}
+    # sky bulbs touching the tree stay black: a clean margin round the silhouette
+    tree_keys = {k for k, w in role.items() if w in ("leaf", "trunk", "star")}
+    margin = set()
+    for i in sky:
+        c = hc.of(i)
+        if any(nb.key in tree_keys for nb in hc.neighbours(c)):
+            margin.add(i)
+    # ornament slots: pairs of side-by-side boughs, never touching each other
+    pairs = []
+    for c in hc.cells:
+        if role.get(c.key) != "leaf":
+            continue
+        n2 = hc.cell(c.r, c.x + 1)
+        if n2 is not None and role.get(n2.key) == "leaf":
+            pairs.append((c, n2))
+    # a stable id per bulb for its sparkle (bulb indexes move when a bulb dies)
+    sid = {}
+    for i in idx:
+        if 0 <= i < len(px):
+            c = hc.of(i)
+            sid[i] = (1 << 20) + (c.r << 10) + c.d + 512 if c is not None else \
+                (zlib.crc32(str(px[i].mac).encode()) % 4093 << 12) + px[i].local
+    out = {"hc": hc, "star": star, "sid": sid,
+           "leaf_cells": sum(1 for w in role.values() if w == "leaf"), "rays": rays, "trunk": trunk, "leaf": leaf, "sky": sky,
+           "margin": margin, "rest": rest, "dist": dist, "pairs": pairs, "tip": tip,
+           "rows": top + 1, "fol_top": fol_top, "tiers": len(sizes),
+           "ph": {i: (hash01(*v[6], 11) * TAU, 0.25 + 0.35 * hash01(*v[6], 12), hash01(*v[6], 13))
+                  for i, v in leaf.items()}}
+    cache[key] = out
+    return out
+
+
+def _hexdist(a, b) -> int:
+    """Steps between two cells on the honeycomb."""
+    dq, dr = a.q - b.q, a.r - b.r
+    return (abs(dq) + abs(dr) + abs(dq + dr)) // 2
+
+
+def hex_ornaments(plan: dict, density: float, seed: int, ncol: int, state: dict | None = None) -> dict:
+    """Ornaments as bold PAIRS of side-by-side bulbs: {bulb index: colour index}.
+    Placed by lattice key (dead bulbs never move them), never touching each other."""
+    density = round(max(0.0, density) * 100) / 100
+    key = ("hex", id(plan), density, seed, ncol)
+    memo = state if state is not None else plan
+    hit = memo.get("horn")
+    if hit is not None and hit[0] == key:
+        return hit[1]
+    hc = plan["hc"]
+    nleaf = plan["leaf_cells"]                    # dead bulbs included: nothing moves when one dies
+    want = int(round(density * nleaf / 2.2))
+    cand = sorted(plan["pairs"], key=lambda p: hash01(*p[0].key, seed, 41))
+    taken: list = []
+    chosen = []
+    for a, b in cand:
+        if len(chosen) >= want:
+            break
+        # at least two bulbs of green between ornaments, so each pair reads on its own
+        if any(_hexdist(c, o) <= 2 for c in (a, b) for o in taken):
+            continue
+        # keep the top tier's tip and the star's neighbourhood clear
+        if a.r >= plan["fol_top"]:
+            continue
+        chosen.append((a, b))
+        taken += [a, b]
+    chosen.sort(key=lambda p: (-p[0].r, p[0].d))
+    out = {}
+    k0 = int(hash01(seed, 43) * max(1, ncol))
+    for n, (a, b) in enumerate(chosen):
+        k = (k0 + n) % max(1, ncol)
+        for c in (a, b):
+            if c.i is not None and c.i in plan["leaf"]:
+                out[c.i] = k
+    memo["horn"] = (key, out)
+    return out
+
+
+def _burst_state(clock, P, state, intro, dim, seed):
+    B, D = P["burst_every"], P["intro"]
+    burst_age = 1e9
+    if B > 0 and intro is None and dim >= 1.0:
+        bc = clock - state["start"] - max(0.0, D)
+        k = math.floor(bc / B)
+        for kk in (k, k - 1):
+            st = kk * B + B * (0.3 + 0.5 * hash01(kk, seed, 61))
+            if kk >= 0 and bc >= st:
+                burst_age = min(burst_age, bc - st)
+    big = 1.0
+    ignite = clock - state.get("ignite_at", -1e9)
+    if 0 <= ignite < burst_age:
+        burst_age, big = ignite, 1.5
+    return burst_age, big, ignite
+
+
+def _tree_hex(t, ctx, P, state, plan) -> list:
+    layout = ctx.layout
+    n = len(layout.pixels)
+    out = [BLACK] * n
+    clock = ctx.clock
+    intro, dim = _timeline(clock, P, state)
+    D = P["intro"]
+    seed = P["seed"]
+    if intro is not None:
+        x = intro / D
+        front = x / 0.55 * 1.35 - 0.2              # the lighting front, in tree heights
+        trunk_on = _smooth(x / 0.08)
+        star_on = _smooth((intro - 0.82 * D) / 0.15)
+        glow_on = _smooth((x - 0.84) / 0.16)
+    else:
+        front, trunk_on, star_on, glow_on = 9.0, 1.0, 1.0, 1.0
+    burst_age, big, ignite = _burst_state(clock, P, state, intro, dim, seed)
+    burst = envelope(burst_age, 0.05, 0.7) if burst_age < 6 else 0.0
+    dist, sid = plan["dist"], plan["sid"]
+    sparking = bool(plan["star"]) and burst_age < 2.5
+    if sparking:
+        ring_r = burst_age * 9.0
+        fall = math.exp(-burst_age / 0.9) * big
+        flick = int(clock * 20)
+
+    def sparks(i: int) -> float:
+        d = dist.get(i, 99.0)
+        if d > ring_r + 2.5 or d > 12:
+            return 0.0
+        e = math.exp(-((d - ring_r) / 1.1) ** 2)
+        if d < ring_r:
+            hsh = hash01(sid[i], flick, seed, 3)
+            if hsh > 0.65:
+                e = max(e, (hsh - 0.65) / 0.35 * math.exp(-(ring_r - d) / 3.0))
+        return min(1.0, e * fall * (0.55 + 0.45 * hash01(sid[i], flick, seed, 4)))
+
+    def spark_on(c, e):
+        return (c[0] + (1 - c[0]) * e, c[1] + (0.9 - c[1]) * e, c[2] + (0.55 - c[2]) * e)
+
+    # ---- night sky round the tree: dim, a clean black margin, a few far stars
+    sk, skl, skt = P["sky"], P["sky_level"], P["sky_twinkle"]
+    margin = plan["margin"]
+    for i in plan["sky"]:
+        if i in margin:
+            c = BLACK
+        else:
+            c = (sk[0] * skl, sk[1] * skl, sk[2] * skl)
+            if skt > 0:
+                g = glint(sid[i], clock, skt, 0.4, 1.0, seed + 5, 1)[0] * 0.15
+                if g > 0:
+                    c = (c[0] + (0.8 - c[0]) * g, c[1] + (0.85 - c[1]) * g, c[2] + (1.0 - c[2]) * g)
+        if sparking and hash01(sid[i], flick, seed, 6) > 0.7:   # only a sprinkle: the sky stays dark
+            e = sparks(i) * 0.6
+            if e > 0:
+                c = spark_on(c, e)
+        out[i] = _clamp01((c[0] * dim, c[1] * dim, c[2] * dim))
+
+    # ---- trunk
+    tk = P["trunk"]
+    lvl = P["level"]
+    for i in plan["trunk"]:
+        v = lvl * 0.8 * trunk_on * dim
+        out[i] = _clamp01((tk[0] * v, tk[1] * v, tk[2] * v))
+
+    # ---- boughs, garland, ornaments
+    body, body2 = P["body"], P["body2"]
+    shim, shade = P["shimmer"], P["shade"]
+    gcol, gstyle = P["garland"], P["garland_style"]
+    gw, gsp = P["garland_width"], P["garland_spacing"]
+    period = max(3.0, gsp * 0.4)
+    ghalf = max(0.5, gw / 4)
+    tr = travel(t, P) * 0.5
+    gspark, grate = P["garland_sparkle"], P["glints"]
+    ocols = (P["ornament_colors"] or [(1.0, 0.0, 0.0)])[:3]
+    orn = hex_ornaments(plan, P["density"], seed, len(ocols), state)
+    ov = min(1.0, lvl * 1.15)
+    soft = 0.22
+    ph = plan["ph"]
+    ghost = 0.12 * P["pre_glow"] if intro is not None else 0.0
+    for i, (r, x, h, tier, edge, bottom, key) in plan["leaf"].items():
+        if intro is not None:
+            lit = _smooth((front - h * 0.85 - 0.15 * min(1.0, abs(x) / 4)) / soft)
+        else:
+            lit = 1.0
+        a, rate, mix = ph[i]
+        w = 1 - shim * (0.5 + 0.5 * math.sin(clock * rate * TAU + a))
+        v = lvl * w * (1 - shade * (1 - h))
+        c = lerp(body, body2, mix)
+        c = (c[0] * v, c[1] * v, c[2] * v)
+        if i in orn:
+            oc = ocols[orn[i] % len(ocols)]
+            oc = (oc[0] * ov, oc[1] * ov, oc[2] * ov)
+            if intro is not None:
+                pop_t = D * (0.5 + 0.3 * (h * 0.7 + 0.3 * hash01(*key, seed, 47)))
+                age = intro - pop_t
+                if age >= 0:
+                    g = envelope(age, 0.02, 0.35)
+                    c = lerp(c, oc, _smooth(age / 0.08))
+                    c = (c[0] + (1 - c[0]) * g, c[1] + (1 - c[1]) * g * 0.9, c[2] + (1 - c[2]) * g * 0.7)
+            else:
+                g = glint(sid[i], clock, grate, 0.03, 0.4, seed, 1)[0] * 0.6 if grate > 0 else 0.0
+                c = (oc[0] + (1 - oc[0]) * g, oc[1] + (1 - oc[1]) * g, oc[2] + (1 - oc[2]) * g)
+        elif gstyle != "none":
+            if gstyle == "swag":
+                u = x - 0.5 * r - tr                      # along a 60-degree lattice line
+                d = u % period
+                d = min(d, period - d)
+                cov = max(0.0, min(1.0, ghalf + 0.5 - d))
+            else:                                         # strand: each tier's lowest row
+                cov = 0.0
+                if bottom:
+                    wave = 0.5 + 0.5 * math.cos((x - tr) / max(1.5, gsp * 0.25) * TAU)
+                    cov = max(0.0, min(1.0, (wave - 0.4) * 3.0))      # dashes creeping along
+            if cov > 0:
+                gc = gcol
+                if gspark > 0:
+                    g = glint(sid[i], clock, gspark * 0.5, 0.02, 0.18, seed + 1, 2)[0] * cov
+                    gc = (gc[0] + (1 - gc[0]) * g, gc[1] + (1 - gc[1]) * g, gc[2] + (1 - gc[2]) * g * 0.8)
+                gv = min(1.0, lvl * 1.1)
+                c = lerp(c, (gc[0] * gv, gc[1] * gv, gc[2] * gv), cov)
+        if intro is not None and abs(front - h * 0.85) < soft * 1.6:
+            e = max(0.0, 1 - abs(front - h * 0.85 - soft * 0.5) / (soft * 1.1))
+            hs = hash01(*key, int(clock * 15), seed)
+            if hs > 0.6:
+                c = lerp(c, (1.0, 0.82, 0.55), 0.85 * e * (0.4 + 1.5 * (hs - 0.6)))
+        if sparking:
+            e = sparks(i) * 0.5
+            if e > 0:
+                c = spark_on(c, e)
+        c = (c[0] * lit * dim, c[1] * lit * dim, c[2] * lit * dim)
+        if ghost > 0 and lit < 1:                         # the unlit tree, waiting
+            g = ghost * (1 - lit) * dim
+            c = (max(c[0], body[0] * g), max(c[1], body[1] * g), max(c[2], body[2] * g))
+        out[i] = _clamp01(c)
+
+    # ---- the star (and its rays)
+    sc = P["star"]
+    if star_on > 0:
+        pulse = 1 - P["star_pulse"] * (0.5 + 0.5 * math.sin(clock * TAU / 3.2))
+        b = min(1.0, burst * big)
+        for i in plan["star"]:
+            tw = glint(sid[i], clock, 0.8, 0.03, 0.25, seed + 2, 1)[0]
+            v = 0.82 * pulse * (1 - b) + b
+            c = (sc[0] * v, sc[1] * v, sc[2] * v)
+            hot = min(1.0, 0.15 + 0.5 * b + 0.35 * tw)
+            c = (c[0] + (1 - c[0]) * hot, c[1] + (1 - c[1]) * hot, c[2] + (1 - c[2]) * hot * 0.75)
+            out[i] = _clamp01((c[0] * star_on * dim, c[1] * star_on * dim, c[2] * star_on * dim))
+        for i in plan["rays"]:
+            tw = glint(sid[i], clock, 0.5, 0.05, 0.4, seed + 3, 1)[0]
+            v = (0.3 + 0.5 * b + 0.4 * tw) * pulse
+            out[i] = _clamp01((sc[0] * v * star_on * dim, sc[1] * v * star_on * dim, sc[2] * v * star_on * dim))
+
+    # ---- the rest of the target (the gable outline): a soft warm frame, the star's halo
+    gl, glv = P["glow"], P["glow_level"]
+    glow_on = max(glow_on, P["pre_glow"])
+    halo = P["halo"]
+    if not plan["tip"]:
+        # without the Tip the outline's apex sits right over the tree's small star: a full
+        # halo there glows bigger than the star itself and reads as a second, floating star
+        halo *= 0.4
+    flash = P["ignite_flash"] * envelope(ignite, 0.04, 0.5) if 0 <= ignite < 4 else 0.0
+    for i in plan["rest"]:
+        v = glv * (0.85 + 0.15 * wobble(sid[i], clock, 0.3, seed))
+        c = (gl[0] * v, gl[1] * v, gl[2] * v)
+        d = dist.get(i, 99.0)
+        if halo > 0 and d < 3.5 and plan["star"]:
+            f = min(1.0, halo * 1.4 * (1 - d / 3.5) ** 1.2)
+            c = lerp(c, sc, f * star_on)
+        c = (c[0] * glow_on, c[1] * glow_on, c[2] * glow_on)
+        if sparking:
+            e = sparks(i)
+            if e > 0:
+                c = spark_on(c, e)
+        if flash > 0:
+            c = lerp(c, (1.0, 0.95, 0.85), flash)
+        out[i] = _clamp01((c[0] * dim, c[1] * dim, c[2] * dim))
+    return out
+
+
+@frame_effect("tree", "Christmas tree", TREE_PARAMS,
+              "A Christmas tree drawn for the Peak's honeycomb: a tiered fir with straight "
+              "60-degree sides against a dark night sky, a trunk on the bottom row, a garland "
+              "swag along the lattice diagonal, bold paired ornaments in two or three colours "
+              "and a bright star on top (on the Tip's apex when there is one) that breathes and "
+              "now and then bursts into sparks. Starts with a tree-lighting: trunk, boughs from "
+              "the bottom up, ornaments pop on, the star ignites last. The rest of the target "
+              "(e.g. the gable outline) glows warmly round it. Without a zigzag in the target "
+              "the whole target is lit as a tree, row by row.",
+              group="Scenes")
+def tree(t, ctx, P, state):
+    n = len(ctx.layout.pixels)
+    idx = [i for i in ctx.idx if 0 <= i < n]
+    if not idx:
+        return [BLACK] * n
+    plan = tree_plan(ctx.layout, idx, P["spread"])
+    if plan is None:
+        return _tree_flat(t, ctx, P, state)
+    return _tree_hex(t, ctx, P, state, plan)
+
 
 
 # ------------------------------------------------------------------ presents
